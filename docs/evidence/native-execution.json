@@ -1,0 +1,45 @@
+{
+  "testMode": "local Messages protocol fixture, real Harness Agent and sandboxed tools",
+  "harnessVersion": "0.1.7-alpha.1",
+  "status": "awaiting_review",
+  "engine": "Harness / deepseek-official/deepseek-flash",
+  "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+  "result": {
+    "summary": "本地模型夹具：真实执行回归测试，确认修复前失败、修复后通过。",
+    "category": "bug",
+    "priority": "P2",
+    "confidence": 1,
+    "labels": [
+      "bug"
+    ],
+    "missingInfo": [],
+    "duplicateOf": null,
+    "duplicateReason": "",
+    "evidence": [
+      {
+        "source": "native tool execution",
+        "detail": "See persisted tool/result output."
+      },
+      {
+        "source": "Harness tool/result · seq 19",
+        "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"fixture-call-1\"},\"toolCallId\":\"fixture-call-1\",\"content\":[{\"type\":\"text\",\"text\":\"BASELINE_FAILED_AS_EXPECTED\\nREGRESSION_PASSED\\n\\n\"}],\"isError\":false,\"id\":\"88ef9eaf-575f-44e1-be4e-da9eb773ffc1\"}}"
+      }
+    ],
+    "nextSteps": [
+      "Review patch"
+    ],
+    "responseDraft": "Fixture fixed.",
+    "tests": [
+      {
+        "command": "node test.cjs (before)",
+        "status": "failed",
+        "output": "BASELINE_FAILED_AS_EXPECTED"
+      },
+      {
+        "command": "node test.cjs (after)",
+        "status": "passed",
+        "output": "REGRESSION_PASSED"
+      }
+    ]
+  }
+}

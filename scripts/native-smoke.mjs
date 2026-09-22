@@ -1,0 +1,21 @@
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
+const errors=[]; page.on('pageerror', e => errors.push(e.message));
+await page.goto(process.env.DSH_TEST_URL || 'http://127.0.0.1:4318');
+await page.waitForTimeout(2000);
+const intro = page.getByText('Continue', { exact: true });
+await intro.waitFor({timeout:15000}).catch(() => {});
+if (await intro.count()) { await intro.click(); await intro.waitFor({state:'hidden',timeout:10000}); }
+const later = page.getByText('Configure later', { exact: true });
+await later.waitFor({timeout:5000}).catch(() => {});
+if (await later.count()) await later.click();
+console.log((await page.locator('body').innerText()).slice(0, 1500));
+const button = page.getByText('维护工作台', { exact: true });
+if (await button.count()) await button.first().click();
+await page.waitForTimeout(1000);
+await page.screenshot({ path: 'docs/screenshots/harness-native.png', fullPage: true });
+console.log('PAGE_ERRORS', errors);
+console.log('WORKBENCH_VISIBLE', await page.getByRole('heading', { name: '让每个问题，都有下一步。' }).count());
+console.log('API_STATUS', await page.evaluate(async () => { const r = await fetch('/maintainer/api/state'); return { status:r.status, text: (await r.text()).slice(0,150) }; }));
+await browser.close();
