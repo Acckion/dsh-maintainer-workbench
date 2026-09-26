@@ -9,7 +9,7 @@ import { Workbench } from '../core/workbench.ts';
 import { API, handler } from '../server/http.ts';
 import { harnessRunner, hostStatus } from './native-runner.ts';
 export const name = 'maintainer-workbench';
-export const inject = ['webServer', 'connection', 'agents', 'agentPresets', 'permissionPresets', 'workspaceRegistry', 'agentDefaultModel', 'llm'];
+export const inject = ['webServer', 'connection', 'agents', 'agentPresets', 'permissionPresets', 'workspaceRegistry', 'agentDefaultModel', 'llm', 'tools'];
 interface Connection { requestRejection(request: { headers: import('node:http').IncomingMessage['headers'] }): 401 | 403 | undefined }
 export async function apply(ctx: Context): Promise<void> {
   const dataDir = resolve(process.env.MAINTAINER_DATA_DIR ?? resolve(resolveDshHome(), 'maintainer'));

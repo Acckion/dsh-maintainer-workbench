@@ -43,12 +43,21 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
       if (path === '/sync') await workbench.sync(z.object({ fullName: z.string().min(3).max(200) }).parse(input).fullName);
       else if (path === '/prepare') await workbench.prepareRepository(z.object({ repoId: z.string() }).parse(input).repoId);
       else if (path === '/bind') { const p = z.object({ repoId: z.string(), localPath: z.string().min(1).max(2000) }).parse(input); await workbench.bindPath(p.repoId, p.localPath); }
-      else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds) }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind)); return; }
+      else if (path === '/classify') {
+        const p = z.object({ issueIds:z.array(z.string()).min(1).max(workbench.store.settings().maxJobsPerBatch) }).parse(input);
+        const created:string[] = [], reused:string[] = [], errors:{id:string;error:string}[] = [];
+        for (const id of new Set(p.issueIds)) { try { const issue = workbench.store.get<import('../core/types.ts').Issue>('issues',id); if (!issue) throw new Error('事项不存在'); const r = workbench.enqueue([id],issue.type === 'pr' ? 'preflight' : 'triage'); created.push(...r.created);reused.push(...r.reused); } catch(e) { errors.push({id,error:e instanceof Error ? e.message : '派发失败'}); } }
+        send(res,200,{created,reused,errors});return;
+      }
+      else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds), sourceJobId: z.string().optional(), instructions: z.string().max(8000).optional() }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind, { sourceJobId: p.sourceJobId, instructions: p.instructions })); return; }
+      else if (path === '/finding') { const p = z.object({ id: z.string(), findingId: z.string(), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.finding(p.id, p.findingId, p.decision); }
+      else if (path === '/decision') { const p = z.object({ issueId: z.string(), stage: z.string(), reason: z.string().max(4000) }).parse(input); workbench.decide(p.issueId, p.stage, p.reason); }
       else if (path === '/cancel') workbench.cancel(z.object({ id: z.string() }).parse(input).id);
       else if (path === '/retry') workbench.retry(z.object({ id: z.string() }).parse(input).id);
       else if (path === '/review') { const p = z.object({ id: z.string(), decision: z.enum(['approve', 'reject']), note: z.string().max(4000) }).parse(input); await workbench.review(p.id, p.decision, p.note); }
-      else if (path === '/publish') { const p = z.object({ id: z.string(), action: z.enum(['comment', 'labels', 'pr']) }).parse(input); send(res, 200, { urls: await workbench.publish(p.id, p.action) }); return; }
+      else if (path === '/publish') { const p = z.object({ id: z.string(), action: z.enum(['comment', 'labels', 'pr', 'update_pr', 'review']) }).parse(input); send(res, 200, { urls: await workbench.publish(p.id, p.action) }); return; }
       else if (path === '/credentials') { if (!credentials) throw new Error('当前运行环境不提供密钥配置'); await credentials.save(input); workbench.store.audit('credentials.updated', '更新本地连接配置，未记录密钥'); }
+      else if (path === '/policy') { const p = z.object({ repoId:z.string(), policy:z.unknown() }).parse(input); workbench.updatePolicy(p.repoId,p.policy); }
       else if (path === '/settings') workbench.updateSettings(input);
       else { send(res, 404, { error: '接口不存在' }); return; }
       send(res, 200, { ok: true });

@@ -21,7 +21,8 @@
     "skills",
     "docs/VALIDATION.md",
     "docs/ACCEPTANCE.md",
-    "docs/evidence"
+    "docs/evidence",
+    "docs/product"
   ],
   "dsh": {
     "bundle": {
@@ -84,6 +85,8 @@
     "@deepseek-ai/dsh-agent-default-model": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-workspace": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-session-title": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-client-ui-workspace": "0.1.7-alpha.1"
+    "@deepseek-ai/dsh-client-ui-workspace": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-user-approval": "0.1.7-alpha.1"
   }
 }

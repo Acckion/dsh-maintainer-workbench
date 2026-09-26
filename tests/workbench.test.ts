@@ -21,7 +21,7 @@ test('bulk dispatch is atomic and duplicate clicks reuse the same revision', asy
   const first = workbench.enqueue([issue.id], 'triage');
   assert.deepEqual(workbench.enqueue([issue.id], 'triage'), { created: [], reused: first.created });
   workbench.pump(); await workbench.drain();
-  assert.equal(store.jobs()[0].status, 'awaiting_review'); assert.equal(store.jobs()[0].engine, 'unit-test fixture');
+  assert.equal(store.jobs()[0].status, 'completed'); assert.equal(store.jobs()[0].engine, 'unit-test fixture');
   assert.equal(store.issues()[0].analysis?.tests[0].status, 'not_run');
   await workbench.close();
 });
@@ -31,7 +31,7 @@ test('cancelled work never overwrites cancellation with completed; retry keeps o
   const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.cancel(id); await workbench.drain();
   assert.equal(store.get<Job>('jobs', id)?.status, 'cancelled');
   workbench.retry(id); await workbench.drain();
-  assert.deepEqual(store.jobs().map(j => j.status), ['cancelled', 'awaiting_review']);
+  assert.deepEqual(store.jobs().map(j => j.status), ['cancelled', 'completed']);
   assert.equal(store.jobs()[1].attempt, 2); await workbench.close();
 });
 
@@ -40,7 +40,7 @@ test('concurrency cap and timeout apply to the actual worker lifecycle', async (
   workbench.updateSettings({ ...store.settings(), concurrency: 1, timeoutMs: 1000 });
   workbench.enqueue(store.issues().slice(0, 3).map(i => i.id), 'triage'); workbench.pump();
   assert.equal(store.jobs().filter(j => j.status === 'running').length, 1);
-  await workbench.drain(); assert.equal(store.jobs().filter(j => j.status === 'awaiting_review').length, 3);
+  await workbench.drain(); assert.equal(store.jobs().filter(j => j.status === 'completed').length, 3);
   await workbench.close();
 });
 
@@ -81,7 +81,7 @@ test('GitHub pagination excludes no PR records and reports the pinned default br
     return Response.json({ full_name: 'owner/repo', description: null, default_branch: 'main' });
   };
   const result = await new GitHub('', fake).sync('owner/repo');
-  assert.equal(result.repo.headSha, 'abc123'); assert.equal(result.issues[0].type, 'pr'); assert.equal(calls.length, 3);
+  assert.equal(result.repo.headSha, 'abc123'); assert.equal(result.issues[0].type, 'pr'); assert.equal(calls.length, 4);
 });
 
 test('secrets persist with 0600 permissions and invalid remote HTTP is refused', async () => {

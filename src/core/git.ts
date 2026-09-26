@@ -52,3 +52,12 @@ export async function prepareManagedCheckout(repo: Repo, dataDir: string, signal
   catch { await executeGit(path, ['fetch', 'origin', repo.headSha], true, signal, 120000); }
   return path;
 }
+
+/** Fetch GitHub's PR head ref, including forks, then require the exact API snapshot. */
+export async function fetchPullRequestRevision(repo: Repo, number: number, pr: import('./types.ts').PRContext, signal?: AbortSignal, executeGit: typeof git = git): Promise<void> {
+  if (!Number.isSafeInteger(number) || number < 1 || !/^[a-f0-9]{40,64}$/.test(pr.headSha) || !/^[a-f0-9]{40,64}$/.test(pr.baseSha)) throw new Error('PR 版本信息无效');
+  await executeGit(repo.localPath, ['fetch', 'origin', `refs/pull/${number}/head`], true, signal);
+  const fetched = await executeGit(repo.localPath, ['rev-parse', 'FETCH_HEAD']);
+  if (fetched !== pr.headSha) throw new Error('PR 在准备过程中已更新，请重新派发');
+  await executeGit(repo.localPath, ['fetch', 'origin', pr.baseSha], true, signal);
+}

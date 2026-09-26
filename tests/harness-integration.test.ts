@@ -21,7 +21,7 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
     permissionPresets: { resolve: (p: string) => permissions.push(p), set: () => {} },
     workspaceRegistry: { create: async (path: string) => ({ path, attachSession: async () => {} }) },
     on: (_: string, fn: any) => { listener = fn; return () => {}; },
-    agents: { create: async (options: any) => { calls.push(options); await options.setup({}); return { dispose: async () => {}, agent: { session: {}, cancel: () => {}, followup: (message: unknown) => { texts.push(JSON.stringify(message)); queueMicrotask(() => { listener({ id: options.sessionId }, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: JSON.stringify({ ...result, tests: [{ command: 'invented test', status: 'passed', output: 'untrusted claim' }] }) }] } } }); listener({ id: options.sessionId }, { type: 'turn/end', data: { reason: { kind: 'completed' } } }); }); } } }; } }
+    agents: { create: async (options: any) => { calls.push(options); await options.setup({ tools: { restrict: (v: unknown) => { calls.at(-1).restriction = v; }, guard: () => {} } }); return { dispose: async () => {}, agent: { session: {}, cancel: () => {}, followup: (message: unknown) => { texts.push(JSON.stringify(message)); queueMicrotask(() => { listener({ id: options.sessionId }, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: JSON.stringify({ schemaVersion:1, stage:'triage', summary:'triage', coverage:'metadata', evidence:[], nextSteps:[], responseDraft:'draft', category:'bug', priority:'P2', labels:[], module:'unknown', impact:'unknown', missingInfo:[], duplicateOf:null, duplicateReason:'', route:'investigate', routeReason:'needs evidence' }).replace(',"category":', '],"category":') }] } } }); listener({ id: options.sessionId }, { type: 'turn/end', data: { reason: { kind: 'completed' } } }); }); } } }; } }
   } as unknown as Context;
   const dir = await mkdtemp(join(tmpdir(), 'maintainer-inherit-')); const store = new Store(':memory:');
   const github = new GitHub('', async () => Response.json([]));
@@ -30,9 +30,11 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   store.put('repos', { ...repo, mode: 'github', localPath: '' });
   w.updateSettings({ ...store.settings(), provider: 'wrong-provider', model: 'wrong-model', agentPreset: 'inherit' });
   w.enqueue([issue.id], 'triage'); w.pump(); await w.drain();
-  assert.equal(store.jobs()[0].status, 'awaiting_review');
+  assert.equal(store.jobs()[0].status, 'completed');
   assert.deepEqual(calls[0].agentOptions, { ...selection, maxTokens: 6000 });
-  assert.equal(calls[0].preset, 'host-standard'); assert.equal(store.jobs()[0].result?.tests[0].status, 'not_run');
+  assert.equal(calls[0].preset, undefined); assert.deepEqual(calls[0].restriction, {allow:[]}); assert.deepEqual(store.jobs()[0].result?.tests, []);
+  assert.ok(store.jobs()[0].rawOutput?.includes('],"category":'));
+  assert.ok(store.audits().some(a => a.detail.includes('已修复模型结果')));
   assert.ok(store.jobs()[0].analysisPath); assert.equal(store.jobs()[0].worktree, undefined);
   selection = { provider: 'host-b', model: 'model-b', reasoningEffort: 'low' };
   assert.equal(w.snapshot().capabilities.host?.model, 'model-b');
@@ -55,4 +57,12 @@ test('native credential loading cannot override host provider environment from s
     assert.equal(process.env.GITHUB_TOKEN, 'fixture-github');
     await assert.rejects(c.save({ apiKey: 'unexpected' }), /Harness/);
   } finally { for (const n of names) { if (before[n] === undefined) delete process.env[n]; else process.env[n] = before[n]; } }
+});
+
+test('format recovery creates a tool-free session and never reruns implementation', async()=>{
+  let listener:any;let mounted=0;let restricted=0;let count=0;
+  const ctx={agentDefaultModel:{currentSelection:()=>({provider:'p',model:'m'})},llm:{listProviders:()=>[{id:'p'}]},agentPresets:{resolve:async()=>({id:'standard'}),mount:async()=>{mounted++;}},permissionPresets:{defaultPreset:'workspace-write',resolve:()=>{},set:()=>{}},workspaceRegistry:{create:async(path:string)=>({path,attachSession:async()=>{}})},on:(_:string,fn:any)=>{listener=fn;return()=>{};},agents:{create:async(options:any)=>{count++;await options.setup({tools:{restrict:()=>{restricted++;},guard:()=>{}}});return{dispose:async()=>{},agent:{session:{},cancel:()=>{},followup:()=>{const callback=listener;queueMicrotask(()=>{const text=count===1?'broken result':JSON.stringify({schemaVersion:1,stage:'fix',summary:'recorded change',coverage:'recorded only',evidence:[],nextSteps:[],responseDraft:'',changes:['recorded change'],acceptanceCriteria:[],limitations:['checks unavailable'],tests:[]});callback({id:options.sessionId},{type:'assistant/message',data:{message:{content:[{type:'text',text}]}}});callback({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'completed'}}});});}}};}}} as unknown as Context;
+  const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0],issue=store.issues()[0];const now=new Date().toISOString();
+  const output=await harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'format-test',repoId:repo.id,issueId:issue.id,kind:'fix',status:'running',revision:'r',baseSha:repo.headSha,issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,worktree:'/tmp/owned-fixture'},settings:store.settings(),signal:new AbortController().signal,progress:()=>{}});
+  assert.equal(count,2);assert.equal(mounted,1);assert.equal(restricted,1);assert.equal(output.artifact?.stage,'fix');store.close();
 });
