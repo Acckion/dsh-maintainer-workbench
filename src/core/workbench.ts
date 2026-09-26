@@ -2,12 +2,10 @@ import { localRepositoryProfile } from './repository-context.ts';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { publish, type PublishAction } from './publish.ts';
 import { retrieveRelated } from './retrieval.ts';
 import { Store } from './store.ts';
-import { demoAnalysis, seedDemo } from './demo.ts';
 import { GitHub } from './github.ts';
 import { collectPatch, prepareWorktree, validateCheckout, prepareManagedCheckout } from './git.ts';
 import { modelRunner } from './intelligence.ts';
@@ -49,12 +47,22 @@ export class Workbench {
       }
     } finally { this.polling = false; }
   }
+  githubConnection() { return this.github.connection(); }
   snapshot(): Snapshot {
     const host = this.hostStatus?.();
     return { repos: this.store.repos(), issues: this.store.issues(), jobs: this.store.jobs().reverse(), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.0' };
   }
-  seed(): void { seedDemo(this.store); }
   saveJob(job: Job): void { this.store.put('jobs', { ...job, updatedAt: new Date().toISOString() }); }
+  async syncMany(names: string[]) {
+    const unique = [...new Set(names.map(n => n.trim().replace(/^https:\/\/github\.com\//i, '').replace(/\/$/, '').replace(/\.git$/, '').toLowerCase()))];
+    if (!unique.length || unique.length > 20 || unique.some(n => !/^[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_.-]*$/.test(n))) throw new Error('请输入 1–20 个有效的 owner/repository 或 GitHub 仓库地址');
+    const results: { fullName: string; repoId?: string; error?: string }[] = [];
+    for (const fullName of unique) {
+      try { await this.sync(fullName); results.push({ fullName, repoId: this.store.repos().find(r => r.fullName.toLowerCase() === fullName)?.id }); }
+      catch (error) { results.push({ fullName, error: error instanceof Error ? error.message : '同步失败' }); }
+    }
+    return { results };
+  }
   async sync(fullName: string): Promise<void> {
     const key = fullName.toLowerCase();
     const existing = this.syncs.get(key); if (existing) return existing;
@@ -76,7 +84,7 @@ export class Workbench {
     });
   }
   async bindPath(repoId: string, localPath: string): Promise<void> {
-    const repo = this.repo(repoId); if (repo.mode === 'demo') throw new Error('演示仓库不绑定真实工作目录');
+    const repo = this.repo(repoId);
     const path = await validateCheckout(localPath, repo);
     this.store.put('repos', { ...repo, localPath: path });
     this.store.audit('repo.bind', `${repo.fullName} 已绑定本地工作区`);
@@ -112,7 +120,7 @@ export class Workbench {
       const repo = this.repo(issue.repoId);
       if (kind === 'review' && issue.type !== 'pr') throw new Error('PR 审查只能选择 Pull Request');
       if (issue.state === 'closed') throw new Error('已关闭记录不可派发任务');
-      if (repo.mode !== 'demo' && (kind === 'fix' || kind === 'docs') && !this.nativeRunner) throw new Error('修复与文档编辑需要在 Harness 中运行；工作区会自动准备');
+      if ((kind === 'fix' || kind === 'docs') && !this.nativeRunner) throw new Error('修复与文档编辑需要在 Harness 中运行；工作区会自动准备');
       return { issue, repo };
     });
     const created: string[] = [], reused: string[] = [];
@@ -181,38 +189,31 @@ export class Workbench {
       let repo = this.repo(job.repoId);
       const related = retrieveRelated(job.issueSnapshot, this.store.issues().filter(i => i.repoId === repo.id && i.id !== job.issueId && i.state === 'open'));
       let output: Awaited<ReturnType<Runner>>;
-      if (repo.mode === 'demo') {
-        progress('演示执行：整理报告线索（不会调用模型或修改代码）');
-        await delay(900, undefined, { signal: controller.signal });
-        progress('演示执行：生成结构化结果与待审核草稿');
-        output = { result: demoAnalysis(job.issueSnapshot, job.kind), engine: 'demo / simulated' };
-      } else {
-        if (this.nativeRunner && !repo.localPath && job.kind !== 'triage') {
-          progress('自动准备仓库克隆；首次运行可能需要一些时间');
-          await waitFor(this.prepareRepository(repo.id), controller.signal); controller.signal.throwIfAborted(); repo = this.repo(repo.id);
-        }
-        progress('读取仓库结构、开发约定、构建配置与测试入口');
-        repo = { ...repo, headSha: job.baseSha };
-        repo.profile = await this.understand(repo, controller.signal);
-        if (this.nativeRunner && repo.localPath) {
-          const worktree = await prepareWorktree(repo, job, this.dataDir);
-          job = { ...job, worktree: worktree.path, branch: worktree.branch };
-          controller.signal.throwIfAborted();
-          this.saveJob(job); progress(`已创建独立分支 ${worktree.branch}`);
-        }
-        controller.signal.throwIfAborted();
-        if (this.nativeRunner && !job.worktree) {
-          const analysisPath = join(this.dataDir, 'analysis', job.id);
-          await mkdir(analysisPath, { recursive: true });
-          job = { ...job, analysisPath }; this.saveJob(job);
-        }
-        const runner = this.nativeRunner ?? modelRunner;
-        output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress });
+      if (this.nativeRunner && !repo.localPath && job.kind !== 'triage') {
+        progress('自动准备仓库克隆；首次运行可能需要一些时间');
+        await waitFor(this.prepareRepository(repo.id), controller.signal); controller.signal.throwIfAborted(); repo = this.repo(repo.id);
       }
+      progress('读取仓库结构、开发约定、构建配置与测试入口');
+      repo = { ...repo, headSha: job.baseSha };
+      repo.profile = await this.understand(repo, controller.signal);
+      if (this.nativeRunner && repo.localPath) {
+        const worktree = await prepareWorktree(repo, job, this.dataDir);
+        job = { ...job, worktree: worktree.path, branch: worktree.branch };
+        controller.signal.throwIfAborted();
+        this.saveJob(job); progress(`已创建独立分支 ${worktree.branch}`);
+      }
+      controller.signal.throwIfAborted();
+      if (this.nativeRunner && !job.worktree) {
+        const analysisPath = join(this.dataDir, 'analysis', job.id);
+        await mkdir(analysisPath, { recursive: true });
+        job = { ...job, analysisPath }; this.saveJob(job);
+      }
+      const runner = this.nativeRunner ?? modelRunner;
+      output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress });
       controller.signal.throwIfAborted();
       const patch = job.worktree ? await collectPatch(job.worktree, job.baseSha) : '';
       controller.signal.throwIfAborted();
-      if (repo.mode !== 'demo' && (job.kind === 'fix' || job.kind === 'docs') && !patch) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
+      if ((job.kind === 'fix' || job.kind === 'docs') && !patch) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
       this.store.transaction(() => {
         const currentIssue = this.store.get<Issue>('issues', job.issueId)!;
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId)) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });

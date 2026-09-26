@@ -1,31 +1,16 @@
+// Run against a freshly started, empty development instance; never seeds product data.
 import { chromium } from '@playwright/test';
-import { mkdir } from 'node:fs/promises';
+import assert from 'node:assert/strict';
 const browser = await chromium.launch({ headless: true });
-const page = await browser.newPage({ viewport: { width: 1512, height: 982 }, deviceScaleFactor: 1 });
-const errors = [];
-page.on('pageerror', e => errors.push(e.message));
-await page.goto('http://127.0.0.1:4317');
-await page.getByRole('heading', { name: '让每个问题，都有下一步。' }).waitFor();
-await page.getByLabel('选择 #128', { exact: true }).check();
-await page.getByLabel('选择 #131', { exact: true }).check();
-await page.getByRole('button', { name: '智能分诊', exact: true }).click();
-await page.getByRole('button', { name: /待我审核/ }).click();
-await page.getByRole('button', { name: /并发刷新令牌/ }).waitFor();
-await page.getByRole('button', { name: /并发刷新令牌/ }).click();
-await page.getByRole('button', { name: '接受结果', exact: true }).click();
-await page.getByRole('status').getByText(/审核通过/).waitFor();
-await page.getByRole('button', { name: /维护收件箱/ }).click();
-await page.getByRole('button', { name: /刷新页面后登录状态丢失/ }).click();
-await page.getByText('可能与 #128 重复', { exact: true }).waitFor();
-await mkdir('docs/screenshots', { recursive: true });
-await page.screenshot({ path: 'docs/screenshots/workbench-desktop.png', fullPage: true });
-await page.getByRole('button', { name: '设置与连接', exact: true }).click();
-await page.getByRole('button', { name: '保存连接配置', exact: true }).waitFor();
-await page.screenshot({ path: 'docs/screenshots/settings-desktop.png', fullPage: true });
-await page.setViewportSize({ width: 390, height: 844 });
-await page.getByRole('button', { name: /维护收件箱/ }).click();
-await page.screenshot({ path: 'docs/screenshots/workbench-mobile.png', fullPage: true });
-const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-await browser.close();
-if (errors.length || overflow) throw new Error(JSON.stringify({ errors, overflow }));
-console.log('Browser smoke passed: batch triage, duplicate evidence, review approval, settings, mobile overflow.');
+try {
+  const page = await browser.newPage({ viewport: { width: 1512, height: 982 } });
+  await page.goto(process.env.WORKBENCH_TEST_URL ?? 'http://127.0.0.1:4317');
+  await page.getByRole('heading', { name: '连接你的第一个仓库' }).waitFor();
+  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByPlaceholder('owner/repository').waitFor();
+  assert.equal(await page.getByPlaceholder('owner/repository').inputValue(), '');
+  await page.getByRole('button', {name:'关闭'}).click();
+  await page.setViewportSize({width:390,height:844});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  console.log('Empty onboarding, connect dialog and mobile layout passed.');
+} finally { await browser.close(); }

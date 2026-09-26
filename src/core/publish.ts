@@ -1,3 +1,4 @@
+import { resolveGitHubAuth } from './github-auth.ts';
 import { z } from 'zod';
 import type { Job, Repo } from './types.ts';
 import type { Store } from './store.ts';
@@ -8,9 +9,8 @@ export type PublishAction = 'comment' | 'labels' | 'pr';
 
 /** Called only by an explicit publish action after local result approval. */
 export async function publish(store: Store, job: Job, repo: Repo, action: PublishAction, github = new GitHub(), executeGit: typeof git = git): Promise<string[]> {
-  if (repo.mode === 'demo') throw new Error('演示任务不能发布到 GitHub');
   if (job.status !== 'approved' || !job.result) throw new Error('请先审核并接受结果');
-  if (!process.env.GITHUB_TOKEN) throw new Error('发布需要服务端 GITHUB_TOKEN（仓库写权限）');
+  if (!(await resolveGitHubAuth()).token) throw new Error('发布需要有效的 GitHub 登录或令牌（仓库写权限）');
   const prior = job.publications?.[action];
   if (prior?.status === 'published') return prior.urls;
   if (prior?.status === 'publishing') throw new Error('该操作正在发布，或上次发布被中断。请先核查 GitHub 发布结果，避免重复写入。');

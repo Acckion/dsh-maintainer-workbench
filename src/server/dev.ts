@@ -11,7 +11,6 @@ const unlock = lockDirectory(dataDir);
 const credentials = new Credentials(dataDir);
 await credentials.load();
 const workbench = new Workbench(new Store(resolve(dataDir, 'workbench.sqlite')), dataDir);
-if (workbench.store.repos().length === 0) workbench.seed();
 const api = handler(workbench, localRejection, credentials);
 const files: Record<string, [string, string]> = { '/': ['dist/preview.html', 'text/html'], '/app.js': ['dist/app.js', 'application/javascript'], '/app.css': ['dist/app.css', 'text/css'] };
 const server = createServer(async (req, res) => {

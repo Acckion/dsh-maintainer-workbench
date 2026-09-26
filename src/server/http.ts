@@ -22,6 +22,7 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
     const url = new URL(req.url ?? '/', 'http://localhost');
     const path = url.pathname.slice(API.length);
     try {
+      if (req.method === 'GET' && path === '/github/connection') { send(res, 200, await workbench.githubConnection()); return; }
       if (req.method === 'GET' && path === '/state') { send(res, 200, workbench.snapshot()); return; }
       if (req.method === 'GET' && path.startsWith('/export/')) {
         const job = workbench.store.get<Job>('jobs', decodeURIComponent(path.slice('/export/'.length)));
@@ -32,8 +33,14 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
       }
       if (req.method !== 'POST') { send(res, 404, { error: '接口不存在' }); return; }
       const input = await body(req);
-      if (path === '/demo') workbench.seed();
-      else if (path === '/sync') await workbench.sync(z.object({ fullName: z.string().min(3).max(200) }).parse(input).fullName);
+      if (path === '/sync-all') {
+        const names = workbench.store.repos().map(r => r.fullName);
+        const results = [];
+        for (let i = 0; i < names.length; i += 20) results.push(...(await workbench.syncMany(names.slice(i, i + 20))).results);
+        send(res, 200, { results }); return;
+      }
+      if (path === '/sync-many') { send(res, 200, await workbench.syncMany(z.object({ names: z.array(z.string().max(250)).min(1).max(20) }).parse(input).names)); return; }
+      if (path === '/sync') await workbench.sync(z.object({ fullName: z.string().min(3).max(200) }).parse(input).fullName);
       else if (path === '/prepare') await workbench.prepareRepository(z.object({ repoId: z.string() }).parse(input).repoId);
       else if (path === '/bind') { const p = z.object({ repoId: z.string(), localPath: z.string().min(1).max(2000) }).parse(input); await workbench.bindPath(p.repoId, p.localPath); }
       else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds) }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind)); return; }

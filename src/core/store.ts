@@ -15,6 +15,15 @@ export class Store {
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, jobId TEXT, action TEXT NOT NULL, detail TEXT NOT NULL);`);
+    // Upgrade legacy installations before any worker can restore or execute tasks.
+    this.transaction(() => {
+      const demoRepos = "SELECT id FROM repos WHERE json_extract(data, '$.mode') = 'demo'";
+      const demoJobs = `SELECT id FROM jobs WHERE json_extract(data, '$.repoId') IN (${demoRepos}) OR json_extract(data, '$.engine') = 'demo / simulated'`;
+      this.db.exec(`DELETE FROM audit WHERE jobId IN (${demoJobs}) OR action = 'demo.seed';
+        DELETE FROM jobs WHERE id IN (${demoJobs});
+        DELETE FROM issues WHERE json_extract(data, '$.repoId') IN (${demoRepos});
+        DELETE FROM repos WHERE id IN (${demoRepos});`);
+    });
   }
   all<T>(table: 'repos' | 'issues' | 'jobs' | 'settings'): T[] { return this.db.prepare(`SELECT data FROM ${table} ORDER BY rowid`).all().map(r => JSON.parse(String(r.data)) as T); }
   get<T>(table: 'repos' | 'issues' | 'jobs' | 'settings', id: string): T | undefined { const r = this.db.prepare(`SELECT data FROM ${table} WHERE id=?`).get(id); return r ? JSON.parse(String(r.data)) as T : undefined; }

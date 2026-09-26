@@ -1,3 +1,4 @@
+import { resolveGitHubAuth } from './github-auth.ts';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -5,7 +6,7 @@ import { resolve, join } from 'node:path';
 import { mkdir, realpath, rename, rm, mkdtemp } from 'node:fs/promises';
 import type { Job, Repo } from './types.ts';
 const exec = promisify(execFile);
-export async function git(cwd: string, args: string[], authenticate = false, signal?: AbortSignal, timeout = 30000): Promise<string> { return (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, timeout, signal, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(authenticate && process.env.GITHUB_TOKEN ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:' + process.env.GITHUB_TOKEN).toString('base64'), GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {}) } })).stdout.trimEnd(); }
+export async function git(cwd: string, args: string[], authenticate = false, signal?: AbortSignal, timeout = 30000): Promise<string> { const auth = authenticate ? await resolveGitHubAuth() : undefined; return (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, timeout, signal, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(auth?.token ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:' + auth.token).toString('base64'), GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {}) } })).stdout.trimEnd(); }
 export async function validateCheckout(path: string, repo: Repo): Promise<string> {
   const canonical = await realpath(path);
   const root = await git(canonical, ['rev-parse', '--show-toplevel']);

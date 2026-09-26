@@ -1,3 +1,4 @@
+import { resolveGitHubAuth } from './github-auth.ts';
 import { contextPaths, repositoryProfile } from './repository-context.ts';
 import { z } from 'zod';
 import type { Issue, Repo } from './types.ts';
@@ -6,13 +7,22 @@ const issueSchema = z.object({ number: z.number(), title: z.string(), body: z.st
 export class GitHub {
   constructor(private token?: string, private fetcher: typeof fetch = fetch) {}
   async request(path: string, init: RequestInit = {}): Promise<unknown> {
-    const response = await this.fetcher(`https://api.github.com${path}`, { ...init, signal: init.signal ?? AbortSignal.timeout(30000), headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'maintainer-workbench/0.1', ...((this.token ?? process.env.GITHUB_TOKEN) ? { Authorization: `Bearer ${this.token ?? process.env.GITHUB_TOKEN}` } : {}), ...init.headers } });
-    if (!response.ok) throw new Error(`GitHub ${response.status}${response.status === 403 || response.status === 429 ? '：权限不足或 API 限流，请配置 GITHUB_TOKEN 后重试' : response.status === 404 ? '：仓库不存在，或令牌无读取权限' : '：请求失败'}`);
+    const auth = await resolveGitHubAuth(this.token);
+    const response = await this.fetcher(`https://api.github.com${path}`, { ...init, signal: init.signal ?? AbortSignal.timeout(30000), headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'maintainer-workbench/0.1', ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}), ...init.headers } });
+    if (!response.ok) throw new Error(`GitHub ${response.status}${response.status === 403 || response.status === 429 ? '：权限不足或 API 限流，请检查账号的仓库权限、组织 SSO 授权或 API 限额' : response.status === 404 ? '：仓库不存在，或令牌无读取权限' : response.status === 401 ? '：GitHub 登录已失效，请重新登录或更新令牌' : '：请求失败'}`);
     return response.json();
+  }
+  async connection() {
+    const auth = await resolveGitHubAuth(this.token);
+    if (!auth.token) return { source: auth.source, authenticated: false };
+    try {
+      const user = z.object({ login: z.string() }).parse(await new GitHub(auth.token, this.fetcher).request('/user'));
+      return { source: auth.source, authenticated: true, login: user.login };
+    } catch (error) { return { source: auth.source, authenticated: false, error: error instanceof Error ? error.message : '连接验证失败' }; }
   }
   async sync(fullName: string): Promise<{ repo: Repo; issues: Issue[] }> {
     nameSchema.parse(fullName);
-    const meta = z.object({ full_name: z.string(), description: z.string().nullable(), default_branch: z.string() }).parse(await this.request(`/repos/${fullName}`));
+    const meta = z.object({ full_name: z.string(), description: z.string().nullable(), default_branch: z.string(), private: z.boolean().optional() }).parse(await this.request(`/repos/${fullName}`));
     const commit = z.object({ sha: z.string() }).parse(await this.request(`/repos/${fullName}/commits/${encodeURIComponent(meta.default_branch)}`));
     const issues: Issue[] = [];
     let truncated = false;
@@ -22,7 +32,7 @@ export class GitHub {
       if (rows.length < 100) break;
       if (page === 10) truncated = true;
     }
-    return { repo: { id: meta.full_name, fullName: meta.full_name, description: meta.description ?? '', defaultBranch: meta.default_branch, headSha: commit.sha, localPath: '', mode: 'github', syncedAt: new Date().toISOString(), syncWarning: truncated ? '只同步最近更新的 1000 条记录，较早的记录未覆盖。' : null }, issues };
+    return { repo: { id: meta.full_name, fullName: meta.full_name, description: meta.description ?? '', private: meta.private, defaultBranch: meta.default_branch, headSha: commit.sha, localPath: '', mode: 'github', syncedAt: new Date().toISOString(), syncWarning: truncated ? '只同步最近更新的 1000 条记录，较早的记录未覆盖。' : null }, issues };
   }
   async profile(repo: Repo, signal?: AbortSignal) {
     try {

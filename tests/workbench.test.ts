@@ -6,14 +6,14 @@ import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { Store } from '../src/core/store.ts';
 import { Workbench } from '../src/core/workbench.ts';
-import { demoAnalysis } from '../src/core/demo.ts';
+import { fixtureAnalysis, seedFixture, fixtureRunner } from './support/fixtures.ts';
 import { GitHub } from '../src/core/github.ts';
 import { git, collectPatch } from '../src/core/git.ts';
 import { Credentials } from '../src/core/credentials.ts';
 import { handler, localRejection } from '../src/server/http.ts';
 import type { Job, Runner } from '../src/core/types.ts';
 
-function fixture(autoStart = true) { const store = new Store(':memory:'); const workbench = new Workbench(store, '/tmp/maintainer-tests', undefined, undefined, autoStart); workbench.seed(); return { store, workbench, issue: store.issues()[0] }; }
+function fixture(autoStart = true) { const store = new Store(':memory:'); const workbench = new Workbench(store, '/tmp/maintainer-tests', fixtureRunner, undefined, autoStart); seedFixture(store); return { store, workbench, issue: store.issues()[0] }; }
 
 test('bulk dispatch is atomic and duplicate clicks reuse the same revision', async () => {
   const { workbench, store, issue } = fixture(false);
@@ -21,7 +21,7 @@ test('bulk dispatch is atomic and duplicate clicks reuse the same revision', asy
   const first = workbench.enqueue([issue.id], 'triage');
   assert.deepEqual(workbench.enqueue([issue.id], 'triage'), { created: [], reused: first.created });
   workbench.pump(); await workbench.drain();
-  assert.equal(store.jobs()[0].status, 'awaiting_review'); assert.equal(store.jobs()[0].engine, 'demo / simulated');
+  assert.equal(store.jobs()[0].status, 'awaiting_review'); assert.equal(store.jobs()[0].engine, 'unit-test fixture');
   assert.equal(store.issues()[0].analysis?.tests[0].status, 'not_run');
   await workbench.close();
 });
@@ -66,7 +66,7 @@ test('HTTP rejects cross-origin mutations and malformed batch input', async () =
   const { workbench } = fixture(false);
   const server = createServer(handler(workbench, localRejection)); await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/maintainer/api`;
-  assert.equal((await fetch(url + '/demo', { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
+  assert.equal((await fetch(url + '/jobs', { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
   assert.equal((await fetch(url + '/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"issueIds":[],"kind":"invalid"}' })).status, 400);
   assert.equal((await fetch(url + '/state')).status, 200);
   await new Promise<void>(r => server.close(() => r())); await workbench.close();
@@ -102,7 +102,7 @@ test('local execution produces an actual patch and blocks approval after worktre
   await writeFile(join(path, 'sum.js'), 'export const sum = (a,b) => a-b;\n'); await git(path, ['add', '.']); await git(path, ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-m', 'initial']);
   const sha = await git(path, ['rev-parse', 'HEAD']);
   const store = new Store(':memory:');
-  const runner: Runner = async ({ job, issue }) => { await writeFile(join(job.worktree!, 'sum.js'), 'export const sum = (a,b) => a+b;\n'); return { result: demoAnalysis(issue, 'fix'), engine: 'test-fixture' }; };
+  const runner: Runner = async ({ job, issue }) => { await writeFile(join(job.worktree!, 'sum.js'), 'export const sum = (a,b) => a+b;\n'); return { result: fixtureAnalysis(issue, 'fix'), engine: 'test-fixture' }; };
   const workbench = new Workbench(store, dir, runner);
   const repo = { id: 'owner/repo', fullName: 'owner/repo', description: '', defaultBranch: 'main', headSha: sha, localPath: path, mode: 'github' as const, syncedAt: null, syncWarning: null };
   store.put('repos', repo); store.put('issues', { id: 'owner/repo#1', repoId: repo.id, number: 1, type: 'issue', title: 'sum returns wrong answer', body: 'sum(2,1) should be 3', author: 'dev', labels: [], state: 'open', comments: 0, updatedAt: '2026-09-22', url: 'https://github.com/owner/repo/issues/1' });
@@ -134,7 +134,7 @@ test('fix -> real failing/passing test -> review -> commit/push -> draft PR requ
     catch (e) { before = String((e as { stderr: string }).stderr); assert.match(before, /AssertionError/); }
     await writeFile(join(job.worktree!, 'sum.cjs'), 'module.exports = (a,b) => a+b;\n');
     const after = await exec(process.execPath, ['test.cjs'], { cwd: job.worktree });
-    const result = demoAnalysis(issue, 'fix'); result.summary = 'Local fixture: corrected subtraction to addition.';
+    const result = fixtureAnalysis(issue, 'fix'); result.summary = 'Local fixture: corrected subtraction to addition.';
     result.tests = [{ command: 'node test.cjs (before)', status: 'failed', output: before.slice(0, 1000) }, { command: 'node test.cjs (after)', status: 'passed', output: after.stdout }];
     return { result, engine: 'deterministic-local-test-runner' };
   };

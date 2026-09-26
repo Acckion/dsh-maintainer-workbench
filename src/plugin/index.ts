@@ -18,7 +18,6 @@ export async function apply(ctx: Context): Promise<void> {
   const credentials = new Credentials(dataDir, 'github-only');
   await credentials.load();
   const workbench = new Workbench(new Store(resolve(dataDir, 'workbench.sqlite')), dataDir, harnessRunner(ctx), undefined, true, () => hostStatus(ctx));
-  if (workbench.store.repos().length === 0) workbench.seed();
   const connection = Reflect.get(ctx, 'connection') as Connection;
   ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: API, handler: handler(workbench, req => connection.requestRejection(req), credentials) }));
   ctx.effect(() => () => workbench.close());

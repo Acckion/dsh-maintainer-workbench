@@ -9,7 +9,7 @@ import { Credentials } from '../src/core/credentials.ts';
 import { Store } from '../src/core/store.ts';
 import { Workbench } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
-import { demoAnalysis } from '../src/core/demo.ts';
+import { fixtureAnalysis, seedFixture, fixtureRunner } from './support/fixtures.ts';
 
 test('new native jobs inherit changing host model/reasoning and default preset, including metadata-only work', async () => {
   let selection = { provider: 'host-a', model: 'model-a', reasoningEffort: 'high' };
@@ -25,8 +25,8 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   } as unknown as Context;
   const dir = await mkdtemp(join(tmpdir(), 'maintainer-inherit-')); const store = new Store(':memory:');
   const github = new GitHub('', async () => Response.json([]));
-  const w = new Workbench(store, dir, harnessRunner(ctx, github), github, false, () => hostStatus(ctx)); w.seed();
-  const issue = store.issues()[0], repo = store.repos()[0], result = demoAnalysis(issue, 'triage');
+  const w = new Workbench(store, dir, harnessRunner(ctx, github), github, false, () => hostStatus(ctx)); seedFixture(store);
+  const issue = store.issues()[0], repo = store.repos()[0], result = fixtureAnalysis(issue, 'triage');
   store.put('repos', { ...repo, mode: 'github', localPath: '' });
   w.updateSettings({ ...store.settings(), provider: 'wrong-provider', model: 'wrong-model', agentPreset: 'inherit' });
   w.enqueue([issue.id], 'triage'); w.pump(); await w.drain();
