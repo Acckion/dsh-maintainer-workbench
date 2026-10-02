@@ -112,17 +112,17 @@ test('bound PR update can reconcile its own saved commit after a lost confirmati
   const issue={...f.issue,type:'pr' as const,headSha:f.repo.headSha,prBaseSha:f.repo.headSha,url:'https://github.com/fixture/queue/pull/128'};f.store.put('issues',issue);
   const pr={headSha:f.repo.headSha,baseSha:f.repo.headSha,headRef:'topic',headRepo:f.repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:true,checks:[],reviews:[],warnings:[]};
   for(const old of [f.fix,f.check,review]){const current=f.store.get<Job>('jobs',old.id)!;f.store.put('jobs',{...current,issueSnapshot:issue,revision:revision(issue,f.repo,current.kind),prContext:pr});}
-  let head=pr.headSha,loseConfirmation=false,pushes=0,posts=0;
+  let head=pr.headSha,remoteUpdatedAt=issue.updatedAt,loseConfirmation=false,pushes=0,posts=0;
   f.gh.pullRequest=async()=>{if(loseConfirmation){loseConfirmation=false;throw Error('lost confirmation');}return{...pr,headSha:head};};
-  f.gh.request=async(_path,init)=>{if(init?.method==='POST')posts++;return{updated_at:issue.updatedAt};};
+  f.gh.request=async(_path,init)=>{if(init?.method==='POST')posts++;return{updated_at:remoteUpdatedAt};};
   await f.w.review(review.id,'approve','reviewed');await f.w.review(f.fix.id,'approve','implementation approved');
   const remote=join(f.repo.localPath,'..','remote.git');await git(f.repo.localPath,['init','--bare',remote]);await git(f.repo.localPath,['push',remote,'HEAD:refs/heads/topic']);
-  const push:typeof git=async(cwd,args)=>{pushes++;await git(cwd,['push',remote,args[2]]);head=await git(cwd,['rev-parse','HEAD']);if(pushes===1)loseConfirmation=true;return'';};
+  const push:typeof git=async(cwd,args)=>{pushes++;await git(cwd,['push',remote,args[2]]);head=await git(cwd,['rev-parse','HEAD']);if(pushes===1){loseConfirmation=true;remoteUpdatedAt='2026-10-06T00:00:00Z';}return'';};
   const token=process.env.GITHUB_TOKEN;process.env.GITHUB_TOKEN='fixture';try{
     await assert.rejects(publish(f.store,f.store.get<Job>('jobs',f.fix.id)!,f.repo,'update_pr',f.gh,push),/lost confirmation/);
     const committed=f.store.get<Job>('jobs',f.fix.id)!.publishedCommit;assert.equal(committed,head);
     const urls=await publish(f.store,f.store.get<Job>('jobs',f.fix.id)!,f.repo,'update_pr',f.gh,push);
-    assert.deepEqual(urls,[issue.url]);assert.equal(f.store.get<Job>('jobs',f.fix.id)!.publishedCommit,committed);assert.equal(await git(remote,['rev-parse','refs/heads/topic']),committed);assert.equal(posts,0);
+    assert.deepEqual(urls,[issue.url]);assert.equal(f.store.get<Job>('jobs',f.fix.id)!.publishedCommit,committed);assert.equal(await git(remote,['rev-parse','refs/heads/topic']),committed);assert.equal(posts,0);assert.equal(pushes,1);assert.equal(f.store.get<Job>('jobs',f.fix.id)?.publications?.update_pr?.remoteUpdatedAt,remoteUpdatedAt);
   }finally{if(token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=token;}
 });
 
@@ -130,7 +130,24 @@ test('ordinary PR review cannot publish stale findings changed during the final 
   const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0],issue={...store.issues()[0],type:'pr' as const,url:'https://github.com/fixture/queue/pull/128'};
   const artifact=artifactSchemas.review.parse({...common,stage:'review',verdict:'changes_requested',blockers:[],findings:[{id:'f1',title:'candidate finding',severity:'P2',path:'value.txt',line:1,trigger:'fixture',evidence:'fixture',recommendation:'inspect'}]});
   const pr={headSha:repo.headSha,baseSha:repo.headSha,headRef:'topic',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:true,checks:[],reviews:[],warnings:[]};
-  const job:Job={id:'ordinary-review',repoId:repo.id,issueId:issue.id,issueSnapshot:issue,kind:'review',status:'approved',revision:'r',baseSha:repo.headSha,attempt:1,createdAt:'now',updatedAt:'now',artifact,result:asAnalysis(artifact),findingDecisions:{f1:'accepted'},prContext:pr};store.put('jobs',job);let posts=0;
+  const job:Job={id:'ordinary-review',repoId:repo.id,issueId:issue.id,issueSnapshot:issue,kind:'review',status:'approved',revision:revision(issue,repo,'review'),baseSha:repo.headSha,attempt:1,createdAt:'now',updatedAt:'now',artifact,result:asAnalysis(artifact),findingDecisions:{f1:'accepted'},prContext:pr};store.put('issues',issue);store.put('jobs',job);let posts=0;
   const gh=new GitHub('fixture',async(input,init)=>{const url=String(input);if(init?.method==='POST'){posts++;return Response.json({html_url:issue.url+'#review'});}if(url.endsWith('/pulls/128'))return Response.json({head:{sha:pr.headSha,ref:pr.headRef,repo:{full_name:pr.headRepo}},base:{sha:pr.baseSha,ref:pr.baseRef},draft:false,merged:false,mergeable:true});if(url.endsWith('/issues/128'))return Response.json({updated_at:issue.updatedAt});if(url.includes('/reviews?per_page=100&page='))store.put('jobs',{...store.get<Job>('jobs',job.id)!,status:'awaiting_review',findingDecisions:{f1:'needs_evidence'}});return Response.json([]);});
   const token=process.env.GITHUB_TOKEN;process.env.GITHUB_TOKEN='fixture';try{await assert.rejects(publish(store,job,repo,'review',gh),/审批或产物内容已变化/);assert.equal(posts,0);assert.equal(store.get<Job>('jobs',job.id)?.findingDecisions?.f1,'needs_evidence');}finally{store.close();if(token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=token;}
+});
+
+test('remote base drift during publication checks prevents even a branch push', async t => {
+  const f = await setup(t); await f.w.review(f.fix.id, 'approve', 'approve saved implementation');
+  let remoteHead = f.repo.headSha, pushes = 0, posts = 0;
+  f.gh.request = async (path, init) => {
+    if (init?.method === 'POST') { posts++; return { html_url: 'https://github.com/fixture/queue/pull/1' }; }
+    if (path.includes('/commits/')) return { sha: remoteHead };
+    if (path.endsWith(`/issues/${f.issue.number}`)) { remoteHead = 'b'.repeat(40); return { updated_at: f.issue.updatedAt }; }
+    if (path.includes('/pulls?')) return [];
+    throw Error('Unexpected fixture request ' + path);
+  };
+  const token = process.env.GITHUB_TOKEN; process.env.GITHUB_TOKEN = 'fixture';
+  try {
+    await assert.rejects(publish(f.store, f.store.get<Job>('jobs', f.fix.id)!, f.repo, 'pr', f.gh, async () => { pushes++; return ''; }), /代码基线.*变化/);
+    assert.equal(pushes, 0); assert.equal(posts, 0);
+  } finally { if (token === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = token; }
 });

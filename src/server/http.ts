@@ -55,7 +55,8 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
       else if (path === '/cancel') workbench.cancel(z.object({ id: z.string() }).parse(input).id);
       else if (path === '/retry') workbench.retry(z.object({ id: z.string() }).parse(input).id);
       else if (path === '/review') { const p = z.object({ id: z.string(), decision: z.enum(['approve', 'reject']), note: z.string().max(4000) }).parse(input); send(res, 200, { ok: true, ...await workbench.review(p.id, p.decision, p.note) }); return; }
-      else if (path === '/publish') { const p = z.object({ id: z.string(), action: z.enum(['comment', 'labels', 'pr', 'update_pr', 'review']) }).parse(input); send(res, 200, { urls: await workbench.publish(p.id, p.action) }); return; }
+      else if (path === '/publish/preview') { const p = z.object({ id: z.string(), action: z.enum(['comment', 'labels', 'pr', 'update_pr', 'review']) }).parse(input); send(res, 200, await workbench.previewPublish(p.id, p.action)); return; }
+      else if (path === '/publish') { const p = z.object({ id: z.string(), action: z.enum(['comment', 'labels', 'pr', 'update_pr', 'review']), previewStamp: z.string().length(64).optional() }).parse(input); send(res, 200, { urls: await workbench.publish(p.id, p.action, p.previewStamp) }); return; }
       else if (path === '/credentials') { if (!credentials) throw new Error('当前运行环境不提供密钥配置'); await credentials.save(input); workbench.store.audit('credentials.updated', '更新本地连接配置，未记录密钥'); }
       else if (path === '/policy') { const p = z.object({ repoId:z.string(), policy:z.unknown() }).parse(input); workbench.updatePolicy(p.repoId,p.policy); }
       else if (path === '/settings') workbench.updateSettings(input);

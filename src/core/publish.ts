@@ -1,22 +1,101 @@
 import { resolveGitHubAuth } from './github-auth.ts';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { Job, Repo } from './types.ts';
+import type { Issue, Job, Repo } from './types.ts';
 import type { Store } from './store.ts';
 import { GitHub } from './github.ts';
 import { collectPatch, git, validateCheckout } from './git.ts';
 import { assertDeliveryCurrent, resolveDelivery, type DeliveryTarget } from './delivery.ts';
+import { lightweight } from './artifacts.ts';
+import { revision } from './revision.ts';
 const urlSchema = z.object({ html_url: z.string().url() });
 export type PublishAction = 'comment' | 'labels' | 'pr' | 'update_pr' | 'review';
+const approvalStamp = (job: Job) => JSON.stringify({ ...job, publications: undefined, publishedCommit: undefined, artifactState: undefined });
+const previewStamp = (job: Job, action: PublishAction, mode: 'publish' | 'reconcile' = 'publish') => createHash('sha256').update(JSON.stringify([approvalStamp(job), action, mode])).digest('hex');
+
+async function existingPublication(job: Job, repo: Repo, action: PublishAction, github: GitHub): Promise<string[] | undefined> {
+  if (job.publications?.[action]?.status !== 'failed' || !['comment', 'review'].includes(action)) return;
+  const resource = action === 'comment' ? `issues/${job.issueSnapshot.number}/comments` : `pulls/${job.issueSnapshot.number}/reviews`;
+  const marker = `<!-- maintainer-workbench:${job.id}:${action} -->`;
+  for (let page = 1; ; page++) {
+    const rows = z.array(z.object({ body: z.string().nullable(), html_url: z.string().url() })).parse(await github.request(`/repos/${repo.fullName}/${resource}?per_page=100&page=${page}`));
+    const existing = rows.find(row => row.body?.includes(marker));
+    if (existing) return [existing.html_url];
+    if (rows.length < 100) return;
+  }
+}
+
+function assertInputCurrent(store: Store, job: Job, repo: Repo): void {
+  const currentIssue = store.get<Issue>('issues', job.issueId), currentRepo = store.get<Repo>('repos', job.repoId);
+  if (!currentIssue || !currentRepo || currentIssue.repoId !== job.repoId || currentIssue.number !== job.issueSnapshot.number
+    || currentRepo.fullName !== repo.fullName || currentRepo.defaultBranch !== repo.defaultBranch
+    || job.revision !== revision(currentIssue, currentRepo, job.kind)) throw new Error('发布输入已变化，预览已失效；请重新同步、分析并审核');
+}
+
+/** Re-read the actual code and issue inputs for preview and every new external write. */
+async function remoteInputs(store: Store, job: Job, repo: Repo, action: PublishAction, github: GitHub): Promise<string> {
+  assertInputCurrent(store, job, repo);
+  if (job.prContext) {
+    const current = await github.pullRequest(repo, job.issueSnapshot.number);
+    if ((current.headSha !== job.prContext.headSha && !(action === 'update_pr' && current.headSha === job.publishedCommit)) || current.baseSha !== job.prContext.baseSha) throw new Error('PR head/base 已变化，旧产物不可发布');
+    if (current.headRef !== job.prContext.headRef || current.headRepo !== job.prContext.headRepo || current.baseRef !== job.prContext.baseRef) throw new Error('PR 目标分支已变化，旧产物不可发布');
+    if (current.merged) throw new Error('PR 已合并');
+  } else if (!lightweight(job.kind)) {
+    const live = z.object({ sha: z.string() }).parse(await github.request(`/repos/${repo.fullName}/commits/${encodeURIComponent(repo.defaultBranch)}`));
+    if (live.sha !== job.baseSha) throw new Error('远端代码基线已变化，预览已失效；请同步后重新分析并审核');
+  }
+  const live = z.object({ updated_at: z.string() }).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+  assertInputCurrent(store, job, repo);
+  return live.updated_at;
+}
+
+function assertIssueFresh(job: Job, updatedAt: string): void {
+  const receipt = Object.values(job.publications ?? {}).filter(r => r.status === 'published').sort((a, b) => b.at.localeCompare(a.at))[0];
+  if (updatedAt !== (receipt?.remoteUpdatedAt ?? job.issueSnapshot.updatedAt)) throw new Error('GitHub Issue/PR 已更新，预览已失效；请重新同步并分析后发布');
+}
+
+/** Read-only preview validation; this does not authorize or perform a publication. */
+export async function previewPublication(store: Store, job: Job, repo: Repo, action: PublishAction, github = new GitHub()) {
+  if (job.status !== 'approved' || !job.result) throw new Error('请先审核并接受结果');
+  const stamp = previewStamp(job, action);
+  const alreadyPublished = await existingPublication(job, repo, action, github);
+  if (alreadyPublished) return { id: job.id, revision: job.revision, updatedAt: job.updatedAt, stamp: previewStamp(job, action, 'reconcile'), alreadyPublished };
+  const updatedAt = await remoteInputs(store, job, repo, action, github);
+  // A failed attempt may have written remotely before losing its response. Allow
+  // the existing deduplication lookup; a genuinely new write still checks freshness.
+  if (!job.publications?.[action]) assertIssueFresh(job, updatedAt);
+  if (job.deliveryReviewId) {
+    const delivery = await resolveDelivery(store, repo, job.deliveryReviewId, github, { allowPublishedHead: action === 'update_pr' && !!job.publishedCommit });
+    if (delivery.implementationJobId !== job.id) throw new Error('实施产物与批准的审查目标不一致');
+  }
+  if (job.worktree && await collectPatch(job.worktree, job.baseSha) !== (job.patch ?? '')) throw new Error('已审核差异发生变化，请重新派发并审核');
+  assertInputCurrent(store, job, repo);
+  const current = store.get<Job>('jobs', job.id);
+  if (!current || previewStamp(current, action) !== stamp) throw new Error('审批或产物内容已变化，请重新打开预览');
+  return { id: job.id, revision: job.revision, updatedAt: job.updatedAt, stamp };
+}
 
 /** Called only by an explicit publish action after local result approval. */
-export async function publish(store: Store, job: Job, repo: Repo, action: PublishAction, github = new GitHub(), executeGit: typeof git = git): Promise<string[]> {
+export async function publish(store: Store, job: Job, repo: Repo, action: PublishAction, github = new GitHub(), executeGit: typeof git = git, expectedPreview?: string): Promise<string[]> {
   if (job.status !== 'approved' || !job.result) throw new Error('请先审核并接受结果');
-  const approvalStamp = (value: Job) => JSON.stringify({ ...value, publications: undefined, publishedCommit: undefined });
   const approvedContent = approvalStamp(job);
   if (!(await resolveGitHubAuth()).token) throw new Error('发布需要有效的 GitHub 登录或令牌（仓库写权限）');
   const prior = job.publications?.[action];
   if (prior?.status === 'published') return prior.urls;
   if (prior?.status === 'publishing') throw new Error('该操作正在发布，或上次发布被中断。请先核查 GitHub 发布结果，避免重复写入。');
+  // Reconcile only a marker already present remotely. Stale inputs may recover a
+  // lost receipt, but must never reach a new POST through this read-only path.
+  const recovered = await existingPublication(job, repo, action, github);
+  if (recovered) {
+    const live = z.object({ updated_at: z.string() }).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+    const current = store.get<Job>('jobs', job.id)!;
+    store.put('jobs', { ...current, publications: { ...current.publications, [action]: { status: 'published', urls: recovered, remoteUpdatedAt: live.updated_at, at: new Date().toISOString() } } });
+    store.audit('publish.reconciled', `${action}：核对已存在的远端记录，未重复写入`, job.id);
+    return recovered;
+  }
+  if (expectedPreview === previewStamp(job, action, 'reconcile')) throw new Error('此前找到的发布记录已不存在；本次仅核对回执，不会重新发送，请先在 GitHub 核查');
+  if (expectedPreview && expectedPreview !== previewStamp(job, action)) throw new Error('审批或产物内容已变化，发布预览已失效；请重新打开预览');
+  assertInputCurrent(store, job, repo);
   let delivery: DeliveryTarget | undefined;
   if (job.deliveryReviewId) {
     delivery = await resolveDelivery(store, repo, job.deliveryReviewId, github, { allowPublishedHead: action === 'update_pr' && !!job.publishedCommit });
@@ -25,19 +104,17 @@ export async function publish(store: Store, job: Job, repo: Repo, action: Publis
   const assertBinding = () => {
     const current = store.get<Job>('jobs', job.id);
     if (!current || current.status !== 'approved' || approvalStamp(current) !== approvedContent) throw new Error('发布前审批或产物内容已变化，请重新确认');
+    assertInputCurrent(store, job, repo);
     if (delivery) assertDeliveryCurrent(store, delivery);
   };
-  const remoteWrite = (path: string, init: RequestInit) => { assertBinding(); return github.request(path, init); };
-  if (job.prContext) {
-    const current = await github.pullRequest(repo, job.issueSnapshot.number);
-    // Retry after a successful push may observe our own recorded commit.
-    if ((current.headSha !== job.prContext.headSha && !(action === 'update_pr' && current.headSha === job.publishedCommit)) || current.baseSha !== job.prContext.baseSha) throw new Error('PR head/base 已变化，旧产物不可发布');
-    if (current.headRef !== job.prContext.headRef || current.headRepo !== job.prContext.headRepo || current.baseRef !== job.prContext.baseRef) throw new Error('PR 目标分支已变化，旧产物不可发布');
-    if (current.merged) throw new Error('PR 已合并');
-  }
-  const live = z.object({ updated_at: z.string() }).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
-  const lastReceipt = Object.values(job.publications ?? {}).filter(r => r.status === 'published').sort((a,b) => b.at.localeCompare(a.at))[0];
-  const assertFresh = () => { if (live.updated_at !== (lastReceipt?.remoteUpdatedAt ?? job.issueSnapshot.updatedAt)) throw new Error('GitHub Issue/PR 已更新，请重新同步并分析后发布'); };
+  const remoteWrite = async (path: string, init: RequestInit) => {
+    assertBinding();
+    assertIssueFresh(job, await remoteInputs(store, job, repo, action, github));
+    assertBinding();
+    return github.request(path, init);
+  };
+  const updatedAt = await remoteInputs(store, job, repo, action, github);
+  const assertFresh = () => assertIssueFresh(job, updatedAt);
   if (!prior) assertFresh();
   if (['pr', 'update_pr'].includes(action) && (!job.worktree || !job.branch || !job.patch)) throw new Error('没有可发布的工作区补丁');
   if (job.worktree && await collectPatch(job.worktree, job.baseSha) !== (job.patch ?? '')) throw new Error('已审核差异发生变化，请重新派发并审核');
@@ -100,8 +177,19 @@ export async function publish(store: Store, job: Job, repo: Repo, action: Publis
         const current = await github.pullRequest(repo, job.issueSnapshot.number);
         const ownCommit = store.get<Job>('jobs', job.id)!.publishedCommit;
         if (current.merged || (current.headSha !== job.prContext.headSha && current.headSha !== ownCommit) || current.baseSha !== job.prContext.baseSha || current.headRef !== job.prContext.headRef || current.headRepo !== job.prContext.headRepo || current.baseRef !== job.prContext.baseRef) throw new Error('推送前 PR 版本或目标分支已变化');
+        if (action === 'update_pr' && job.publishedCommit && current.headSha === ownCommit) {
+          // A previous push may have succeeded before its confirmation was lost.
+          // Confirm that exact saved commit read-only, even though the push itself
+          // advanced GitHub's updated_at; do not push it again.
+          const confirmed = z.object({ updated_at: z.string() }).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+          assertBinding();
+          const urls = [job.issueSnapshot.url];
+          set('published', urls, undefined, confirmed.updated_at);
+          return urls;
+        }
       }
       if (await collectPatch(worktree, job.baseSha) !== job.patch || await git(worktree, ['rev-parse', 'HEAD']) !== store.get<Job>('jobs', job.id)!.publishedCommit) throw new Error('推送前工作区已变化');
+      assertIssueFresh(job, await remoteInputs(store, store.get<Job>('jobs', job.id)!, repo, action, github));
       assertBinding();
       await executeGit(worktree, ['push', `https://github.com/${repo.fullName}.git`, `HEAD:refs/heads/${action === 'update_pr' ? job.prContext!.headRef : job.branch}`], true);
       if (action === 'update_pr') {

@@ -4,7 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { publish, type PublishAction } from './publish.ts';
+import { previewPublication, publish, type PublishAction } from './publish.ts';
 import { retrieveRelated } from './retrieval.ts';
 import { Store } from './store.ts';
 import { GitHub } from './github.ts';
@@ -211,13 +211,17 @@ export class Workbench {
     this.store.put('issues', { ...issue, workflow: { stage, reason, updatedAt: new Date().toISOString() } });
     this.store.audit('item.decision', `${issueId}: ${stage} · ${reason}`);
   }
-  async publish(id: string, action: PublishAction): Promise<string[]> {
+  async previewPublish(id: string, action: PublishAction) {
+    const job = this.job(id);
+    return previewPublication(this.store, job, this.repo(job.repoId), action, this.github);
+  }
+  async publish(id: string, action: PublishAction, expectedPreview?: string): Promise<string[]> {
     if (this.publishing.has(id)) throw new Error('此任务正在发布，请等待当前操作完成');
     const targetJob = this.job(id);
     const target = `${targetJob.repoId}:${targetJob.prContext?.headRef ?? targetJob.branch ?? targetJob.issueId}`;
     if (this.publishing.has(target)) throw new Error('同一目标分支正在发布，请稍后重试');
     this.publishing.add(id); this.publishing.add(target);
-    try { const job = this.job(id); return await publish(this.store, job, this.repo(job.repoId), action, this.github); }
+    try { const job = this.job(id); return await publish(this.store, job, this.repo(job.repoId), action, this.github, undefined, expectedPreview); }
     finally { this.publishing.delete(id); this.publishing.delete(target); }
   }
   updatePolicy(repoId: string, input: unknown): void {
