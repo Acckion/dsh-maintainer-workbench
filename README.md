@@ -70,6 +70,8 @@ npm run check          # strict TypeScript + 行为/本地 Git 流程测试 + �
 npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent / Shell 联调
 ```
 
+新增 `npm run evaluate` 可对固定基线和当前源码运行八案例工作流对照，并生成 JSON/Markdown 证据；默认同时进行本地模型驱动的真实 Harness 联调。使用方式与未测边界见 [可复现评估](docs/EVALUATION.md)。这不是模型质量或修复成功率评测。
+
 浏览器回归脚本为 `scripts/browser-smoke.mjs`；需要先启动独立预览，并安装 Playwright Chromium。已记录的证据范围见 [验证记录](docs/VALIDATION.md)。本地模型夹具验证协议和工具链，不代表真实模型的智能评测。
 
 ## 数据与限制
