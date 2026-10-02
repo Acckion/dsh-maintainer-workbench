@@ -52,7 +52,7 @@ npm run evaluate -- --baseline <commit> --out .data/evaluations/my-run
 
 ## 已测与未测
 
-2026-10-02：旧基线八项中五项满足契约，修复版本八项全部满足；差异恰为 mutation-retry、unexecuted-test-claim、binary-handoff。两侧通过相同正样本、无缺陷/缺信息负样本及格式恢复控制。
+2026-10-02：[已提交代码的完整留证](evidence/evaluation-2026-10-02/SUMMARY.md)中，旧基线八项中五项满足契约，修复版本八项全部满足；差异恰为 mutation-retry、unexecuted-test-claim、binary-handoff。两侧通过相同正样本、无缺陷/缺信息负样本及格式恢复控制。
 
 记录的毫秒值包括临时仓库准备与本机调度；单次前后运行不构成性能提升证据。模型 Token、真实 API 成本、人工采纳率和真实模型误报率必须保持 null，不用夹具次数或合成 token 数替代。
 

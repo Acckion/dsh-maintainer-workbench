@@ -1,0 +1,46 @@
+{
+  "checkedAt": "2026-10-02T02:42:33.039Z",
+  "branch": "test/harness-0.2-compatibility",
+  "commit": "d2bf220277485a2dd90ba93e28aa7ec104030984",
+  "pluginBase": "ce9e68ff940192d6f38f3918c6d0f60039388139",
+  "npmDistTags": {
+    "latest": "0.2.0-rc.2",
+    "next": "0.2.0-rc.2",
+    "alpha": "0.1.7-alpha.2"
+  },
+  "versions": {
+    "harness": "0.2.0-rc.2",
+    "cordis": "4.0.4"
+  },
+  "initialFailure": "ERESOLVE: Cordis 4.0.3 does not satisfy dsh-llm 0.2.0-rc.2 peer ~4.0.4",
+  "resolution": "Isolated branch updates Cordis peer and development dependency to 4.0.4 without forcing peer resolution",
+  "checks": {
+    "typecheck": "passed",
+    "tests": {
+      "passed": 54,
+      "failed": 0
+    },
+    "build": "passed",
+    "nativeIntegration": "passed"
+  },
+  "native": {
+    "fixStatus": "awaiting_review",
+    "triageStatus": "completed",
+    "host": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash",
+      "agentPreset": "standard",
+      "adapterRegistered": true
+    },
+    "modelMode": "deterministic local Messages fixture; no paid model inference"
+  },
+  "scope": {
+    "productionBranchStillPinnedTo": "0.1.7-alpha.1",
+    "notTested": [
+      "browser UI",
+      "installed tarball lifecycle",
+      "real model provider behavior",
+      "new 0.2 feature surface"
+    ]
+  }
+}
