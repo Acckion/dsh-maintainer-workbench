@@ -115,3 +115,9 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 分诊与预检仅处理元数据，不创建代码工作区、不开放 shell；代码任务在固定版本的隔离工作区执行，继续继承 Harness 模型和权限。设置中可按仓库调整同步、自动分诊与预算。发布仍需预览并确认，不自动合并。
 
 具体实现、验证与能力边界见 [工作流实现记录](docs/product/IMPLEMENTATION.md)。
+
+### Fresh profile compatibility
+
+The plugin accepts host Cordis `>=4.0.3 <4.1.0`; the source lockfile still tests `4.0.3`. Freshly resolved DSH `0.1.7` utility packages can require `~4.0.4`, so a fresh npm-style host should supply `4.0.4`. An isolated `0.1.7-alpha.1` host with `4.0.4` passed installed-package native workflows.
+
+Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).

@@ -57,7 +57,7 @@
     "node": ">=24"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "4.0.3"
+    "@deepseek-ai/cordis": ">=4.0.3 <4.1.0"
   },
   "dependencies": {
     "react": "18.3.1",

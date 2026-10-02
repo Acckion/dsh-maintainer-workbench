@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { validateReport } from '../tests/evaluation/report.ts';
 import { fixtureEnvironment } from '../tests/evaluation/environment.ts';
+import { dependencyFingerprints } from '../tests/evaluation/dependencies.ts';
 const exec = promisify(execFile), root = resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
 const value = (flag, fallback) => { const i = args.indexOf(flag); if (i < 0) return fallback; if (!args[i + 1] || args[i + 1].startsWith('--')) throw Error(`Missing ${flag} value`); return args[i + 1]; };
@@ -27,15 +28,18 @@ const runCorpus = async (source, label, commit) => {
   console.log(`${label}:\n${result.stdout.trim()}`);
   return validateReport(JSON.parse(await readFile(output, 'utf8')));
 };
-let before, after, dependencyLockSha256, native = { status: 'not_run', mode: 'real Harness agent with deterministic local model', realModelQualityMeasured: false };
+let before, after, dependencyLockSha256, baselineDependencyLockSha256, dependencyGraphSha256, native = { status: 'not_run', mode: 'real Harness agent with deterministic local model', realModelQualityMeasured: false };
 try {
   const source = join(scratch, 'baseline'); await mkdir(source);
   const archive = join(scratch, 'baseline.tar');
   await exec('git', ['archive', '--format=tar', `--output=${archive}`, baseline], { cwd: root });
   await exec('tar', ['-xf', archive, '-C', source]);
-  const hashLock = async directory => createHash('sha256').update(await readFile(join(directory, 'package-lock.json'))).digest('hex');
-  dependencyLockSha256 = await hashLock(root);
-  if (await hashLock(source) !== dependencyLockSha256) throw Error('Baseline and candidate dependency locks differ; provision matching runtimes before comparing them');
+  const sourceFingerprint = dependencyFingerprints(await readFile(join(source, 'package-lock.json'), 'utf8'));
+  const candidateFingerprint = dependencyFingerprints(await readFile(join(root, 'package-lock.json'), 'utf8'));
+  dependencyLockSha256 = candidateFingerprint.lockSha256;
+  baselineDependencyLockSha256 = sourceFingerprint.lockSha256;
+  dependencyGraphSha256 = candidateFingerprint.graphSha256;
+  if (sourceFingerprint.graphSha256 !== dependencyGraphSha256) throw Error('Baseline and candidate resolved dependency graphs differ; provision matching runtimes before comparing them');
   await symlink(join(root, 'node_modules'), join(source, 'node_modules'), 'dir');
   before = await runCorpus(source, 'baseline', baseline);
   after = await runCorpus(root, 'candidate', candidate);
@@ -60,7 +64,7 @@ try {
 } finally { await rm(scratch, { recursive: true, force: true }); }
 const corpusHash = createHash('sha256').update(await readFile(join(root, 'tests/evaluation/corpus.ts'))).update(await readFile(join(root, 'tests/evaluation/run.ts'))).digest('hex');
 const rows = after.cases.map(result => ({ id: result.id, title: result.title, category: result.category, baseline: before.cases.find(old => old.id === result.id)?.expectationSatisfied ?? null, candidate: result.expectationSatisfied, baselineMs: before.cases.find(old => old.id === result.id)?.durationMs ?? null, candidateMs: result.durationMs }));
-const comparison = { schemaVersion: 1, generatedAt: new Date().toISOString(), corpusVersion: after.corpusVersion, corpusSha256: corpusHash, dependencyLockSha256, baselineCommit: baseline, candidateCommit: candidate, candidateHasUncommittedChanges: dirty, pinnedHarnessVersion: JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).devDependencies['@deepseek-ai/dsh'], mode: after.mode, baseline: before.metrics, candidate: after.metrics, cases: rows, native, realModelEvaluation: { status: 'not_run', reason: 'Requires separately approved provider, model/reasoning, credential destination and spending budget', tokens: null, apiCostUsd: null, humanAcceptanceRate: null, falsePositiveRate: null }, limitations: after.limitations };
+const comparison = { schemaVersion: 1, generatedAt: new Date().toISOString(), corpusVersion: after.corpusVersion, corpusSha256: corpusHash, dependencyLockSha256, baselineDependencyLockSha256, dependencyGraphSha256, baselineCommit: baseline, candidateCommit: candidate, candidateHasUncommittedChanges: dirty, pinnedHarnessVersion: JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).devDependencies['@deepseek-ai/dsh'], mode: after.mode, baseline: before.metrics, candidate: after.metrics, cases: rows, native, realModelEvaluation: { status: 'not_run', reason: 'Requires separately approved provider, model/reasoning, credential destination and spending budget', tokens: null, apiCostUsd: null, humanAcceptanceRate: null, falsePositiveRate: null }, limitations: after.limitations };
 await writeFile(join(directory, 'comparison.json'), JSON.stringify(comparison, null, 2) + '\n');
 const markdown = ['# Maintainer workflow evaluation', '', '**Deterministic contract checks, not a model-quality benchmark.**', '', `Baseline: ${baseline}`, `Candidate: ${candidate}${dirty ? ' (working tree had changes)' : ''}`, `Corpus SHA-256: ${corpusHash}`, '', `Workflow expectations: baseline ${before.metrics.passed}/${before.metrics.cases}; candidate ${after.metrics.passed}/${after.metrics.cases}`, `Native Harness integration: ${native.status} (real agent/tools, local scripted model; fix and triage only)`, '', '| Case | Baseline | Candidate |', '|---|---|---|', ...rows.map(row => `| ${row.id} | ${row.baseline ? 'PASS' : 'FAIL'} | ${row.candidate ? 'PASS' : 'FAIL'} |`), '', 'Detailed observed states, local command outputs, elapsed times and patches are in baseline.json and candidate.json. Single-run elapsed times include fixture setup and are not speed comparisons.', '', 'Real model acceptance, false-positive rate, tokens and API cost are not measured. Fixture cases and responses must not be presented as real model performance.', '', 'Paid API requests: 0. No external GitHub writes. Original fixtures are MIT-licensed; runtime/resource attribution remains in THIRD_PARTY_NOTICES.md.', ''];
 await writeFile(join(directory, 'SUMMARY.md'), markdown.join('\n'));
