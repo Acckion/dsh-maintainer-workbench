@@ -1,17 +1,21 @@
 import React, { useState } from 'react';
 import type { Issue, Job, JobKind } from '../core/types.ts';
 import { kindNames } from '../core/types.ts';
-const stages: Record<string,string> = { needs_info:'等待补充信息', decision:'等待维护者决策', accepted:'已接受', deferred:'已暂缓', investigate:'调查原因', implement:'可以实施', answer:'准备答复', track:'跟踪已有工作', draft:'远端草稿阶段', review:'等待审查', blocked:'存在阻塞', fix:'实施完成', docs:'文档变更完成', validate:'验证完成', ci:'CI 诊断完成' };
+import { validationState } from '../core/workflow-state.ts';
+const stages: Record<string,string> = { needs_info:'等待补充信息', decision:'等待维护者决策', accepted:'已接受', deferred:'已暂缓', investigate:'调查原因', implement:'可以实施', answer:'准备答复', track:'跟踪已有工作', draft:'远端草稿阶段', review:'等待审查', blocked:'存在阻塞', fix:'实施完成', docs:'文档变更完成', validate:'验证完成', validated:'验证报告通过', ci:'CI 诊断完成' };
 export function WorkflowPanel({ issue, job, history, busy, act }: { issue: Issue; job?: Job; history: Job[]; busy: boolean; act: (path: string, data: unknown, message: string) => Promise<unknown> }) {
   const [instructions, setInstructions] = useState('');
   const a = job?.artifact;
+  const validation = validationState(a);
   const complete = job?.artifactState !== 'stale' && job && !!job.result && !['running','queued','failed','cancelled','rejected'].includes(job.status);
-  const primary: JobKind | undefined = !a ? (issue.type === 'pr' ? 'preflight' : 'triage') : a.stage === 'triage' ? (a.route === 'implement' ? (a.category === 'docs' ? 'docs' : 'fix') : a.route === 'investigate' ? 'investigate' : undefined) : a.stage === 'preflight' ? 'review' : a.stage === 'investigate' ? 'fix' : ['fix','docs'].includes(a.stage) ? 'validate' : a.stage === 'validate' ? 'review' : a.stage === 'review' && Object.values(job?.findingDecisions ?? {}).includes('accepted') ? 'fix' : a.stage === 'ci' ? 'investigate' : undefined;
+  const primary: JobKind | undefined = !a ? (issue.type === 'pr' ? 'preflight' : 'triage') : a.stage === 'triage' ? (a.route === 'implement' ? (a.category === 'docs' ? 'docs' : 'fix') : a.route === 'investigate' ? 'investigate' : undefined) : a.stage === 'preflight' ? 'review' : a.stage === 'investigate' ? 'fix' : ['fix','docs'].includes(a.stage) ? 'validate' : a.stage === 'validate' ? (validation?.state === 'passed' ? 'review' : validation?.state === 'failed' ? 'fix' : 'validate') : a.stage === 'review' && Object.values(job?.findingDecisions ?? {}).includes('accepted') ? 'fix' : a.stage === 'ci' ? 'investigate' : undefined;
   const next = async (kind: JobKind) => act('/jobs', { issueIds:[issue.id], kind, sourceJobId: complete ? job.id : undefined, instructions }, '已派发下一阶段，自动交接现有证据');
   return <section className="mw-workflow">
     <div className="mw-section-title">处理流程 <span className="mw-tag">{issue.state === 'closed' ? (issue.merged ? 'GitHub 已合并' : 'GitHub 已关闭') : stages[issue.workflow?.stage ?? ''] ?? (issue.type === 'pr' ? '待预检' : '待分诊')}</span></div>
+    {job?.deliveryReviewId && <p className="mw-callout">此实施产物已关联批准的独立审查；确认产物后可预览发布。</p>}
     {job?.artifactState === 'stale' && <div className="mw-callout amber">此产物对应旧版本，仅供参考；请对当前版本重新执行。</div>}<p className="mw-muted">{a?.summary ?? issue.workflow?.reason ?? '先判断处理方向，再按需要调查、实施和验证。'}</p>
     {issue.linkedPullRequests?.map(url => <p key={url}><a href={url} target="_blank" rel="noreferrer">跟踪已创建的 PR ↗</a></p>)}
+    {validation && validation.state !== 'passed' && <div className="mw-callout amber"><strong>{validation.reason}</strong></div>}
     {a && <><p>{a.coverage}</p>{a.stage === 'triage' && <div className="mw-callout"><div><strong>{stages[a.route]} · {a.module || '模块待确定'}</strong><p>{a.routeReason}</p><p>影响：{a.impact}</p></div></div>}
     {(a.stage === 'investigate' || a.stage === 'ci') && <><h4>事实与假设</h4>{'facts' in a && a.facts.map((s,i) => <p key={`f${i}`}>事实：{s}</p>)}{'hypotheses' in a && a.hypotheses.map((s,i) => <p key={`h${i}`}>待验证：{s}</p>)}</>}
     {a.stage === 'investigate' && <><h4>复现与根因</h4><p>{a.reproduction}</p><p>{a.rootCause}</p></>}

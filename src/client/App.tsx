@@ -70,7 +70,15 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(undefined), 7000); return () => clearTimeout(timer); }, [toast]);
   async function action(label: string, path: string, data: unknown, success = '已完成') {
     if (busy) return; setBusy(label);
-    try { const result = await request(path, data); await refresh(); setToast({ text: success }); return result; }
+    try {
+      const result = await request(path, data); await refresh();
+      if (result.delivery?.implementationJobId) {
+        setPage('tasks'); setFocused(undefined); setJobFocus(result.delivery.implementationJobId); setDetailTab('overview'); setPublishAction(undefined); setReviewNote('');
+        setToast({ text: '审查已接受，已打开同一补丁的实施产物，请确认后预览发布' });
+      } else if (result.deliveryBlockedReason) setToast({ text: `审查已接受，交接仍需处理：${result.deliveryBlockedReason}`, error: true });
+      else setToast({ text: success });
+      return result;
+    }
     catch (e) { setToast({ text: (e as Error).message, error: true }); }
     finally { setBusy(''); }
   }

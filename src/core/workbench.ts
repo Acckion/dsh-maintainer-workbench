@@ -11,8 +11,11 @@ import { GitHub } from './github.ts';
 import { collectPatch, prepareWorktree, validateCheckout, prepareManagedCheckout, git, fetchPullRequestRevision } from './git.ts';
 import { modelRunner } from './intelligence.ts';
 import { ArtifactFormatError } from './execution-errors.ts';
+import { revision } from './revision.ts';
+import { validationState } from './workflow-state.ts';
+import { resolveDelivery, type DeliveryTarget } from './delivery.ts';
 import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type Settings, type Snapshot, type HostStatus } from './types.ts';
-export function revision(issue: Issue, repo: Repo, kind: JobKind = 'triage'): string { return createHash('sha256').update(JSON.stringify([issue.updatedAt, issue.title, issue.body, issue.state, issue.headSha ?? '', issue.type === 'pr' ? [issue.prBaseSha ?? repo.headSha, issue.headSha ?? 'unknown'] : lightweight(kind) ? 'issue-v2' : repo.headSha])).digest('hex'); }
+export { revision } from './revision.ts';
 const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
 const readOnlyCode = (kind: JobKind): boolean => ['review', 'validate', 'ci'].includes(kind);
 const settingsSchema = z.object({ concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
@@ -168,16 +171,31 @@ export class Workbench {
     }
     this.enqueue([job.issueId], job.kind, { sourceJobId: job.sourceJobId, instructions: job.instructions });
   }
-  async review(id: string, decision: 'approve' | 'reject', note: string): Promise<void> {
+  async review(id: string, decision: 'approve' | 'reject', note: string): Promise<{ delivery?: DeliveryTarget; deliveryBlockedReason?: string }> {
     const job = this.job(id); if (!['awaiting_review', 'completed'].includes(job.status)) throw new Error('任务不在待审核状态');
+    const original = JSON.stringify(job);
     if (decision === 'approve') {
+      if (job.deliveryReviewId) {
+        const delivery = await resolveDelivery(this.store, this.repo(job.repoId), job.deliveryReviewId, this.github);
+        if (delivery.implementationJobId !== job.id) throw new Error('实施产物与批准的审查目标不一致');
+      }
       if (job.prContext) { const live = await this.github.pullRequest(this.repo(job.repoId), job.issueSnapshot.number); if (live.headSha !== job.prContext.headSha || live.baseSha !== job.prContext.baseSha) throw new Error('PR head/base 已更新，请重新审查'); }
       const current = this.store.get<Issue>('issues', job.issueId)!;
       if (revision(current, this.repo(job.repoId), job.kind) !== job.revision) throw new Error('输入已变化，旧结果不可批准；请重新派发任务');
       if (job.worktree && await collectPatch(job.worktree, job.baseSha) !== (job.patch ?? '')) throw new Error('worktree 内容已变化，原差异已过期；请重新执行');
     }
+    if (JSON.stringify(this.job(id)) !== original) throw new Error('审核期间产物状态或发现处置已变化，请重新查看后确认');
     this.saveJob({ ...job, status: decision === 'approve' ? 'approved' : 'rejected', reviewNote: note });
     this.store.audit(`job.${decision}`, note || (decision === 'approve' ? '审核通过，仅记录本地决定；未推送代码或发布回复' : '退回，等待重新调查'), id);
+    if (decision === 'approve' && job.kind === 'review' && job.patch && job.sourceJobId) {
+      try {
+        const delivery = await resolveDelivery(this.store, this.repo(job.repoId), id, this.github);
+        this.saveJob({ ...this.job(delivery.implementationJobId), deliveryReviewId: id });
+        this.store.audit('job.delivery_prepared', '已定位同一补丁的实施产物，实施审批与远端发布仍单独确认', id);
+        return { delivery };
+      } catch (error) { return { deliveryBlockedReason: error instanceof Error ? error.message : '无法核验实施交接' }; }
+    }
+    return {};
   }
   finding(id: string, findingId: string, decision: FindingDecision): void {
     const job = this.job(id);
@@ -310,8 +328,9 @@ export class Workbench {
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });
         this.saveJob({ ...job, ...output, patch, formatRecovery: undefined, waitingReason: undefined, status: lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
         const artifact = output.artifact;
-        const stage = artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
-        if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });
+        const validation = validationState(artifact);
+        const stage = validation ? (validation.state === 'passed' ? 'validated' : 'blocked') : artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
+        if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: validation?.reason ?? artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });
         this.store.audit('job.completed', `${output.engine} · 产物已保存，未发布远端`, job.id);
       });
     } catch (error) {
