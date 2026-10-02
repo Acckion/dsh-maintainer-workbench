@@ -43,9 +43,29 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
   }
   const byId = new Map(jobs.map(job => [job.id, job]));
   const isImplementation = (job: Job) => job.kind === 'fix' || job.kind === 'docs';
-  const includeDirectValidations = (implementation: Job) => {
-    const children = jobs.filter(job => job.kind === 'validate' && job.sourceJobId === implementation.id);
-    const matching = children.filter(job => samePatch(selected, job) && terminal.has(job.status));
+  const includeLinkedValidations = (implementation: Job) => {
+    // Reruns can be dispatched from a validation or review, not only the implementation.
+    // Follow explicit handoffs and verify every intermediate record; identical patch text
+    // alone must never pull in another implementation's reports.
+    const children = new Map<string, Job[]>();
+    for (const job of jobs) if (job.sourceJobId && ['validate', 'review'].includes(job.kind)) {
+      children.set(job.sourceJobId, [...(children.get(job.sourceJobId) ?? []), job]);
+    }
+    const matching: Job[] = [], seen = new Set([implementation.id]);
+    const queue = [{ job: implementation, depth: 0 }];
+    let omitted = false;
+    for (let index = 0; index < queue.length; index++) {
+      const parent = queue[index];
+      for (const job of children.get(parent.job.id) ?? []) {
+        if (seen.has(job.id) || parent.depth >= 29 || !samePatch(selected, job) || !terminal.has(job.status)) {
+          omitted = true;
+          continue;
+        }
+        seen.add(job.id);
+        if (job.kind === 'validate') matching.push(job);
+        queue.push({ job, depth: parent.depth + 1 });
+      }
+    }
     const additional = matching.filter(job => !evidence.validations.some(record => record.id === job.id));
     if (evidence.review && additional.length) {
       evidence.warnings.push(additional.some(job => validationState(job.artifact)?.state !== 'passed')
@@ -53,7 +73,7 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
         : '同一补丁另有验证记录未被此审查引用，以下分别列出');
     }
     evidence.validations = [...evidence.validations, ...additional].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
-    if (children.length !== matching.length) evidence.warnings.push('部分关联验证尚未完成、已过期或不属于此补丁，未计入当前证据');
+    if (omitted) evidence.warnings.push('部分关联验证或交接记录尚未完成、已过期或不属于此补丁，未计入当前证据');
   };
   if (isImplementation(selected)) evidence.implementation = selected;
   if (selected.kind === 'validate') evidence.validations = [selected];
@@ -90,14 +110,14 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
     evidence.review = anchor.kind === 'review' ? anchor : undefined;
     evidence.validations = chain.filter(job => job.kind === 'validate');
     evidence.reviewSourceValidationIds = evidence.review ? evidence.validations.map(job => job.id) : [];
-    includeDirectValidations(cursor);
+    includeLinkedValidations(cursor);
     return evidence;
   }
 
   if (isImplementation(selected)) {
-    // Follow only direct validation edges for this patch, never any latest pass on the issue.
+    // Follow only explicit handoffs for this patch, never any latest pass on the issue.
     // Show every matching report rather than selecting only a passing retry.
-    includeDirectValidations(selected);
+    includeLinkedValidations(selected);
   }
   return evidence;
 }

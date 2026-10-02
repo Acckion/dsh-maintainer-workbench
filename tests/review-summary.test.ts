@@ -67,6 +67,67 @@ test('an approved chain cannot conceal another same-patch failing validation fro
   assert.deepEqual(reviewEvidence(f.implementation,f.jobs).validations.map(job=>job.id),[f.validation.id]);
 });
 
+for (const source of ['validation', 'review'] as const) test(`a same-patch failed validation dispatched from ${source} remains visible at both review entries`, () => {
+  const f = finalChain(), failed = structuredClone(f.validation);
+  failed.id = `nested-failure-from-${source}`; failed.createdAt = '2026-10-03T00:00:00Z';
+  failed.sourceJobId = f[source].id;
+  if (failed.artifact?.stage !== 'validate') throw Error('fixture');
+  failed.artifact.tests[0].status = 'failed'; failed.result = asAnalysis(failed.artifact); f.jobs.push(failed);
+  for (const selected of [f.implementation, f.review]) {
+    const result = reviewEvidence(selected, f.jobs), markup = html(selected, f.jobs);
+    assert.deepEqual(result.validations.map(job => job.id), [f.validation.id, failed.id]);
+    assert.deepEqual(result.reviewSourceValidationIds, [f.validation.id]);
+    assert.ok(result.warnings.some(text => text.includes('另有失败')));
+    assert.match(markup, /其他同补丁验证报告/); assert.match(markup, /1 项验证失败/);
+  }
+});
+
+test('descendant validation verifies every intermediate handoff and never borrows another implementation', () => {
+  for (const drift of ['patch', 'base', 'revision', 'issue', 'target', 'stale', 'rejected', 'missing', 'cycle', 'other-implementation'] as const) {
+    const f = finalChain(), intermediate = structuredClone(f.validation), later = structuredClone(f.validation);
+    intermediate.id = 'intermediate-check'; intermediate.sourceJobId = f.implementation.id;
+    later.id = 'later-check'; later.sourceJobId = intermediate.id; later.createdAt = '2026-10-03T00:00:00Z';
+    if (later.artifact?.stage !== 'validate') throw Error('fixture');
+    later.artifact.tests[0].status = 'failed'; later.result = asAnalysis(later.artifact);
+    if (drift === 'patch') intermediate.patch += 'different';
+    if (drift === 'base') intermediate.baseSha = 'other-base';
+    if (drift === 'revision') intermediate.revision = 'other-revision';
+    if (drift === 'issue') intermediate.issueId = 'other-issue';
+    if (drift === 'target') intermediate.prContext = { headSha:'x',baseSha:'y',headRef:'other',headRepo:'fixture/other',baseRef:'main',draft:false,merged:false,mergeable:null,checks:[],reviews:[],warnings:[] };
+    if (drift === 'stale') intermediate.artifactState = 'stale';
+    if (drift === 'rejected') intermediate.status = 'rejected';
+    if (drift === 'missing') intermediate.sourceJobId = 'missing';
+    if (drift === 'cycle') intermediate.sourceJobId = later.id;
+    if (drift === 'other-implementation') {
+      const other = { ...f.implementation, id: 'other-implementation' };
+      f.jobs.push(other); intermediate.sourceJobId = other.id;
+    }
+    f.jobs.push(intermediate, later);
+    for (const selected of [f.implementation, f.review]) {
+      const result = reviewEvidence(selected, f.jobs);
+      assert.ok(!result.validations.some(job => job.id === later.id), drift);
+      assert.deepEqual(result.reviewSourceValidationIds, [f.validation.id], drift);
+    }
+  }
+});
+
+test('multi-hop reruns stay distinct from review-source evidence without changing local decisions', () => {
+  const f = finalChain(), rerun = structuredClone(f.validation), followupReview = structuredClone(f.review), failed = structuredClone(f.validation);
+  rerun.id = 'rerun'; rerun.sourceJobId = f.review.id; rerun.createdAt = '2026-10-03T00:00:00Z';
+  followupReview.id = 'followup-review'; followupReview.sourceJobId = rerun.id;
+  failed.id = 'multi-hop-failure'; failed.sourceJobId = followupReview.id; failed.createdAt = '2026-10-04T00:00:00Z';
+  if (failed.artifact?.stage !== 'validate') throw Error('fixture');
+  failed.artifact.tests[0].status = 'failed'; failed.result = asAnalysis(failed.artifact);
+  f.jobs.push(rerun, followupReview, failed);
+  const saved = JSON.stringify(f.jobs);
+  for (const selected of [f.implementation, f.review, rerun]) {
+    const result = reviewEvidence(selected, f.jobs);
+    assert.deepEqual(result.validations.map(job => job.id), [f.validation.id, rerun.id, failed.id]);
+    if (selected.kind !== 'validate') assert.deepEqual(result.reviewSourceValidationIds, [f.validation.id]);
+  }
+  assert.equal(JSON.stringify(f.jobs), saved, 'The summary is read-only; extra reports do not silently revoke local decisions');
+});
+
 test('current artifact coverage remains visible in the composed overview for every non-review stage', () => {
   const f = finalChain();
   for (const source of f.jobs.filter(job=>job.artifact && job.kind!=='review')) {
