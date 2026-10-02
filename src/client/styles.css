@@ -192,3 +192,17 @@
 .mw-stage-event { border-left: 2px solid #b6d7ca; padding: 10px 14px; margin: 12px 0; }
 .mw-stage-event span { display: block; color: #637c72; font-size: 11px; }
 .mw-attention-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,320px),1fr)); gap: 20px; align-items: start; }
+
+.mw-review-summary { margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid #dce7e2; }
+.mw-review-summary h3 { margin: 0 0 14px; font-size: 18px; color: #173d33; }
+.mw-review-summary h4 { margin: 16px 0 8px; font-size: 14px; }
+.mw-review-summary p, .mw-review-summary li { line-height: 1.65; overflow-wrap: anywhere; }
+.mw-review-summary code { overflow-wrap: anywhere; font-size: 12px; }
+.mw-review-state, .mw-review-links { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mw-review-next { font-weight: 600; }
+.mw-review-latest, .mw-review-unknown { color: #695b31; }
+.mw-review-report { margin: 14px 0; padding: 2px 0 12px; border-bottom: 1px solid #e1e8e5; }
+.mw-review-report details { margin: 10px 0; }
+.mw-review-report summary { cursor: pointer; font-size: 13px; }
+.mw-review-report pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font-size: 12px; }
+.mw-review-links .mw-text-button { text-align: left; white-space: normal; }

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 export const kinds = ['triage', 'preflight', 'investigate', 'fix', 'review', 'docs', 'validate', 'ci'] as const;
 export type JobKind = typeof kinds[number];
-export const kindNames: Record<JobKind, string> = { preflight: '变更预检', validate: '验证变更', ci: '诊断 CI', triage: '快速分诊', investigate: '问题调查', fix: '实施变更', review: 'PR 审查', docs: '文档维护' };
+export const kindNames: Record<JobKind, string> = { preflight: '变更预检', validate: '验证变更', ci: '诊断 CI', triage: '快速分诊', investigate: '问题调查', fix: '实施变更', review: '代码审查', docs: '文档维护' };
 export const analysisSchema = z.object({
   summary: z.string().min(1).max(12000),
   category: z.enum(['bug', 'feature', 'docs', 'question', 'maintenance']),

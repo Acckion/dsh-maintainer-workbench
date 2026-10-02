@@ -37,7 +37,7 @@ test('failed or incomplete validation stays in attention and routes back to corr
   assert.equal(f.check.status,'completed');assert.equal(item.workflow?.stage,'blocked');assert.match(item.workflow?.reason??'',/验证失败/);
   assert.match(renderToStaticMarkup(React.createElement(Attention,{state,open:()=>{}})),/1 个需要判断/);
   const markup=renderToStaticMarkup(React.createElement(WorkflowPanel,{issue:item,job:f.check,history:state.jobs,busy:false,act:async()=>{}}));
-  assert.match(markup,/下一步：实施变更/);assert.doesNotMatch(markup,/下一步：PR 审查/);
+  assert.match(markup,/下一步：实施变更/);assert.doesNotMatch(markup,/下一步：代码审查/);
   assert.equal(validationState(validation('not_run'))?.state,'incomplete');assert.equal(validationState(validation('passed'))?.state,'passed');
   // Legacy saved workflow labels also stay visible when the latest validation failed.
   const legacy={...state,issues:state.issues.map(i=>i.id===item.id?{...i,workflow:{stage:'validate',reason:'legacy label',updatedAt:'now'}}:i)};
