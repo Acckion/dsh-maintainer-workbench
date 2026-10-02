@@ -2,14 +2,15 @@ import React from 'react';
 import type { Audit, Job } from '../core/types.ts';
 import { kindNames } from '../core/types.ts';
 import { validationState } from '../core/workflow-state.ts';
-import { executionExplanation, patchScope, reviewEvidence, reviewVerdicts } from './review-evidence.ts';
+import { acceptanceEligibility, executionExplanation, patchScope, reviewEvidence, reviewVerdicts } from './review-evidence.ts';
 
 export type DetailTab = 'overview' | 'evidence' | 'diff' | 'log';
 type OpenJob = (id: string, tab: DetailTab) => void;
 const statusNames = { passed: '报告通过', failed: '报告失败', not_run: '未执行' };
 
-export function AcceptArtifactButton({ job, busy, accept }: { job: Job; busy: boolean; accept: () => void }) {
-  return <button type="button" className="mw-button primary" disabled={busy || job.artifactState === 'stale'} aria-disabled={job.artifactState === 'stale'} onClick={accept}>{['fix', 'docs'].includes(job.kind) ? '接受此实施产物' : '接受此报告'}</button>;
+export function AcceptArtifactButton({ job, busy, blockedReason, accept }: { job: Job; busy: boolean; blockedReason?: string; accept: () => void }) {
+  const blocked = job.artifactState === 'stale' || !!blockedReason;
+  return <button type="button" className="mw-button primary" disabled={busy || blocked} aria-disabled={blocked} onClick={accept}>{['fix', 'docs'].includes(job.kind) ? '接受此实施产物' : '接受此报告'}</button>;
 }
 
 function TestReport({ job, own = false, role, open }: { job: Job; own?: boolean; role?: string; open: OpenJob }) {
@@ -31,6 +32,7 @@ function TestReport({ job, own = false, role, open }: { job: Job; own?: boolean;
 /** Read-only summary. All acceptance/publication authority stays in the backend. */
 export function ReviewSummary({ job, jobs, audit, native, open, openSession }: { job: Job; jobs: Job[]; audit: Audit[]; native: boolean; open: OpenJob; openSession?: (id: string) => void }) {
   const evidence = reviewEvidence(job, jobs), execution = executionExplanation(job, native, audit);
+  const acceptance = acceptanceEligibility(job, jobs);
   const artifact = job.artifact, implementation = evidence.implementation, review = evidence.review;
   const risks = [...evidence.warnings];
   for (const source of [job, implementation?.id !== job.id ? implementation : undefined, review?.id !== job.id ? review : undefined]) {
@@ -53,6 +55,7 @@ export function ReviewSummary({ job, jobs, audit, native, open, openSession }: {
     <p className="mw-muted">任务 <code>{job.id.slice(0, 8)}</code> · 基线 <code title={job.baseSha}>{job.baseSha.slice(0, 12)}</code> · 第 {job.attempt} 次尝试</p>
     {execution.latest && <p className="mw-review-latest">最近记录：{execution.latest.detail}</p>}
     <p className="mw-review-next">下一步：{execution.next}</p>
+    {!acceptance.allowed && ['awaiting_review', 'completed'].includes(job.status) && <p className="mw-callout amber">待审核已暂停：{acceptance.reason} 历史接受记录不会被改写。</p>}
     <div className="mw-review-links"><button type="button" className="mw-text-button" onClick={() => open(job.id, 'log')}>查看执行记录</button>{job.sessionId && openSession && <button type="button" className="mw-text-button" onClick={() => openSession(job.sessionId!)}>打开对应 Harness 会话 / 审批</button>}</div>
     {artifact?.stage === 'triage' && <section><h4>分诊依据与缺口</h4><p>影响范围：{artifact.module || '模块待核实'} · {artifact.impact || '影响尚待核实'}</p><p>{artifact.routeReason}</p>{artifact.missingInfo.length > 0 && <ul>{artifact.missingInfo.map((text, index) => <li key={index}>{text}</li>)}</ul>}<p className="mw-muted">轻量分诊不执行代码测试；影响判断仍需后续证据核实。</p><button type="button" className="mw-text-button" onClick={() => open(job.id, 'evidence')}>查看分诊证据</button></section>}
     {codeTask && <section><h4>修改与验证</h4><p>{patchScope(job.patch)}</p>{job.patch && <button type="button" className="mw-text-button" onClick={() => open(job.id, 'diff')}>查看此任务的完整补丁</button>}

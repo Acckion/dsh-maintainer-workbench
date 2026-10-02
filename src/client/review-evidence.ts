@@ -1,5 +1,6 @@
 import type { Analysis, Audit, Issue, Job } from '../core/types.ts';
 import { validationState } from '../core/workflow-state.ts';
+import { validationAcceptance, type ValidationAcceptance } from '../core/validation-acceptance.ts';
 
 /** Never display an older issue classification as the selected task's result. */
 export function selectedAnalysis(issue?: Issue, job?: Job): Analysis | undefined {
@@ -8,6 +9,8 @@ export function selectedAnalysis(issue?: Issue, job?: Job): Analysis | undefined
 
 const terminal = new Set<Job['status']>(['completed', 'awaiting_review', 'approved']);
 const statusLabels: Record<Job['status'], string> = { queued: '排队等待执行', running: '执行中', failed: '执行失败', cancelled: '已取消', rejected: '已退回', completed: '报告已生成', awaiting_review: '等待维护者审核', approved: '本地产物已接受' };
+export function acceptanceEligibility(job: Job, jobs: Job[]): ValidationAcceptance { return validationAcceptance(job, jobs); }
+export function reviewQueue(jobs: Job[]): Job[] { return jobs.filter(job => job.status === 'awaiting_review' && job.artifactState !== 'stale' && acceptanceEligibility(job, jobs).allowed); }
 export function taskStatus(job: Job): { label: string; tone: string } {
   const validation = terminal.has(job.status) ? validationState(job.artifact) : undefined;
   const label = validation ? `${validation.state === 'failed' ? '验证报告有失败' : validation.state === 'incomplete' ? '验证报告不完整' : '验证报告通过'}${job.status === 'approved' ? ' · 本地已接受' : ''}` : statusLabels[job.status];

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { Audit, Issue, Job } from '../src/core/types.ts';
 import { artifactSchemas, asAnalysis } from '../src/core/artifacts.ts';
 import { AcceptArtifactButton, ReviewSummary, type DetailTab } from '../src/client/ReviewSummary.tsx';
-import { executionExplanation, patchScope, reviewEvidence, selectedAnalysis, taskStatus } from '../src/client/review-evidence.ts';
+import { acceptanceEligibility, executionExplanation, patchScope, reviewEvidence, reviewQueue, selectedAnalysis, taskStatus } from '../src/client/review-evidence.ts';
 import { WorkflowPanel } from '../src/client/WorkflowPanel.tsx';
 
 const saved = JSON.parse(readFileSync(new URL('../docs/evidence/product-trial-2026-10-02/after.json', import.meta.url), 'utf8'));
@@ -38,6 +38,37 @@ test('focused implementation pass does not hide the explicitly linked failing fu
   assert.match(markup, /1 项验证失败/); assert.match(markup, /Only the reported symptom was tested/);
   assert.match(markup, /实施自报测试/); assert.match(markup, /不能替代独立验证/);
   assert.doesNotMatch(markup, new RegExp(f.validation.id));
+});
+
+test('only the latest exact-patch validation controls implementation acceptance and the review queue', () => {
+  const data = trial(), original = data.jobs.find(job => job.id === data.observations.originalImplementationJobId)!;
+  const failed = data.jobs.find(job => job.id === original.sourceJobId)!;
+  const finalValidation = data.jobs.find(job => job.kind === 'validate' && job.sourceJobId === original.id)!;
+  const earlier = data.jobs.find(job => job.id === failed.sourceJobId)!;
+  assert.equal(acceptanceEligibility(earlier, data.jobs).allowed, false);
+  assert.match(acceptanceEligibility(earlier, data.jobs).reason ?? '', /最新验证/);
+  assert.equal(acceptanceEligibility(original, data.jobs).allowed, true);
+  assert.deepEqual(reviewQueue(data.jobs).map(job => job.id), [original.id]);
+
+  const laterFailure = structuredClone(finalValidation);
+  laterFailure.id = 'later-failed-validation'; laterFailure.sourceJobId = original.id;
+  laterFailure.createdAt = '2026-10-03T00:00:00.000Z'; laterFailure.updatedAt = laterFailure.createdAt; laterFailure.attempt++;
+  if (laterFailure.artifact?.stage !== 'validate') throw Error('fixture');
+  laterFailure.artifact.tests[0].status = 'failed'; laterFailure.result = asAnalysis(laterFailure.artifact);
+  const afterFailure = [...data.jobs, laterFailure];
+  assert.equal(acceptanceEligibility(original, afterFailure).allowed, false);
+  assert.match(html(original, afterFailure), /待审核已暂停/);
+  assert.match(renderToStaticMarkup(React.createElement(AcceptArtifactButton, { job: original, busy: false, blockedReason: acceptanceEligibility(original, afterFailure).reason, accept: () => {} })), /disabled=""/);
+  assert.equal(reviewQueue(afterFailure).some(job => job.id === original.id), false);
+
+  for (const state of ['cancelled', 'stale'] as const) {
+    const interrupted = structuredClone(finalValidation);
+    interrupted.id = `latest-${state}-validation`; interrupted.sourceJobId = original.id;
+    interrupted.createdAt = '2026-10-04T00:00:00.000Z'; interrupted.updatedAt = interrupted.createdAt; interrupted.attempt += 2;
+    if (state === 'cancelled') { interrupted.status = 'cancelled'; delete interrupted.patch; delete interrupted.artifact; delete interrupted.result; }
+    else interrupted.artifactState = 'stale';
+    assert.equal(acceptanceEligibility(original, [...data.jobs, interrupted]).allowed, false, state);
+  }
 });
 
 test('same-patch validation retries all remain visible rather than cherry-picking a passing report', () => {

@@ -13,6 +13,7 @@ import { modelRunner } from './intelligence.ts';
 import { ArtifactFormatError } from './execution-errors.ts';
 import { revision } from './revision.ts';
 import { validationState } from './workflow-state.ts';
+import { validationAcceptance } from './validation-acceptance.ts';
 import { resolveDelivery, type DeliveryTarget } from './delivery.ts';
 import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type Settings, type Snapshot, type HostStatus } from './types.ts';
 export { revision } from './revision.ts';
@@ -175,6 +176,12 @@ export class Workbench {
     const job = this.job(id); if (!['awaiting_review', 'completed'].includes(job.status)) throw new Error('任务不在待审核状态');
     const original = JSON.stringify(job);
     if (decision === 'approve') {
+      const validation = validationAcceptance(job, this.store.jobs(), candidate => {
+        const issue = this.store.get<Issue>('issues', candidate.issueId);
+        const repo = this.store.get<Repo>('repos', candidate.repoId);
+        return !!issue && !!repo && candidate.revision === revision(issue, repo, candidate.kind);
+      });
+      if (!validation.allowed) throw new Error(validation.reason);
       if (job.deliveryReviewId) {
         const delivery = await resolveDelivery(this.store, this.repo(job.repoId), job.deliveryReviewId, this.github);
         if (delivery.implementationJobId !== job.id) throw new Error('实施产物与批准的审查目标不一致');

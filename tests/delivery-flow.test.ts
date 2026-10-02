@@ -44,6 +44,13 @@ test('failed or incomplete validation stays in attention and routes back to corr
   assert.match(renderToStaticMarkup(React.createElement(Attention,{state:legacy,open:()=>{}})),/1 个需要判断/);
 });
 
+test('a failed exact-patch validation blocks direct acceptance of its implementation without rewriting history',async t=>{
+  const f=await setup(t,'failed');
+  for (const note of ['first blocked approval','repeated blocked approval']) await assert.rejects(f.w.review(f.fix.id,'approve',note),/最新.*验证|完整验证/);
+  assert.equal(f.store.get<Job>('jobs',f.fix.id)?.status,'awaiting_review');
+  assert.equal(f.writes(),0);
+});
+
 test('approved independent review returns the exact implementation without approving or publishing it',async t=>{
   const f=await setup(t);const review=await f.run('review',f.check.id);const result=await f.w.review(review.id,'approve','reviewed the recorded patch');
   assert.equal(result.delivery?.implementationJobId,f.fix.id);assert.equal(result.delivery?.validationJobId,f.check.id);
