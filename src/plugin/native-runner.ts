@@ -1,6 +1,6 @@
 import type {} from '@deepseek-ai/dsh-user-approval';
 import type {} from '@deepseek-ai/dsh-tools';
-import { artifactSchemas, artifactPrompt, asAnalysis, lightweight } from '../core/artifacts.ts';
+import { artifactSchemas, artifactPrompt, asAnalysis, lightweight, withoutExecutedTests } from '../core/artifacts.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-agent';
 import type {} from '@deepseek-ai/dsh-agent-default-model';
@@ -12,6 +12,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session';
 import { taskPrompt } from '../core/workflows.ts';
 import { parseObject } from '../core/intelligence.ts';
 import { GitHub } from '../core/github.ts';
+import { ArtifactFormatError } from '../core/execution-errors.ts';
 import type { Runner, HostStatus } from '../core/types.ts';
 
 export function hostStatus(ctx: Context): HostStatus {
@@ -51,7 +52,11 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           if (event.type === 'tool/result') { const detail = JSON.stringify(event.data).slice(0, 3500); toolEvidence.push({ source: `Harness tool/result · seq ${event.seq}`, detail }); progress(`工具执行结果已记录 · seq ${event.seq}`); }
           if (event.type === 'turn/end') {
             if (event.data.reason.kind === 'completed') resolve();
-            else { if (finalText) recordOutput?.(finalText); reject(new Error(event.data.reason.kind === 'max-tokens' ? '模型输出预算已耗尽，尚未生成完整产物。请提高仓库输出 Token 上限后重试；已有输出和工作区保留。' : `Harness 任务未完成：${JSON.stringify(event.data.reason).slice(0, 1600)}`)); }
+            else {
+              if (finalText) recordOutput?.(finalText);
+              const message = event.data.reason.kind === 'max-tokens' ? '模型输出预算已耗尽，尚未生成完整产物。请提高仓库输出 Token 上限后重试；已有输出和工作区保留。' : `Harness 任务未完成：${JSON.stringify(event.data.reason).slice(0, 1600)}`;
+              reject(event.data.reason.kind === 'max-tokens' && finalText ? new ArtifactFormatError(message) : new Error(message));
+            }
           }
         });
       });
@@ -63,15 +68,21 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
       let artifact;
       try { artifact = artifactSchemas[job.kind].parse(parseObject(finalText, () => progress('已修复模型结果标点，仍按阶段结构校验'))); }
       catch (error) {
-        if (job.formatOnly) throw new Error(`结果整理仍失败，已保留原始输出：${error instanceof Error ? error.message.slice(0, 1200) : '格式错误'}`);
+        if (job.formatOnly) throw new ArtifactFormatError(`结果整理仍失败，已保留原始输出：${error instanceof Error ? error.message.slice(0, 1200) : '格式错误'}`);
         progress('结果格式校验失败，仅整理已有输出；不会重复执行代码任务');
-        const recovered = await harnessRunner(ctx, github)({ repo, issue, related, job: { ...job, id: `${job.id}-format`, formatOnly: true, rawOutput: finalText }, settings, signal, progress: message => progress(message), recordOutput: undefined });
+        let recovered;
+        try {
+          recovered = await harnessRunner(ctx, github)({ repo, issue, related, job: { ...job, id: `${job.id}-format`, formatOnly: true, rawOutput: finalText }, settings, signal, progress: message => progress(message), recordOutput: undefined });
+        } catch (recoveryError) {
+          signal.throwIfAborted();
+          throw new ArtifactFormatError(`结果整理失败，已保留原始输出和执行工作区：${recoveryError instanceof Error ? recoveryError.message.slice(0, 1200) : '格式错误'}`);
+        }
         recovered.result.evidence = [...recovered.result.evidence, ...toolEvidence.slice(-8)].slice(-30);
         return recovered;
       }
+      if (!job.worktree) artifact = withoutExecutedTests(artifact);
       const result = asAnalysis(artifact);
       if (result.duplicateOf !== null && !related.some(i => i.number === result.duplicateOf)) throw new Error('重复候选不在本批上下文中，结果未被接受');
-      if (!job.worktree) result.tests = result.tests.map(t => ({ ...t, status: 'not_run' }));
       result.evidence = [...result.evidence, ...toolEvidence.slice(-8)].slice(-30);
       return { artifact, result, engine: `Harness / ${selection.provider}/${selection.model}` };
     } finally { remove(); signal.removeEventListener('abort', abort); await handle.dispose(); }

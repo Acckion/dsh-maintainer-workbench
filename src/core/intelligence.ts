@@ -1,4 +1,4 @@
-import { artifactSchemas, artifactPrompt, asAnalysis, lightweight } from './artifacts.ts';
+import { artifactSchemas, artifactPrompt, asAnalysis, lightweight, withoutExecutedTests } from './artifacts.ts';
 import { z } from 'zod';
 import { analysisSchema, type Runner } from './types.ts';
 import { taskPrompt } from './workflows.ts';
@@ -49,10 +49,9 @@ export const modelRunner: Runner = async ({ repo, issue, related, job, settings,
   if (!response.ok) throw new Error(`模型服务返回 HTTP ${response.status}，请检查模型、端点和密钥配置`);
   const payload = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1), usage: z.object({ total_tokens: z.number() }).optional() }).parse(await response.json());
   recordOutput?.(payload.choices[0].message.content);
-  const artifact = artifactSchemas[job.kind].parse(parseObject(payload.choices[0].message.content));
-  const result = asAnalysis(artifact);
   // This executor has no test tool, so model claims cannot be represented as execution evidence.
-  result.tests = result.tests.map(test => ({ ...test, status: 'not_run' }));
+  const artifact = withoutExecutedTests(artifactSchemas[job.kind].parse(parseObject(payload.choices[0].message.content)));
+  const result = asAnalysis(artifact);
   if (result.duplicateOf !== null && !related.some(i => i.number === result.duplicateOf)) throw new Error('模型返回了未提供的重复 Issue 编号，结果未被接受');
   return { artifact, result, engine: 'model / remote evidence', tokens: payload.usage?.total_tokens };
 };

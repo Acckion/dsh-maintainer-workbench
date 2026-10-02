@@ -16,6 +16,10 @@ export const artifactSchemas = {
 };
 export type Artifact = z.infer<typeof artifactSchemas[keyof typeof artifactSchemas]>;
 export type FindingDecision = 'accepted' | 'needs_evidence' | 'dismissed' | 'resolved';
+/** Enforce execution scope in the authoritative artifact, including exports and handoffs. */
+export function withoutExecutedTests(artifact: Artifact): Artifact {
+  return 'tests' in artifact ? { ...artifact, tests: artifact.tests.map(test => ({ ...test, status: 'not_run' as const })) } : artifact;
+}
 export function artifactPrompt(kind: JobKind): string {
   const shapes: Record<JobKind, string> = {
     triage: 'category:bug|feature|docs|question|maintenance, priority:P0|P1|P2|P3, labels:string[], module:string, impact:string, missingInfo:string[], duplicateOf:number|null, duplicateReason:string, route:needs_info|decision|investigate|implement|answer|track, routeReason:string',

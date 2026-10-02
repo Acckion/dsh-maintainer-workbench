@@ -10,8 +10,11 @@ import { Store } from './store.ts';
 import { GitHub } from './github.ts';
 import { collectPatch, prepareWorktree, validateCheckout, prepareManagedCheckout, git, fetchPullRequestRevision } from './git.ts';
 import { modelRunner } from './intelligence.ts';
+import { ArtifactFormatError } from './execution-errors.ts';
 import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type Settings, type Snapshot, type HostStatus } from './types.ts';
 export function revision(issue: Issue, repo: Repo, kind: JobKind = 'triage'): string { return createHash('sha256').update(JSON.stringify([issue.updatedAt, issue.title, issue.body, issue.state, issue.headSha ?? '', issue.type === 'pr' ? [issue.prBaseSha ?? repo.headSha, issue.headSha ?? 'unknown'] : lightweight(kind) ? 'issue-v2' : repo.headSha])).digest('hex'); }
+const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
+const readOnlyCode = (kind: JobKind): boolean => ['review', 'validate', 'ci'].includes(kind);
 const settingsSchema = z.object({ concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
 
 export class Workbench {
@@ -157,7 +160,7 @@ export class Workbench {
     if (this.active.has(id)) throw new Error('任务仍在停止，请稍后重试');
     const current = this.store.get<Issue>('issues', job.issueId)!;
     if (revision(current, this.repo(job.repoId), job.kind) !== job.revision) throw new Error('输入版本已变化，请从收件箱重新派发');
-    if (this.nativeRunner && job.rawOutput && !job.result && (job.worktree || job.analysisPath)) {
+    if (this.nativeRunner && job.status === 'failed' && job.formatRecovery && job.rawOutput && !job.result && (job.worktree || job.analysisPath)) {
       const now = new Date().toISOString();
       const recovered: Job = { ...job, id: randomUUID(), formatOnly: true, status: 'queued', attempt: job.attempt + 1, createdAt: now, updatedAt: now, startedAt: undefined, finishedAt: undefined, error: undefined, sessionId: undefined, publications: undefined };
       this.store.put('jobs', recovered); this.store.audit('job.format_retry', `仅整理 ${job.id} 的已保存输出，不重新实施`, recovered.id); if (this.autoStart) this.pump();
@@ -232,6 +235,7 @@ export class Workbench {
       if (waitingReason !== undefined) { job.waitingReason = waitingReason; this.saveJob({ ...this.job(job.id), waitingReason }); }
       if (sessionId) { job.sessionId = sessionId; this.saveJob({ ...this.job(job.id), sessionId }); }
     };
+    let inputPatchHash: string | undefined;
     try {
       let repo = this.repo(job.repoId);
       if (job.revision !== revision(this.store.get<Issue>('issues',job.issueId)!, repo, job.kind)) throw new Error('排队期间输入版本已变化，请重新派发');
@@ -243,7 +247,9 @@ export class Workbench {
       }
       if (job.issueSnapshot.type === 'pr') {
         progress('固定 PR head/base，并读取可见 CI 与审查状态');
-        job.prContext = await this.github.pullRequest(repo, job.issueSnapshot.number, controller.signal);
+        const livePR = await this.github.pullRequest(repo, job.issueSnapshot.number, controller.signal);
+        if (job.formatOnly && (!job.prContext || livePR.headSha !== job.prContext.headSha || livePR.baseSha !== job.prContext.baseSha)) throw new Error('PR head/base 已变化，不能整理旧版本产物；请重新同步并派发');
+        job.prContext = livePR;
         if (job.prContext.merged) throw new Error('PR 已合并，请重新同步');
         if (job.issueSnapshot.headSha && job.issueSnapshot.headSha !== job.prContext.headSha) throw new Error('PR 已更新，请先同步仓库再派发');
         job.baseSha = job.prContext.headSha;
@@ -279,7 +285,13 @@ export class Workbench {
           progress('已将来源补丁应用到新的隔离工作区');
         }
       }
-      const inputPatch = job.worktree && ['review','validate','ci'].includes(job.kind) ? await collectPatch(job.worktree, job.baseSha) : '';
+      if (job.formatOnly) {
+        const checkpoint = job.formatRecovery;
+        if (!checkpoint || checkpoint.baseSha !== job.baseSha) throw new Error('缺少可信的输出整理检查点；请重新派发');
+        const currentPatch = job.worktree ? await collectPatch(job.worktree, job.baseSha) : '';
+        if (patchHash(currentPatch) !== checkpoint.patchHash || (job.worktree && await git(job.worktree, ['rev-parse', 'HEAD']) !== job.baseSha)) throw new Error('工作区在输出失败后已变化，不能整理旧产物；请重新派发');
+      }
+      inputPatchHash = patchHash(job.worktree && readOnlyCode(job.kind) ? await collectPatch(job.worktree, job.baseSha) : '');
       const runner = this.nativeRunner ?? modelRunner;
       output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordOutput: text => {
         if (controller.signal.aborted) return;
@@ -289,12 +301,14 @@ export class Workbench {
       controller.signal.throwIfAborted();
       const patch = job.worktree ? await collectPatch(job.worktree, job.baseSha) : '';
       controller.signal.throwIfAborted();
-      if (['review','validate','ci'].includes(job.kind) && patch !== inputPatch) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
+      if (job.formatOnly && (patchHash(patch) !== job.formatRecovery!.patchHash || (job.worktree && await git(job.worktree, ['rev-parse', 'HEAD']) !== job.baseSha))) throw new Error('工作区在结果整理期间已变化，不能接受旧产物；请重新派发');
+      controller.signal.throwIfAborted();
+      if (readOnlyCode(job.kind) && patchHash(patch) !== inputPatchHash) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
       if ((job.kind === 'fix' || job.kind === 'docs') && !patch) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
       this.store.transaction(() => {
         const currentIssue = this.store.get<Issue>('issues', job.issueId)!;
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });
-        this.saveJob({ ...job, ...output, patch, waitingReason: undefined, status: lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
+        this.saveJob({ ...job, ...output, patch, formatRecovery: undefined, waitingReason: undefined, status: lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
         const artifact = output.artifact;
         const stage = artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
         if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });
@@ -302,7 +316,20 @@ export class Workbench {
       });
     } catch (error) {
       const current = this.job(job.id);
-      if (current.status !== 'cancelled') this.saveJob({ ...current, status: 'failed', error: controller.signal.aborted ? String(controller.signal.reason?.message ?? '已中断') : error instanceof Error ? error.message : String(error), finishedAt: new Date().toISOString() });
+      let formatRecovery: Job['formatRecovery'];
+      if (error instanceof ArtifactFormatError && current.status !== 'cancelled' && current.rawOutput && !controller.signal.aborted) {
+        try {
+          const patch = current.worktree ? await collectPatch(current.worktree, current.baseSha) : '';
+          const digest = patchHash(patch);
+          if (current.formatOnly && (!current.formatRecovery || current.formatRecovery.baseSha !== current.baseSha || digest !== current.formatRecovery.patchHash)) throw new Error('工作区在结果整理期间已变化，不能整理旧产物；请重新派发');
+          if (readOnlyCode(current.kind) && digest !== inputPatchHash) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
+          if (current.worktree && await git(current.worktree, ['rev-parse', 'HEAD']) !== current.baseSha) throw new Error('工作区 HEAD 已变化，不能仅整理输出；请重新派发');
+          if (['fix', 'docs'].includes(current.kind) && !patch) throw new Error('Agent 未产生可审核的代码差异，请重新派发');
+          formatRecovery = { baseSha: current.baseSha, patchHash: digest };
+        } catch (integrityError) { error = integrityError; }
+      }
+      const latest = this.job(job.id);
+      if (latest.status !== 'cancelled') this.saveJob({ ...latest, status: 'failed', formatRecovery: controller.signal.aborted ? undefined : formatRecovery, error: controller.signal.aborted ? String(controller.signal.reason?.message ?? '已中断') : error instanceof Error ? error.message : String(error), finishedAt: new Date().toISOString() });
       this.store.audit('job.stopped', this.job(job.id).error ?? '已取消', job.id);
     } finally { clearTimeout(timer); }
   }

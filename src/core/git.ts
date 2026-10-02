@@ -6,7 +6,7 @@ import { resolve, join } from 'node:path';
 import { mkdir, realpath, rename, rm, mkdtemp } from 'node:fs/promises';
 import type { Job, Repo } from './types.ts';
 const exec = promisify(execFile);
-export async function git(cwd: string, args: string[], authenticate = false, signal?: AbortSignal, timeout = 30000): Promise<string> { const auth = authenticate ? await resolveGitHubAuth() : undefined; return (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, timeout, signal, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(auth?.token ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:' + auth.token).toString('base64'), GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {}) } })).stdout.trimEnd(); }
+export async function git(cwd: string, args: string[], authenticate = false, signal?: AbortSignal, timeout = 30000, preserveOutput = false): Promise<string> { const auth = authenticate ? await resolveGitHubAuth() : undefined; const output = (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, timeout, signal, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(auth?.token ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:' + auth.token).toString('base64'), GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {}) } })).stdout; return preserveOutput ? output : output.trimEnd(); }
 export async function validateCheckout(path: string, repo: Repo): Promise<string> {
   const canonical = await realpath(path);
   const root = await git(canonical, ['rev-parse', '--show-toplevel']);
@@ -30,7 +30,10 @@ export async function prepareWorktree(repo: Repo, job: Job, dataDir: string): Pr
 export async function collectPatch(path: string, base = 'HEAD'): Promise<string> {
   // Only the plugin-owned worktree index is changed. Untracked new files are included.
   await git(path, ['add', '--all']);
-  return git(path, ['diff', '--cached', '--no-ext-diff', '--no-textconv', base, '--']);
+  const patch = await git(path, ['diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', base, '--'], false, undefined, 30000, true);
+  // Binary blocks need their closing blank line; trimming can silently drop the last file.
+  // Retain the existing text-only representation so historical approvals stay comparable.
+  return patch.includes('GIT binary patch\n') ? patch : patch.trimEnd();
 }
 
 /** Plugin-owned clone, used only when no user checkout is bound. Clone never executes repository scripts. */
