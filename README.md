@@ -118,6 +118,8 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 
 2026-10-02 安装包试用发现并修复了两处维护流程断点：失败验证仍保留为待处理事项；接受独立审查后可定位同版本、同补丁的原实施产物，继续单独批准与发布。完整十步试用、复现脚本和未测边界见 [安装包维护试用](docs/product/INSTALLED-TRIAL.md)，参赛剩余材料见 [准备状态](docs/product/COMPETITION-READINESS.md)。
 
+随后收敛为“维护者判断台”，默认详情加入同补丁的统一审阅摘要及明确恢复状态。产品目标与非目标见 [产品定义](docs/product/PRODUCT-FOCUS.md)，个人试用时建议检查的五个场景见 [个人试用说明](docs/product/PERSONAL-TRIAL.md)。
+
 ### Fresh profile compatibility
 
 The plugin accepts host Cordis `>=4.0.3 <4.1.0`; the source lockfile still tests `4.0.3`. Freshly resolved DSH `0.1.7` utility packages can require `~4.0.4`, so a fresh npm-style host should supply `4.0.4`. An isolated `0.1.7-alpha.1` host with `4.0.4` passed installed-package native workflows.
