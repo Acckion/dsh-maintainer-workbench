@@ -1,0 +1,57 @@
+[
+  {
+    "name": "react",
+    "version": "18.3.1",
+    "license": "MIT",
+    "source": "https://github.com/facebook/react.git",
+    "usage": "Standalone preview bundle; host-provided React in native client",
+    "notice": "third_party/runtime/REACT-LICENSE",
+    "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+    "modifications": "Upstream library unchanged; bundled as applicable",
+    "obligation": "Preserve upstream copyright and license/permission notice"
+  },
+  {
+    "name": "react-dom",
+    "version": "18.3.1",
+    "license": "MIT",
+    "source": "https://github.com/facebook/react.git",
+    "usage": "Standalone preview rendering",
+    "notice": "third_party/runtime/REACT-DOM-LICENSE",
+    "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+    "modifications": "Upstream library unchanged; bundled as applicable",
+    "obligation": "Preserve upstream copyright and license/permission notice"
+  },
+  {
+    "name": "scheduler",
+    "version": "0.23.2",
+    "license": "MIT",
+    "source": "https://github.com/facebook/react.git",
+    "usage": "React DOM scheduling in standalone preview",
+    "notice": "third_party/runtime/SCHEDULER-LICENSE",
+    "sha256": "52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85",
+    "modifications": "Upstream library unchanged; bundled as applicable",
+    "obligation": "Preserve upstream copyright and license/permission notice"
+  },
+  {
+    "name": "lucide-react",
+    "version": "0.468.0",
+    "license": "ISC",
+    "source": "https://github.com/lucide-icons/lucide.git",
+    "usage": "Tree-shaken icons in standalone and native clients",
+    "notice": "third_party/runtime/LUCIDE-LICENSE",
+    "sha256": "1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc",
+    "modifications": "Upstream library unchanged; bundled as applicable",
+    "obligation": "Preserve upstream copyright and license/permission notice"
+  },
+  {
+    "name": "zod",
+    "version": "3.25.76",
+    "license": "MIT",
+    "source": "git+https://github.com/colinhacks/zod.git",
+    "usage": "Runtime input/schema validation",
+    "notice": "third_party/runtime/ZOD-LICENSE",
+    "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
+    "modifications": "Upstream library unchanged; bundled as applicable",
+    "obligation": "Preserve upstream copyright and license/permission notice"
+  }
+]
