@@ -3,7 +3,7 @@
 | Resource | Version | License | Usage |
 |---|---|---|---|
 | DeepSeek Harness | 0.1.7-alpha.1 | MIT, Copyright (c) 2026 DeepSeek | Native host, Standard Agent preset, coding tools, model adapters, sessions, permission system; API usage patterns referenced in docs/RESEARCH.md |
-| DeepSeek Cordis | 4.0.3 | MIT | Native plugin lifecycle and dependency injection |
+| DeepSeek Cordis | 4.0.3 in development lock; 4.0.4 in fresh-install host trial | MIT | Native plugin lifecycle and dependency injection; one shared host instance |
 | React / React DOM | 18.3.1 | MIT | UI, native build reuses host React |
 | Lucide React | 0.468.0 | ISC | UI icons |
 | Zod | 3.25.76 | MIT | Request and model output validation |
