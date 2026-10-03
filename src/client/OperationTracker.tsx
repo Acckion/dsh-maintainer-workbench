@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Loader2, X, XCircle } from 'lucide-react';
 import type { Job } from '../core/types.ts';
 import { kindNames } from '../core/types.ts';
 import { taskStatus } from './review-evidence.ts';
@@ -17,7 +17,8 @@ export function OperationTracker({ record, jobs, open, close }: { record?: Opera
       const job = jobs.find(item => item.id === id);
       if (!job) return <div className="mw-operation-missing" key={id}><AlertTriangle size={15} /><span><code>{id.slice(0, 8)}</code> 已不在当前任务列表中；可能被删除或切换了数据源。</span></div>;
       const status = taskStatus(job);
-      return <button key={id} onClick={() => open(id)}><span>{['queued', 'running'].includes(job.status) ? <Loader2 className="mw-spin" size={16} /> : <CheckCircle2 size={16} />}</span><div><strong>{kindNames[job.kind]} · #{job.issueSnapshot.number}</strong><small><code>{job.id.slice(0, 8)}</code> · {job.waitingReason || status.label}</small></div><ExternalLink size={15} /></button>;
+      const icon = job.status === 'running' ? <Loader2 className="mw-spin" size={16} /> : ['failed', 'cancelled', 'rejected'].includes(job.status) ? <XCircle size={16} /> : ['queued', 'awaiting_review'].includes(job.status) ? <Clock3 size={16} /> : <CheckCircle2 size={16} />;
+      return <button key={id} className={`mw-operation-${status.tone}`} onClick={() => open(id)}><span>{icon}</span><div><strong>{kindNames[job.kind]} · #{job.issueSnapshot.number}</strong><small><code>{job.id.slice(0, 8)}</code> · {job.waitingReason || status.label}</small></div><ExternalLink size={15} /></button>;
     })}</div>
     {record.errors.length > 0 && <div className="mw-operation-errors">{record.errors.map(error => <p key={`${error.id}:${error.error}`}><AlertTriangle size={15} /><code>{error.id}</code><span>{error.error}</span></p>)}</div>}
   </section>;

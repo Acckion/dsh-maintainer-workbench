@@ -525,6 +525,11 @@ export function App({
       else setToast({ text: success });
       return result;
     } catch (e) {
+      if (["/jobs", "/classify", "/retry"].includes(path)) {
+        const detail = e instanceof Error ? e.message : "请求未确认";
+        const ids = path === "/retry" ? [String((data as { id?: string }).id ?? "retry")] : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
+        setOperationRecords(records => ({ ...records, [repoId]: { ids: [], reused: [], errors: ids.map(id => ({ id, error: `请求未完成或被拒绝：${detail}；未确认是否已创建任务，请刷新后核对。` })), at: new Date().toISOString() } }));
+      }
       setToast({ text: (e as Error).message, error: true });
     } finally {
       setBusy("");
