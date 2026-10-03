@@ -507,7 +507,7 @@ export function App({
     setPageSearch(values => ({ ...values, [pageSearchKey(origin.repoId, origin.page)]: origin.search }));
     setFilter(origin.filter); setType(origin.type); setSelected(origin.selected);
     if (origin.page === 'inbox') setFocused(origin.focused); else setJobFocus(origin.focused);
-    restoreOrigin(origin, repoId, { frame: requestAnimationFrame, scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element; } });
+    restoreOrigin(origin, repoId, { frame: callback => requestAnimationFrame(() => requestAnimationFrame(callback)), scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element; } });
   };
   async function action(
     label: string,
