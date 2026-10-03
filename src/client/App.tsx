@@ -480,17 +480,17 @@ export function App({
     const timer = setTimeout(() => setToast(undefined), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
-  const navigate = (nextPage: Page, nextRepoId = currentContext.current.repoId) => {
+  const navigate = (nextPage: Page, nextRepoId = currentContext.current.repoId, preserveOrigin = false) => {
     const previous = currentContext.current;
     if (previous.page !== nextPage || previous.repoId !== nextRepoId)
       navigationGeneration.current += 1;
-    if (previous.repoId !== nextRepoId) originRef.current = undefined;
+    if (!preserveOrigin && (previous.repoId !== nextRepoId || previous.page !== nextPage)) originRef.current = undefined;
     currentContext.current = { repoId: nextRepoId, page: nextPage };
     if (nextRepoId !== previous.repoId) setRepoId(nextRepoId);
     if (nextPage !== previous.page) setPage(nextPage);
   };
   const moveFocusToDetail = () => focusDetail({ frame: requestAnimationFrame, focus: id => {
-    const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element;
+    const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element;
   } });
   const rememberOrigin = () => {
     if (!['inbox', 'reviews', 'tasks'].includes(page)) return;
@@ -503,11 +503,11 @@ export function App({
     setJobFocus(undefined);
     if (!origin || origin.repoId !== currentContext.current.repoId) { setFocused(undefined); return; }
     // Compute this key from the destination, rather than the source closure.
-    navigate(origin.page);
+    navigate(origin.page, origin.repoId, true);
     setPageSearch(values => ({ ...values, [pageSearchKey(origin.repoId, origin.page)]: origin.search }));
     setFilter(origin.filter); setType(origin.type); setSelected(origin.selected);
     if (origin.page === 'inbox') setFocused(origin.focused); else setJobFocus(origin.focused);
-    restoreOrigin(origin, repoId, { frame: requestAnimationFrame, scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element; } });
+    restoreOrigin(origin, repoId, { frame: requestAnimationFrame, scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element; } });
   };
   async function action(
     label: string,
@@ -527,7 +527,7 @@ export function App({
       }
       if (result.delivery?.implementationJobId && currentContext.current.repoId === actionRepoId && navigationGeneration.current === actionNavigation) {
         rememberOrigin();
-        navigate("tasks");
+        navigate("tasks", actionRepoId, true);
         setFocused(undefined);
         setJobFocus(result.delivery.implementationJobId);
         setDetailTab("overview");
@@ -583,7 +583,7 @@ export function App({
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
       return;
     rememberOrigin();
-    navigate("tasks");
+    navigate("tasks", repoId, true);
     setFocused(undefined);
     setJobFocus(id);
     setDetailTab(tab);
@@ -911,7 +911,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { rememberOrigin(); navigate('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
+                open={id => { rememberOrigin(); navigate('tasks', repoId, true); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
@@ -1032,7 +1032,6 @@ export function App({
                         );
                         return (
                           <div
-                            id={`mw-item-${i.id}`}
                             className={`mw-issue-row ${focused === i.id ? "focused" : ""}`}
                             key={i.id}
                           >
@@ -1049,6 +1048,7 @@ export function App({
                               }
                             />
                             <button
+                              id={`mw-item-${i.id}`}
                               className="mw-issue-content"
                               onClick={() => {
                                 setFocused(i.id);
@@ -1185,6 +1185,7 @@ export function App({
                           id={`mw-item-${j.id}`}
                           className={`mw-task-row ${jobFocus === j.id ? "focused" : ""}`}
                           onClick={() => {
+                            navigationGeneration.current += 1;
                             setJobFocus(j.id);
                             setFocused(undefined);
                             setDetailTab("overview");
