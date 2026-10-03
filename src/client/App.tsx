@@ -402,7 +402,7 @@ export function App({
   const [selected, setSelected] = useState<string[]>([]);
   const [focused, setFocused] = useState<string>();
   const [jobFocus, setJobFocus] = useState<string>();
-  const [search, setSearch] = useState("");
+  const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
   const [type, setType] = useState("all");
   const [detailTab, setDetailTab] = useState("overview");
@@ -429,8 +429,11 @@ export function App({
     }
   });
   const mainRef = useRef<HTMLElement>(null);
-  const inboxReturnRef = useRef<{ scrollTop: number; focused?: string }>();
+  const inboxReturnRef = useRef<{ repoId: string; scrollTop: number; focused?: string }>();
   const refreshSequence = useRef(0);
+  const searchKey = `${repoId}:${page}`;
+  const search = pageSearch[searchKey] ?? "";
+  const setSearchValue = (value: string) => setPageSearch(values => ({ ...values, [searchKey]: value }));
   const refresh = useCallback(async () => {
     const sequence = ++refreshSequence.current;
     try {
@@ -456,7 +459,6 @@ export function App({
     setSelected([]);
     setFocused(undefined);
     setJobFocus(undefined);
-    setSearch("");
     setFilter("all");
     setType("all");
     setPublishAction(undefined);
@@ -479,13 +481,15 @@ export function App({
     return () => clearTimeout(timer);
   }, [toast]);
   const rememberInbox = () => {
-    inboxReturnRef.current = { scrollTop: mainRef.current?.scrollTop ?? 0, focused };
+    inboxReturnRef.current = { repoId, scrollTop: mainRef.current?.scrollTop ?? 0, focused };
   };
   const returnToInbox = () => {
     setPage("inbox");
     setJobFocus(undefined);
-    setFocused(inboxReturnRef.current?.focused);
-    requestAnimationFrame(() => mainRef.current?.scrollTo({ top: inboxReturnRef.current?.scrollTop ?? 0 }));
+    const context = inboxReturnRef.current;
+    if (context?.repoId !== repoId) { setFocused(undefined); return; }
+    setFocused(context.focused);
+    requestAnimationFrame(() => mainRef.current?.scrollTo({ top: context.scrollTop }));
   };
   async function action(
     label: string,
@@ -498,6 +502,10 @@ export function App({
     try {
       const result = await request(path, data);
       await refresh();
+      if (["/jobs", "/classify"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
+        const record: OperationRecord = { ids: result.created ?? [], reused: result.reused ?? [], errors: result.errors ?? [], at: new Date().toISOString() };
+        setOperationRecords(records => ({ ...records, [repoId]: record }));
+      }
       if (result.delivery?.implementationJobId) {
         if (page === "inbox") rememberInbox();
         setPage("tasks");
@@ -592,13 +600,7 @@ export function App({
       "任务已进入队列",
     );
     if (response) {
-      const record: OperationRecord = {
-        ids: response.created ?? [],
-        reused: response.reused ?? [],
-        errors: response.errors ?? [],
-        at: new Date().toISOString(),
-      };
-      setOperationRecords((records) => ({ ...records, [repoId]: record }));
+      const record: OperationRecord = { ids: response.created ?? [], reused: response.reused ?? [], errors: response.errors ?? [], at: new Date().toISOString() };
       setToast({
         text: `已记录本次派发：新建 ${record.ids.length}，复用 ${record.reused.length}，失败 ${record.errors.length}`,
       });
@@ -672,7 +674,6 @@ export function App({
               onClick={() => {
                 setPage(n.id);
                 setJobFocus(undefined);
-                setSearch("");
               }}
             >
               <n.icon size={18} />
@@ -887,7 +888,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { rememberInbox(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); }}
+                open={id => { rememberInbox(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(''); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
@@ -926,7 +927,7 @@ export function App({
                           placeholder="搜索标题、编号或标签…"
                           aria-label="搜索问题"
                           value={search}
-                          onChange={(e) => setSearch(e.target.value)}
+                          onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
                       <label className="mw-filter">
@@ -1148,7 +1149,7 @@ export function App({
                           aria-label="搜索任务"
                           placeholder="搜索任务…"
                           value={search}
-                          onChange={(e) => setSearch(e.target.value)}
+                          onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
                     </div>
@@ -1588,6 +1589,10 @@ export function App({
             <button
               aria-label="关闭详情"
               onClick={() => {
+                if (page === "tasks" && inboxReturnRef.current?.repoId === repoId) {
+                  returnToInbox();
+                  return;
+                }
                 setFocused(undefined);
                 setJobFocus(undefined);
               }}
