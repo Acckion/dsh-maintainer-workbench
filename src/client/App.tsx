@@ -1136,7 +1136,7 @@ export function App({
                   {displayedIssue ? (
                     renderDetail()
                   ) : (
-                    <aside className="mw-detail mw-detail-placeholder">
+                    <aside className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}>
                       <div className="mw-detail-art">
                         <GitBranch size={38} />
                         <span>
@@ -1234,7 +1234,7 @@ export function App({
                   {displayedIssue && job ? (
                     renderDetail()
                   ) : (
-                    <aside className="mw-detail mw-detail-placeholder">
+                    <aside className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}>
                       {originRef.current && (
                         <button aria-label="返回来源列表" onClick={returnToOrigin}>返回列表</button>
                       )}
