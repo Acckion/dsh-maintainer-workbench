@@ -5,10 +5,11 @@ import { kindNames } from '../core/types.ts';
 import { taskStatus } from './review-evidence.ts';
 
 export type OperationRecord = { ids: string[]; reused: string[]; errors: { id: string; error: string }[]; at: string };
+export function operationTaskIds(record?: OperationRecord) { return record ? [...new Set([...record.ids, ...record.reused])] : []; }
 
 export function OperationTracker({ record, jobs, open, close }: { record?: OperationRecord; jobs: Job[]; open: (id: string) => void; close: () => void }) {
   if (!record) return null;
-  const requested = [...new Set([...record.ids, ...record.reused])];
+  const requested = operationTaskIds(record);
   return <section className="mw-operation-tracker" aria-label="本次操作追踪">
     <div className="mw-operation-heading"><div><span className="mw-eyebrow">THIS OPERATION</span><h2>本次任务追踪</h2><p>仅显示刚才派发的任务；刷新不会混入全部任务。</p></div><button aria-label="关闭本次操作追踪" onClick={close}><X size={18} /></button></div>
     <div className="mw-operation-summary"><span><CheckCircle2 size={15} />新建 {record.ids.length}</span><span>复用 {record.reused.length}</span><span className={record.errors.length ? 'error' : ''}>{record.errors.length ? <AlertTriangle size={15} /> : null}失败 {record.errors.length}</span></div>

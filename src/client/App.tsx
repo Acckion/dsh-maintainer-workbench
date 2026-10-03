@@ -428,11 +428,18 @@ export function App({
       return {};
     }
   });
+  const mainRef = useRef<HTMLElement>(null);
+  const inboxReturnRef = useRef<{ scrollTop: number; focused?: string }>();
+  const refreshSequence = useRef(0);
   const refresh = useCallback(async () => {
+    const sequence = ++refreshSequence.current;
     try {
-      setState(await request("/state"));
+      const snapshot = await request("/state");
+      if (sequence !== refreshSequence.current) return;
+      setState(snapshot);
       setLoadError("");
     } catch (e) {
+      if (sequence !== refreshSequence.current) return;
       setLoadError((e as Error).message);
     }
   }, []);
@@ -471,6 +478,15 @@ export function App({
     const timer = setTimeout(() => setToast(undefined), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
+  const rememberInbox = () => {
+    inboxReturnRef.current = { scrollTop: mainRef.current?.scrollTop ?? 0, focused };
+  };
+  const returnToInbox = () => {
+    setPage("inbox");
+    setJobFocus(undefined);
+    setFocused(inboxReturnRef.current?.focused);
+    requestAnimationFrame(() => mainRef.current?.scrollTo({ top: inboxReturnRef.current?.scrollTop ?? 0 }));
+  };
   async function action(
     label: string,
     path: string,
@@ -483,6 +499,7 @@ export function App({
       const result = await request(path, data);
       await refresh();
       if (result.delivery?.implementationJobId) {
+        if (page === "inbox") rememberInbox();
         setPage("tasks");
         setFocused(undefined);
         setJobFocus(result.delivery.implementationJobId);
@@ -534,6 +551,7 @@ export function App({
   const openEvidenceJob = (id: string, tab: DetailTab) => {
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
       return;
+    if (page === "inbox") rememberInbox();
     setPage("tasks");
     setFocused(undefined);
     setJobFocus(id);
@@ -732,7 +750,7 @@ export function App({
             </span>
           </div>
         </header>
-        <main className="mw-main">
+        <main className="mw-main" ref={mainRef}>
           <div className="mw-page-heading">
             <div>
               <div className="mw-eyebrow">REPOSITORY OPERATIONS</div>
@@ -869,7 +887,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); }}
+                open={id => { rememberInbox(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
@@ -1552,6 +1570,11 @@ export function App({
             {displayedIssue.number}
           </span>
           <div>
+            {page === "tasks" && inboxReturnRef.current && (
+              <button aria-label="返回维护收件箱" onClick={returnToInbox}>
+                返回列表
+              </button>
+            )}
             {displayedIssue.url && (
               <a
                 href={displayedIssue.url}
