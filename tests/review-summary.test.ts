@@ -61,12 +61,13 @@ test('only the latest exact-patch validation controls implementation acceptance 
   assert.match(renderToStaticMarkup(React.createElement(AcceptArtifactButton, { job: original, busy: false, blockedReason: acceptanceEligibility(original, afterFailure).reason, accept: () => {} })), /disabled=""/);
   assert.equal(reviewQueue(afterFailure).some(job => job.id === original.id), false);
 
-  for (const state of ['cancelled', 'stale'] as const) {
+  for (const state of ['cancelled', 'stale', 'incomplete'] as const) {
     const interrupted = structuredClone(finalValidation);
     interrupted.id = `latest-${state}-validation`; interrupted.sourceJobId = original.id;
     interrupted.createdAt = '2026-10-04T00:00:00.000Z'; interrupted.updatedAt = interrupted.createdAt; interrupted.attempt += 2;
     if (state === 'cancelled') { interrupted.status = 'cancelled'; delete interrupted.patch; delete interrupted.artifact; delete interrupted.result; }
-    else interrupted.artifactState = 'stale';
+    else if (state === 'stale') interrupted.artifactState = 'stale';
+    else { if (interrupted.artifact?.stage !== 'validate') throw Error('fixture'); interrupted.artifact.tests[0].status = 'not_run'; interrupted.result = asAnalysis(interrupted.artifact); }
     assert.equal(acceptanceEligibility(original, [...data.jobs, interrupted]).allowed, false, state);
   }
 });

@@ -35,6 +35,44 @@ test('cancelled work never overwrites cancellation with completed; retry keeps o
   assert.equal(store.jobs()[1].attempt, 2); await workbench.close();
 });
 
+test('terminal and format-retry jobs clear stale approval waits while preserving inspectable evidence', async () => {
+  const store = new Store(':memory:'); seedFixture(store); const issue = store.issues()[0];
+  let stop!: () => void;
+  const runner: Runner = async ({ progress, signal }) => {
+    progress('等待宿主审批', undefined, '等待权限审批');
+    await new Promise<void>((resolve) => { stop = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
+    signal.throwIfAborted();
+    throw new Error('fixture failure');
+  };
+  const workbench = new Workbench(store, '/tmp/maintainer-state-evidence', runner, undefined, false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(store.get<Job>('jobs', id)?.waitingReason, '等待权限审批');
+  workbench.cancel(id); await workbench.drain();
+  const cancelled = store.get<Job>('jobs', id)!;
+  assert.equal(cancelled.status, 'cancelled'); assert.equal(cancelled.waitingReason, undefined);
+
+  const recoverable: Job = { ...cancelled, id: 'format-recovery-source', status: 'failed', waitingReason: '等待权限审批', rawOutput: '{"summary":"partial"}', analysisPath: '/tmp/saved-analysis', formatRecovery: { baseSha: cancelled.baseSha, patchHash: 'saved-output-fixture' }, error: 'invalid JSON' };
+  store.put('jobs', recoverable); workbench.retry(recoverable.id);
+  const retry = store.jobs().find(job => job.id !== recoverable.id && job.formatOnly)!;
+  assert.ok(retry); assert.equal(retry.status, 'queued'); assert.equal(retry.waitingReason, undefined);
+  assert.equal(retry.rawOutput, recoverable.rawOutput); assert.equal(retry.analysisPath, recoverable.analysisPath);
+  stop?.(); await workbench.close();
+});
+
+test('failed jobs clear approval waits without dropping raw output evidence', async () => {
+  const store = new Store(':memory:'); seedFixture(store); const issue = store.issues()[0];
+  const runner: Runner = async ({ progress, recordOutput }) => {
+    progress('等待宿主审批', undefined, '等待权限审批'); recordOutput?.('{"partial":true}');
+    throw new Error('fixture failure');
+  };
+  const workbench = new Workbench(store, '/tmp/maintainer-failed-wait', runner, undefined, false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump(); await workbench.drain();
+  const failed = store.get<Job>('jobs', id)!;
+  assert.equal(failed.status, 'failed'); assert.equal(failed.waitingReason, undefined);
+  assert.equal(failed.rawOutput, '{"partial":true}'); await workbench.close();
+});
+
 test('concurrency cap and timeout apply to the actual worker lifecycle', async () => {
   const { workbench, store } = fixture(false);
   workbench.updateSettings({ ...store.settings(), concurrency: 1, timeoutMs: 1000 });
