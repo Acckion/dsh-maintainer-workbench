@@ -431,23 +431,19 @@ export function App({
   });
   const mainRef = useRef<HTMLElement>(null);
   const inboxReturnRef = useRef<{ repoId: string; scrollTop: number; focused?: string }>();
-  const refreshSequence = useRef(0);
+  const refreshInFlight = useRef<Promise<void>>();
+  const navigationGeneration = useRef(0);
   const searchKey = pageSearchKey(repoId, page);
   const search = pageSearch[searchKey] ?? "";
   const setSearchValue = (value: string) => setPageSearch(values => ({ ...values, [searchKey]: value }));
-  const refresh = useCallback(async () => {
-    const sequence = ++refreshSequence.current;
-    try {
-      const snapshot = await request("/state");
-      if (sequence !== refreshSequence.current) return;
-      setState(snapshot);
-      setLoadError("");
-    } catch (e) {
-      if (sequence !== refreshSequence.current) return;
-      setLoadError((e as Error).message);
-    }
+  const refresh = useCallback(() => {
+    if (refreshInFlight.current) return refreshInFlight.current;
+    const pending = request("/state").then(snapshot => { setState(snapshot); setLoadError(""); }).catch(e => setLoadError((e as Error).message)).finally(() => { refreshInFlight.current = undefined; });
+    refreshInFlight.current = pending;
+    return pending;
   }, []);
   useEffect(() => {
+    navigationGeneration.current += 1;
     void refresh();
     const id = setInterval(() => void refresh(), 2000);
     return () => clearInterval(id);
@@ -499,15 +495,16 @@ export function App({
     success = "已完成",
   ) {
     if (busy) return;
+    const actionRepoId = repoId, actionNavigation = navigationGeneration.current;
     setBusy(label);
     try {
       const result = await request(path, data);
       await refresh();
       if (["/jobs", "/classify", "/retry"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
         const record = operationRecordFromResponse(result);
-        setOperationRecords(records => ({ ...records, [repoId]: record }));
+        setOperationRecords(records => ({ ...records, [actionRepoId]: record }));
       }
-      if (result.delivery?.implementationJobId) {
+      if (result.delivery?.implementationJobId && repoId === actionRepoId && navigationGeneration.current === actionNavigation) {
         if (page === "inbox") rememberInbox();
         setPage("tasks");
         setFocused(undefined);
@@ -528,7 +525,7 @@ export function App({
     } catch (e) {
       if (["/jobs", "/classify", "/retry"].includes(path)) {
         const ids = path === "/retry" ? [String((data as { id?: string }).id ?? "retry")] : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
-        setOperationRecords(records => ({ ...records, [repoId]: operationFailureRecord(ids, e) }));
+        setOperationRecords(records => ({ ...records, [actionRepoId]: operationFailureRecord(ids, e) }));
       }
       setToast({ text: (e as Error).message, error: true });
     } finally {
