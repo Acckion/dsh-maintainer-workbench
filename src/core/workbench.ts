@@ -148,7 +148,10 @@ export class Workbench {
   }
   cancel(id: string): void {
     const job = this.job(id); if (!['queued', 'running'].includes(job.status)) throw new Error('只能取消排队或执行中的任务');
-    this.saveJob({ ...job, status: 'cancelled', finishedAt: new Date().toISOString() });
+    // A waiting reason describes only an active Agent/approval wait.  Keep the
+    // session, worktree and raw output for inspection, but never let a stale
+    // progress message describe a cancelled task.
+    this.saveJob({ ...job, status: 'cancelled', waitingReason: undefined, finishedAt: new Date().toISOString() });
     this.active.get(id)?.abort(new Error('维护者取消了任务'));
     this.store.audit('job.cancelled', '由维护者取消；已生成的 worktree 保留供检查', id);
   }
@@ -159,7 +162,7 @@ export class Workbench {
     if (revision(current, this.repo(job.repoId), job.kind) !== job.revision) throw new Error('输入版本已变化，请从收件箱重新派发');
     if (this.nativeRunner && job.rawOutput && !job.result && (job.worktree || job.analysisPath)) {
       const now = new Date().toISOString();
-      const recovered: Job = { ...job, id: randomUUID(), formatOnly: true, status: 'queued', attempt: job.attempt + 1, createdAt: now, updatedAt: now, startedAt: undefined, finishedAt: undefined, error: undefined, sessionId: undefined, publications: undefined };
+      const recovered: Job = { ...job, id: randomUUID(), formatOnly: true, status: 'queued', attempt: job.attempt + 1, createdAt: now, updatedAt: now, startedAt: undefined, finishedAt: undefined, error: undefined, waitingReason: undefined, sessionId: undefined, publications: undefined };
       this.store.put('jobs', recovered); this.store.audit('job.format_retry', `仅整理 ${job.id} 的已保存输出，不重新实施`, recovered.id); if (this.autoStart) this.pump();
       return;
     }
@@ -302,7 +305,7 @@ export class Workbench {
       });
     } catch (error) {
       const current = this.job(job.id);
-      if (current.status !== 'cancelled') this.saveJob({ ...current, status: 'failed', error: controller.signal.aborted ? String(controller.signal.reason?.message ?? '已中断') : error instanceof Error ? error.message : String(error), finishedAt: new Date().toISOString() });
+      if (current.status !== 'cancelled') this.saveJob({ ...current, status: 'failed', waitingReason: undefined, error: controller.signal.aborted ? String(controller.signal.reason?.message ?? '已中断') : error instanceof Error ? error.message : String(error), finishedAt: new Date().toISOString() });
       this.store.audit('job.stopped', this.job(job.id).error ?? '已取消', job.id);
     } finally { clearTimeout(timer); }
   }
