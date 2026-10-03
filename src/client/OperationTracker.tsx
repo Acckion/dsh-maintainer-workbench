@@ -1,10 +1,11 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, ExternalLink, Loader2, X, XCircle } from 'lucide-react';
 import type { Job } from '../core/types.ts';
+import type { OperationRecord } from './operation-state.ts';
 import { kindNames } from '../core/types.ts';
 import { taskStatus } from './review-evidence.ts';
 
-export type OperationRecord = { ids: string[]; reused: string[]; errors: { id: string; error: string }[]; at: string };
+export type { OperationRecord } from './operation-state.ts';
 export function operationTaskIds(record?: OperationRecord) { return record ? [...new Set([...record.ids, ...record.reused])] : []; }
 
 export function OperationTracker({ record, jobs, open, close }: { record?: OperationRecord; jobs: Job[]; open: (id: string) => void; close: () => void }) {

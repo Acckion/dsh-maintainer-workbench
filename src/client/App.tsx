@@ -18,6 +18,7 @@ import {
   taskStatus,
 } from "./review-evidence.ts";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
+import { operationFailureRecord, operationRecordFromResponse, pageSearchKey, restoreInboxContext, reviewNoteForTask } from "./operation-state.ts";
 import React, {
   useCallback,
   useEffect,
@@ -431,7 +432,7 @@ export function App({
   const mainRef = useRef<HTMLElement>(null);
   const inboxReturnRef = useRef<{ repoId: string; scrollTop: number; focused?: string }>();
   const refreshSequence = useRef(0);
-  const searchKey = `${repoId}:${page}`;
+  const searchKey = pageSearchKey(repoId, page);
   const search = pageSearch[searchKey] ?? "";
   const setSearchValue = (value: string) => setPageSearch(values => ({ ...values, [searchKey]: value }));
   const refresh = useCallback(async () => {
@@ -486,8 +487,8 @@ export function App({
   const returnToInbox = () => {
     setPage("inbox");
     setJobFocus(undefined);
-    const context = inboxReturnRef.current;
-    if (context?.repoId !== repoId) { setFocused(undefined); return; }
+    const context = restoreInboxContext(inboxReturnRef.current, repoId);
+    if (!context) { setFocused(undefined); return; }
     setFocused(context.focused);
     requestAnimationFrame(() => mainRef.current?.scrollTo({ top: context.scrollTop }));
   };
@@ -502,8 +503,8 @@ export function App({
     try {
       const result = await request(path, data);
       await refresh();
-      if (["/jobs", "/classify"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
-        const record: OperationRecord = { ids: result.created ?? [], reused: result.reused ?? [], errors: result.errors ?? [], at: new Date().toISOString() };
+      if (["/jobs", "/classify", "/retry"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
+        const record = operationRecordFromResponse(result);
         setOperationRecords(records => ({ ...records, [repoId]: record }));
       }
       if (result.delivery?.implementationJobId) {
@@ -526,9 +527,8 @@ export function App({
       return result;
     } catch (e) {
       if (["/jobs", "/classify", "/retry"].includes(path)) {
-        const detail = e instanceof Error ? e.message : "请求未确认";
         const ids = path === "/retry" ? [String((data as { id?: string }).id ?? "retry")] : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
-        setOperationRecords(records => ({ ...records, [repoId]: { ids: [], reused: [], errors: ids.map(id => ({ id, error: `请求未完成或被拒绝：${detail}；未确认是否已创建任务，请刷新后核对。` })), at: new Date().toISOString() } }));
+        setOperationRecords(records => ({ ...records, [repoId]: operationFailureRecord(ids, e) }));
       }
       setToast({ text: (e as Error).message, error: true });
     } finally {
@@ -893,7 +893,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { rememberInbox(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(''); }}
+                open={id => { if (page === 'inbox' && !inboxReturnRef.current) rememberInbox(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
