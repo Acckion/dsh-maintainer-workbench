@@ -506,6 +506,7 @@ export function App({
     originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused: selection, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: selection ? `mw-item-${selection}` : `mw-list-${page}` });
   };
   const returnToOrigin = () => {
+    navigationGeneration.current += 1;
     const origin = originRef.current;
     originRef.current = undefined;
     setJobFocus(undefined);
@@ -590,6 +591,7 @@ export function App({
   const openEvidenceJob = (id: string, tab: DetailTab) => {
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
       return;
+    navigationGeneration.current += 1;
     rememberOrigin();
     navigate("tasks", repoId, true);
     setFocused(undefined);
@@ -625,6 +627,7 @@ export function App({
     }
   }
   async function enqueue(kind: JobKind, ids = selected) {
+    const requestContext = { ...currentContext.current, navigation: navigationGeneration.current, ids };
     const response = await action(
       "dispatch",
       kind === "triage" ? "/classify" : "/jobs",
@@ -636,7 +639,8 @@ export function App({
       setToast({
         text: `已记录本次派发：新建 ${record.ids.length}，复用 ${record.reused.length}，失败 ${record.errors.length}`,
       });
-      setSelected([]);
+      if (currentContext.current.repoId === requestContext.repoId && currentContext.current.page === requestContext.page && navigationGeneration.current === requestContext.navigation)
+        setSelected(current => current.filter(id => !requestContext.ids.includes(id)));
     }
   }
   const nav = [
@@ -917,7 +921,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { rememberOrigin(); navigate('tasks', repoId, true); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
+                open={id => { navigationGeneration.current += 1; rememberOrigin(); navigate('tasks', repoId, true); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
@@ -1057,6 +1061,7 @@ export function App({
                               id={`mw-item-${i.id}`}
                               className="mw-issue-content"
                               onClick={() => {
+                                navigationGeneration.current += 1;
                                 setFocused(i.id);
                                 setJobFocus(undefined);
                                 setDetailTab("overview");
@@ -1630,6 +1635,7 @@ export function App({
                   returnToOrigin();
                   return;
                 }
+                navigationGeneration.current += 1;
                 setFocused(undefined);
                 setJobFocus(undefined);
               }}
