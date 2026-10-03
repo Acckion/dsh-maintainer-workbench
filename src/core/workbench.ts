@@ -34,7 +34,7 @@ export class Workbench {
   private profiles = new Map<string, Promise<import("./types.ts").RepositoryProfile>>();
   private syncs = new Map<string, Promise<void>>();
   constructor(public store: Store, private dataDir: string, private nativeRunner?: Runner, private github = new GitHub(), private autoStart = true, private hostStatus?: () => HostStatus) {
-    for (const job of store.jobs()) if (job.status === 'running') { this.saveJob({ ...job, status: 'failed', error: '上次进程中断。为避免重复修改，未自动重新执行；请检查 worktree 后重试。', finishedAt: new Date().toISOString() }); store.audit('job.interrupted', '进程重启后恢复为待人工重试', job.id); }
+    for (const job of store.jobs()) if (job.status === 'running') { this.saveJob({ ...job, status: 'failed', waitingReason: undefined, error: '上次进程中断。为避免重复修改，未自动重新执行；请检查 worktree 后重试。', finishedAt: new Date().toISOString() }); store.audit('job.interrupted', '进程重启后恢复为待人工重试', job.id); }
     for (const job of store.jobs()) if (job.publications) { let changed = false; for (const receipt of Object.values(job.publications)) if (receipt.status === 'publishing') { receipt.status = 'failed'; receipt.error = '上次发布过程被中断；重试时将先按任务标识核对远端结果'; changed = true; } if (changed) { this.saveJob(job); store.audit('publish.interrupted', '恢复中断的发布记录', job.id); } }
     if (autoStart) { queueMicrotask(() => this.pump()); this.pollTimer = setInterval(() => void this.poll(), 60000); this.pollTimer.unref(); }
   }
@@ -136,7 +136,7 @@ export class Workbench {
     });
     if (options.sourceJobId) {
       const source = this.job(options.sourceJobId);
-      if (ids.length !== 1 || source.issueId !== ids[0] || !source.result || ['failed','cancelled','running','queued'].includes(source.status)) throw new Error('交接来源必须是同一事项的已完成产物');
+      if (ids.length !== 1 || source.issueId !== ids[0] || !source.result || !['completed','awaiting_review','approved'].includes(source.status)) throw new Error('交接来源必须是同一事项的已完成产物');
       if (source.revision !== revision(candidates[0].issue, candidates[0].repo, source.kind) && !(source.kind === 'review' && ['review','fix','investigate','ci'].includes(kind))) throw new Error('来源产物已过期，请先重新分析');
     }
     const created: string[] = [], reused: string[] = [];

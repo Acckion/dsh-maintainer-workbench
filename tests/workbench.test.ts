@@ -94,10 +94,23 @@ test('stale issue input cannot approve an old result', async () => {
 test('restart preserves queued tasks but does not replay a running modification', async () => {
   const { store, workbench, issue } = fixture(false);
   const id = workbench.enqueue([issue.id], 'fix').created[0];
-  store.put('jobs', { ...store.get<Job>('jobs', id)!, status: 'running' });
+  store.put('jobs', { ...store.get<Job>('jobs', id)!, status: 'running', waitingReason: '等待权限审批', rawOutput: '{"partial":true}', worktree: '/tmp/preserved-worktree', formatRecovery: { baseSha: 'fixture-base', patchHash: 'fixture-patch' } });
   const recovered = new Workbench(store, '/tmp/maintainer-tests', undefined, undefined, false);
-  assert.equal(store.get<Job>('jobs', id)?.status, 'failed');
-  assert.match(store.get<Job>('jobs', id)?.error ?? '', /进程中断/); await recovered.close();
+  const job = store.get<Job>('jobs', id)!;
+  assert.equal(job.status, 'failed'); assert.equal(job.waitingReason, undefined);
+  assert.match(job.error ?? '', /进程中断/); assert.equal(job.rawOutput, '{"partial":true}');
+  assert.equal(job.worktree, '/tmp/preserved-worktree'); assert.deepEqual(job.formatRecovery, { baseSha: 'fixture-base', patchHash: 'fixture-patch' });
+  await recovered.close();
+});
+
+test('a rejected artifact cannot seed a new stage, while retry creates a fresh attempt', async () => {
+  const { store, workbench, issue } = fixture(false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump(); await workbench.drain();
+  await workbench.review(id, 'reject', '需要补充 v2 证据');
+  assert.throws(() => workbench.enqueue([issue.id], 'investigate', { sourceJobId: id }), /交接来源/);
+  workbench.retry(id); workbench.pump(); await workbench.drain();
+  assert.equal(store.jobs().at(-1)?.status, 'completed'); assert.equal(store.jobs().at(-1)?.attempt, 2);
+  await workbench.close();
 });
 
 test('HTTP rejects cross-origin mutations and malformed batch input', async () => {
@@ -107,6 +120,17 @@ test('HTTP rejects cross-origin mutations and malformed batch input', async () =
   assert.equal((await fetch(url + '/jobs', { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
   assert.equal((await fetch(url + '/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"issueIds":[],"kind":"invalid"}' })).status, 400);
   assert.equal((await fetch(url + '/state')).status, 200);
+  await new Promise<void>(r => server.close(() => r())); await workbench.close();
+});
+
+test('HTTP refuses a rejected task as a stage handoff source', async () => {
+  const { workbench, issue } = fixture(false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump(); await workbench.drain();
+  await workbench.review(id, 'reject', '需要更多复现证据');
+  const server = createServer(handler(workbench, localRejection)); await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/maintainer/api/jobs`;
+  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issueIds: [issue.id], kind: 'investigate', sourceJobId: id }) });
+  assert.equal(response.status, 400); assert.match((await response.json() as { error: string }).error, /交接来源/);
   await new Promise<void>(r => server.close(() => r())); await workbench.close();
 });
 
