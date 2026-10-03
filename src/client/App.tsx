@@ -434,6 +434,9 @@ export function App({
   const originRef = useRef<NavigationOrigin>();
   const refreshInFlight = useRef<Promise<void>>();
   const navigationGeneration = useRef(0);
+  // Keep async delivery guards independent from React's render-time closures.
+  const currentContext = useRef({ repoId, page });
+  currentContext.current = { repoId, page };
   const searchKey = pageSearchKey(repoId, page);
   const search = pageSearch[searchKey] ?? "";
   const setSearchValue = (value: string) => setPageSearch(values => ({ ...values, [searchKey]: value }));
@@ -444,15 +447,13 @@ export function App({
     return pending;
   }, []);
   useEffect(() => {
-    navigationGeneration.current += 1;
-    originRef.current = undefined;
     void refresh();
     const id = setInterval(() => void refresh(), 2000);
     return () => clearInterval(id);
   }, [refresh]);
   useEffect(() => {
     if (state && !state.repos.some((r) => r.id === repoId))
-      setRepoId(state.repos[0]?.id ?? "");
+      navigate(page, state.repos[0]?.id ?? "");
   }, [state, repoId]);
   useEffect(() => {
     setSelected([]);
@@ -479,16 +480,33 @@ export function App({
     const timer = setTimeout(() => setToast(undefined), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
+  const navigate = (nextPage: Page, nextRepoId = currentContext.current.repoId) => {
+    const previous = currentContext.current;
+    if (previous.page !== nextPage || previous.repoId !== nextRepoId)
+      navigationGeneration.current += 1;
+    if (previous.repoId !== nextRepoId) originRef.current = undefined;
+    currentContext.current = { repoId: nextRepoId, page: nextPage };
+    if (nextRepoId !== previous.repoId) setRepoId(nextRepoId);
+    if (nextPage !== previous.page) setPage(nextPage);
+  };
+  const moveFocusToDetail = () => focusDetail({ frame: requestAnimationFrame, focus: id => {
+    const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element;
+  } });
   const rememberOrigin = () => {
     if (!['inbox', 'reviews', 'tasks'].includes(page)) return;
-    originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: focused ? `mw-item-${focused}` : `mw-list-${page}` });
+    const selection = page === 'inbox' ? focused : jobFocus;
+    originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused: selection, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: selection ? `mw-item-${selection}` : `mw-list-${page}` });
   };
   const returnToOrigin = () => {
     const origin = originRef.current;
     originRef.current = undefined;
     setJobFocus(undefined);
-    if (!origin || origin.repoId !== repoId) { setFocused(undefined); return; }
-    setPage(origin.page); setSearchValue(origin.search); setFilter(origin.filter); setType(origin.type); setSelected(origin.selected); setFocused(origin.focused);
+    if (!origin || origin.repoId !== currentContext.current.repoId) { setFocused(undefined); return; }
+    // Compute this key from the destination, rather than the source closure.
+    navigate(origin.page);
+    setPageSearch(values => ({ ...values, [pageSearchKey(origin.repoId, origin.page)]: origin.search }));
+    setFilter(origin.filter); setType(origin.type); setSelected(origin.selected);
+    if (origin.page === 'inbox') setFocused(origin.focused); else setJobFocus(origin.focused);
     restoreOrigin(origin, repoId, { frame: requestAnimationFrame, scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element; } });
   };
   async function action(
@@ -498,7 +516,7 @@ export function App({
     success = "已完成",
   ) {
     if (busy) return;
-    const actionRepoId = repoId, actionNavigation = navigationGeneration.current;
+    const actionRepoId = currentContext.current.repoId, actionNavigation = navigationGeneration.current;
     setBusy(label);
     try {
       const result = await request(path, data);
@@ -507,9 +525,9 @@ export function App({
         const record = operationRecordFromResponse(result);
         setOperationRecords(records => ({ ...records, [actionRepoId]: record }));
       }
-      if (result.delivery?.implementationJobId && repoId === actionRepoId && navigationGeneration.current === actionNavigation) {
+      if (result.delivery?.implementationJobId && currentContext.current.repoId === actionRepoId && navigationGeneration.current === actionNavigation) {
         rememberOrigin();
-        setPage("tasks");
+        navigate("tasks");
         setFocused(undefined);
         setJobFocus(result.delivery.implementationJobId);
         setDetailTab("overview");
@@ -565,12 +583,13 @@ export function App({
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
       return;
     rememberOrigin();
-    setPage("tasks");
+    navigate("tasks");
     setFocused(undefined);
     setJobFocus(id);
     setDetailTab(tab);
     setPublishAction(undefined);
     if (id !== job?.id) setReviewNote("");
+    moveFocusToDetail();
   };
   const listJobs = jobs
     .filter(
@@ -644,7 +663,7 @@ export function App({
             aria-label="选择仓库"
             disabled={!!busy}
             value={repoId}
-            onChange={(e) => setRepoId(e.target.value)}
+            onChange={(e) => navigate(page, e.target.value)}
           >
             {state?.repos.map((r) => (
               <option value={r.id} key={r.id}>
@@ -677,7 +696,7 @@ export function App({
               aria-current={page === n.id ? "page" : undefined}
               className={page === n.id ? "active" : ""}
               onClick={() => {
-                setPage(n.id);
+                navigate(n.id);
                 setJobFocus(undefined);
               }}
             >
@@ -706,7 +725,7 @@ export function App({
           aria-label="设置与连接"
           title="设置与连接"
           className={`mw-settings-nav ${page === "settings" ? "active" : ""}`}
-          onClick={() => setPage("settings")}
+          onClick={() => navigate("settings")}
         >
           <Settings2 size={17} /> 设置与连接
         </button>
@@ -731,7 +750,7 @@ export function App({
               <select
                 disabled={!!busy}
                 value={repoId}
-                onChange={(e) => setRepoId(e.target.value)}
+                onChange={(e) => navigate(page, e.target.value)}
               >
                 {!state?.repos.length && <option value="">尚未连接仓库</option>}
                 {state?.repos.map((r) => (
@@ -756,7 +775,7 @@ export function App({
             </span>
           </div>
         </header>
-        <main className="mw-main" ref={mainRef}>
+        <main id="mw-main" tabIndex={-1} className="mw-main" ref={mainRef}>
           <div className="mw-page-heading">
             <div>
               <div className="mw-eyebrow">REPOSITORY OPERATIONS</div>
@@ -850,8 +869,7 @@ export function App({
                 <Attention
                   state={state}
                   open={(id) => {
-                    setRepoId(id);
-                    setPage("inbox");
+                    navigate("inbox", id);
                   }}
                 />
               )}
@@ -893,7 +911,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { rememberOrigin(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); focusDetail({ frame: requestAnimationFrame, focus: id => { const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element; } }); }}
+                open={id => { rememberOrigin(); navigate('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
@@ -1036,6 +1054,7 @@ export function App({
                                 setFocused(i.id);
                                 setJobFocus(undefined);
                                 setDetailTab("overview");
+                                moveFocusToDetail();
                               }}
                             >
                               <div className="mw-issue-title">
@@ -1163,12 +1182,14 @@ export function App({
                       listJobs.map((j) => (
                         <button
                           key={j.id}
+                          id={`mw-item-${j.id}`}
                           className={`mw-task-row ${jobFocus === j.id ? "focused" : ""}`}
                           onClick={() => {
                             setJobFocus(j.id);
                             setFocused(undefined);
                             setDetailTab("overview");
                             setReviewNote("");
+                            moveFocusToDetail();
                           }}
                         >
                           <span
@@ -1213,10 +1234,13 @@ export function App({
                     renderDetail()
                   ) : (
                     <aside className="mw-detail mw-detail-placeholder">
+                      {originRef.current && (
+                        <button aria-label="返回来源列表" onClick={returnToOrigin}>返回列表</button>
+                      )}
                       <ShieldCheck size={36} />
-                      <h3>结果可追溯，决策可检查</h3>
+                      <h3>{jobFocus ? "任务已不在当前列表中" : "结果可追溯，决策可检查"}</h3>
                       <p>
-                        选择任务查看输入版本、执行证据、
+                        {jobFocus ? "该任务可能已删除或已切换仓库。你可以返回原来的列表继续处理。" : "选择任务查看输入版本、执行证据、"}
                         <br />
                         代码差异与待审核草稿。
                       </p>
@@ -1285,7 +1309,7 @@ export function App({
                         aria-pressed={r.id === repoId}
                         disabled={!!busy}
                         key={r.id}
-                        onClick={() => setRepoId(r.id)}
+                        onClick={() => navigate(page, r.id)}
                       >
                         <GitBranch size={16} />
                         <span className="mw-repository-name">
@@ -1491,7 +1515,7 @@ export function App({
                 const connected = r.results.find(
                   (item: { repoId?: string }) => item.repoId,
                 );
-                if (connected) setRepoId(connected.repoId);
+                if (connected) navigate(page, connected.repoId);
               }
             }}
           >
