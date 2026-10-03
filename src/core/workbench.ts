@@ -162,7 +162,7 @@ export class Workbench {
     this.active.get(id)?.abort(new Error('维护者取消了任务'));
     this.store.audit('job.cancelled', '由维护者取消；已生成的 worktree 保留供检查', id);
   }
-  retry(id: string): void {
+  retry(id: string): { created: string[]; reused: string[] } {
     const job = this.job(id); if (!['failed', 'cancelled', 'rejected'].includes(job.status)) throw new Error('当前状态不能重试');
     if (this.active.has(id)) throw new Error('任务仍在停止，请稍后重试');
     const current = this.store.get<Issue>('issues', job.issueId)!;
@@ -171,9 +171,9 @@ export class Workbench {
       const now = new Date().toISOString();
       const recovered: Job = { ...job, id: randomUUID(), formatOnly: true, status: 'queued', attempt: job.attempt + 1, createdAt: now, updatedAt: now, startedAt: undefined, finishedAt: undefined, error: undefined, waitingReason: undefined, sessionId: undefined, publications: undefined };
       this.store.put('jobs', recovered); this.store.audit('job.format_retry', `仅整理 ${job.id} 的已保存输出，不重新实施`, recovered.id); if (this.autoStart) this.pump();
-      return;
+      return { created: [recovered.id], reused: [] };
     }
-    this.enqueue([job.issueId], job.kind, { sourceJobId: job.sourceJobId, instructions: job.instructions });
+    return this.enqueue([job.issueId], job.kind, { sourceJobId: job.sourceJobId, instructions: job.instructions });
   }
   async review(id: string, decision: 'approve' | 'reject', note: string): Promise<{ delivery?: DeliveryTarget; deliveryBlockedReason?: string }> {
     const job = this.job(id); if (!['awaiting_review', 'completed'].includes(job.status)) throw new Error('任务不在待审核状态');
