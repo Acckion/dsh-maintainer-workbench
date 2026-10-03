@@ -468,6 +468,14 @@ export function App({
     } catch {}
   }, [repoId]);
   useEffect(() => {
+    if (page === "inbox" || !jobFocus) return;
+    const frame = requestAnimationFrame(() => {
+      const detail = document.getElementById("mw-detail") as HTMLElement | null;
+      detail?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [jobFocus, page]);
+  useEffect(() => {
     try {
       localStorage.setItem(
         "maintainer.operation-tracker",
@@ -661,7 +669,6 @@ export function App({
           <Code2 size={17} />
           <select
             aria-label="选择仓库"
-            disabled={!!busy}
             value={repoId}
             onChange={(e) => navigate(page, e.target.value)}
           >
@@ -748,7 +755,6 @@ export function App({
             <label className="mw-mobile-repo">
               <span className="mw-sr-only">切换当前仓库</span>
               <select
-                disabled={!!busy}
                 value={repoId}
                 onChange={(e) => navigate(page, e.target.value)}
               >

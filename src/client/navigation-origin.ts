@@ -10,4 +10,10 @@ export function restoreOrigin(origin: NavigationOrigin | undefined, repoId: stri
   dom.frame(() => { if (!dom.focus(valid.focusId)) dom.focus(`mw-list-${valid.page}`); dom.scrollTo(valid.scrollTop); });
   return valid;
 }
-export function focusDetail(dom: Pick<NavigationDom, 'frame' | 'focus'>) { dom.frame(() => { if (!dom.focus('mw-detail')) dom.focus('mw-main'); }); }
+export function focusDetail(dom: Pick<NavigationDom, 'frame' | 'focus'>) {
+  dom.frame(() => {
+    if (dom.focus('mw-detail')) return;
+    // A repository change can defer the detail mount past the first frame.
+    dom.frame(() => { if (!dom.focus('mw-detail')) dom.focus('mw-main'); });
+  });
+}
