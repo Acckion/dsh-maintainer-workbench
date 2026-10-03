@@ -19,6 +19,7 @@ import {
 } from "./review-evidence.ts";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
 import { operationFailureRecord, operationRecordFromResponse, pageSearchKey, restoreInboxContext, reviewNoteForTask } from "./operation-state.ts";
+import { captureOrigin, focusDetail, restoreOrigin, type NavigationOrigin } from "./navigation-origin.ts";
 import React, {
   useCallback,
   useEffect,
@@ -430,7 +431,7 @@ export function App({
     }
   });
   const mainRef = useRef<HTMLElement>(null);
-  const inboxReturnRef = useRef<{ repoId: string; scrollTop: number; focused?: string }>();
+  const originRef = useRef<NavigationOrigin>();
   const refreshInFlight = useRef<Promise<void>>();
   const navigationGeneration = useRef(0);
   const searchKey = pageSearchKey(repoId, page);
@@ -444,6 +445,7 @@ export function App({
   }, []);
   useEffect(() => {
     navigationGeneration.current += 1;
+    originRef.current = undefined;
     void refresh();
     const id = setInterval(() => void refresh(), 2000);
     return () => clearInterval(id);
@@ -477,16 +479,17 @@ export function App({
     const timer = setTimeout(() => setToast(undefined), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
-  const rememberInbox = () => {
-    inboxReturnRef.current = { repoId, scrollTop: mainRef.current?.scrollTop ?? 0, focused };
+  const rememberOrigin = () => {
+    if (!['inbox', 'reviews', 'tasks'].includes(page)) return;
+    originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: focused ? `mw-item-${focused}` : `mw-list-${page}` });
   };
-  const returnToInbox = () => {
-    setPage("inbox");
+  const returnToOrigin = () => {
+    const origin = originRef.current;
+    originRef.current = undefined;
     setJobFocus(undefined);
-    const context = restoreInboxContext(inboxReturnRef.current, repoId);
-    if (!context) { setFocused(undefined); return; }
-    setFocused(context.focused);
-    requestAnimationFrame(() => mainRef.current?.scrollTo({ top: context.scrollTop }));
+    if (!origin || origin.repoId !== repoId) { setFocused(undefined); return; }
+    setPage(origin.page); setSearchValue(origin.search); setFilter(origin.filter); setType(origin.type); setSelected(origin.selected); setFocused(origin.focused);
+    restoreOrigin(origin, repoId, { frame: requestAnimationFrame, scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element; } });
   };
   async function action(
     label: string,
@@ -505,7 +508,7 @@ export function App({
         setOperationRecords(records => ({ ...records, [actionRepoId]: record }));
       }
       if (result.delivery?.implementationJobId && repoId === actionRepoId && navigationGeneration.current === actionNavigation) {
-        if (page === "inbox") rememberInbox();
+        rememberOrigin();
         setPage("tasks");
         setFocused(undefined);
         setJobFocus(result.delivery.implementationJobId);
@@ -561,7 +564,7 @@ export function App({
   const openEvidenceJob = (id: string, tab: DetailTab) => {
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
       return;
-    if (page === "inbox") rememberInbox();
+    rememberOrigin();
     setPage("tasks");
     setFocused(undefined);
     setJobFocus(id);
@@ -890,11 +893,11 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { if (page === 'inbox' && !inboxReturnRef.current) rememberInbox(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); }}
+                open={id => { rememberOrigin(); setPage('tasks'); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); focusDetail({ frame: requestAnimationFrame, focus: id => { const element = document.getElementById(id); element?.focus({ preventScroll: true }); return !!element; } }); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
-                  <section className="mw-list-panel">
+                  <section id="mw-list-inbox" tabIndex={-1} className="mw-list-panel">
                     <div className="mw-panel-top">
                       <div className="mw-tabs">
                         <button
@@ -1011,6 +1014,7 @@ export function App({
                         );
                         return (
                           <div
+                            id={`mw-item-${i.id}`}
                             className={`mw-issue-row ${focused === i.id ? "focused" : ""}`}
                             key={i.id}
                           >
@@ -1139,7 +1143,7 @@ export function App({
               )}
               {(page === "tasks" || page === "reviews") && (
                 <div className="mw-workarea">
-                  <section className="mw-list-panel">
+                  <section id={`mw-list-${page}`} tabIndex={-1} className="mw-list-panel">
                     <div className="mw-panel-top">
                       <h3>
                         {page === "reviews" ? "待审核结果" : "所有任务"}{" "}
@@ -1566,15 +1570,15 @@ export function App({
     if (!displayedIssue) return null;
     const acceptance = job ? acceptanceEligibility(job, jobs) : undefined;
     return (
-      <aside className="mw-detail">
+      <aside id="mw-detail" tabIndex={-1} className="mw-detail">
         <div className="mw-detail-header">
           <span>
             {displayedIssue.type === "pr" ? "PULL REQUEST" : "ISSUE"} #
             {displayedIssue.number}
           </span>
           <div>
-            {page === "tasks" && inboxReturnRef.current && (
-              <button aria-label="返回维护收件箱" onClick={returnToInbox}>
+            {originRef.current && (
+              <button aria-label="返回来源列表" onClick={returnToOrigin}>
                 返回列表
               </button>
             )}
@@ -1591,8 +1595,8 @@ export function App({
             <button
               aria-label="关闭详情"
               onClick={() => {
-                if (page === "tasks" && inboxReturnRef.current?.repoId === repoId) {
-                  returnToInbox();
+                if (originRef.current) {
+                  returnToOrigin();
                   return;
                 }
                 setFocused(undefined);
