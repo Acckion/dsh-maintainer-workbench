@@ -2,6 +2,7 @@ import React from 'react';
 import type { Audit, Job } from '../core/types.ts';
 import { kindNames } from '../core/types.ts';
 import { validationState } from '../core/workflow-state.ts';
+import { TestExecutionLink } from './ExecutionEvidence.tsx';
 import { acceptanceEligibility, executionExplanation, patchScope, reviewEvidence, reviewVerdicts } from './review-evidence.ts';
 
 export type DetailTab = 'overview' | 'evidence' | 'diff' | 'log';
@@ -23,7 +24,7 @@ function TestReport({ job, own = false, role, open }: { job: Job; own?: boolean;
     <p className="mw-review-test-counts">{tests.filter(t => t.status === 'passed').length} 项报告通过 · {tests.filter(t => t.status === 'failed').length} 项报告失败 · {tests.filter(t => t.status === 'not_run').length} 项未执行</p>
     <details><summary>环境、覆盖与 {tests.length} 条命令记录</summary><p className="mw-muted">记录时间：{job.createdAt}</p>
       {job.artifact?.stage === 'validate' && <><p>验证环境：{job.artifact.environment || '未说明'}</p><p>验证覆盖：{job.artifact.coverage || '未说明'}</p></>}
-      {!tests.length ? <p>未提供命令记录，不能判断测试覆盖。</p> : tests.map((test, index) => <div className="mw-test" key={index}><strong>{statusNames[test.status]}</strong><code>{test.command}</code><pre>{test.output || '未提供输出'}</pre></div>)}
+      {!tests.length ? <p>未提供命令记录，不能判断测试覆盖。</p> : tests.map((test, index) => <div className="mw-test" key={index}><strong>{statusNames[test.status]}</strong><code>{test.command}</code><pre>{test.output || '未提供输出'}</pre><TestExecutionLink job={job} test={test} /></div>)}
     </details>
     <button type="button" className="mw-text-button" onClick={() => open(job.id, 'evidence')}>核对此{own ? '实施' : '验证'}的证据 · {job.result?.evidence.length ?? 0} 条</button>
   </article>;

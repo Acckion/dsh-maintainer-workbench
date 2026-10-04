@@ -5,7 +5,7 @@ export function Attention({ state, open }: { state:Snapshot; open:(repoId:string
   return <div className="mw-attention-grid">{state.repos.map(repo => {
     const issues = state.issues.filter(i => i.repoId === repo.id && i.state === 'open');
     const latest = issues.map(i => ({issue:i,job:state.jobs.find(j=>j.issueId===i.id)}));
-    const needs = latest.filter(({issue,job}) => ['needs_info','decision','blocked','review'].includes(issue.workflow?.stage ?? '') || ['failed','awaiting_review'].includes(job?.status ?? '') || (validationState(job?.artifact)?.state !== undefined && validationState(job?.artifact)?.state !== 'passed'));
+    const needs = latest.filter(({issue,job}) => issue.informationRequests?.some(r => r.state === 'reply_received') || ['needs_info','decision','blocked','review'].includes(issue.workflow?.stage ?? '') || ['failed','awaiting_review'].includes(job?.status ?? '') || (validationState(job?.artifact)?.state !== undefined && validationState(job?.artifact)?.state !== 'passed'));
     return <section className="mw-settings-card" key={repo.id}><div className="mw-section-title">{repo.fullName}</div><p>{issues.length} 个开放事项 · {needs.length} 个需要判断</p>{needs.slice(0,8).map(({issue,job}) => <div className="mw-stage-event" key={issue.id}><strong>#{issue.number} {issue.title}</strong><p>{job?.error ?? issue.workflow?.reason ?? '变更产物等待审核'}</p></div>)}{!needs.length && <p className="mw-muted">暂无等待判断的事项，可进入队列处理新问题。</p>}<button className="mw-button" onClick={()=>open(repo.id)}>进入维护队列</button></section>;
   })}</div>;
 }

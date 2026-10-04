@@ -52,7 +52,8 @@
     "test:browser:navigation": "node scripts/browser-navigation-fixture.mjs",
     "test:native": "node scripts/native-fixture.mjs",
     "harness:isolated": "node scripts/harness.mjs --isolated",
-    "evaluate": "node scripts/evaluate.mjs"
+    "evaluate": "node scripts/evaluate.mjs",
+    "test:browser:maintenance": "node --import tsx scripts/browser-maintenance-fixture.mjs"
   },
   "engines": {
     "node": ">=24"

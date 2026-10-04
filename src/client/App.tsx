@@ -1,4 +1,5 @@
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
+import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
 import { WorkflowPanel } from "./WorkflowPanel.tsx";
 import {
   PublicationConfirm,
@@ -1774,6 +1775,7 @@ export function App({
           )}
           {detailTab === "evidence" && (
             <>
+              {job?.executionRecords?.map(record => <ExecutionEvidence key={record.id} job={job} record={record} />)}
               {result?.evidence.length ? (
                 result.evidence.map((e, index) => (
                   <div className="mw-evidence" key={index}>

@@ -24,6 +24,7 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
     try {
       if (req.method === 'GET' && path === '/github/connection') { send(res, 200, await workbench.githubConnection()); return; }
       if (req.method === 'GET' && path === '/state') { send(res, 200, workbench.snapshot()); return; }
+      if (req.method === 'GET' && path === '/execution-output') { send(res, 200, workbench.executionOutput(z.string().min(1).parse(url.searchParams.get('id')), z.string().min(1).parse(url.searchParams.get('recordId')))); return; }
       if (req.method === 'GET' && path.startsWith('/export/')) {
         const job = workbench.store.get<Job>('jobs', decodeURIComponent(path.slice('/export/'.length)));
         if (!job) { send(res, 404, { error: '任务不存在' }); return; }
@@ -51,6 +52,15 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
       }
       else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds), sourceJobId: z.string().optional(), instructions: z.string().max(8000).optional() }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind, { sourceJobId: p.sourceJobId, instructions: p.instructions })); return; }
       else if (path === '/finding') { const p = z.object({ id: z.string(), findingId: z.string(), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.finding(p.id, p.findingId, p.decision); }
+      else if (path === '/findings') { const p = z.object({ id: z.string(), findingIds: z.array(z.string()).min(1).max(40), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.findings(p.id, p.findingIds, p.decision); }
+      else if (path === '/finding-followup') { const p = z.object({ id: z.string(), sourceJobId: z.string(), findingId: z.string(), status: z.enum(['resolved','still_present','unverified']), evidence: z.string().trim().min(1).max(6000) }).parse(input); workbench.followup(p.id, p); }
+      else if (path === '/issue-plan') { const p = z.object({ issueId: z.string(), plan: z.unknown() }).parse(input); workbench.savePlan(p.issueId, p.plan); }
+      else if (path === '/information') { const p = z.object({ issueId: z.string(), questions: z.array(z.string()), waitingFor: z.string(), askedAt: z.string().datetime().optional() }).parse(input); send(res, 200, { ok: true, ...workbench.askInformation(p.issueId, p.questions, p.waitingFor, p.askedAt) }); return; }
+      else if (path === '/information/finish') { const p = z.object({ issueId: z.string(), requestId: z.string(), state: z.enum(['fulfilled','dismissed']) }).parse(input); workbench.finishInformation(p.issueId, p.requestId, p.state); }
+      else if (path === '/threads/sync') { await workbench.syncThreads(z.object({ id: z.string() }).parse(input).id); }
+      else if (path === '/threads/link') { const p = z.object({ id: z.string(), findingId: z.string(), threadId: z.string() }).parse(input); workbench.linkThread(p.id, p.findingId, p.threadId); }
+      else if (path === '/threads/preview') { const p = z.object({ id: z.string(), threadId: z.string(), resolved: z.boolean() }).parse(input); send(res, 200, await workbench.previewThread(p.id, p.threadId, p.resolved)); return; }
+      else if (path === '/threads/update') { const p = z.object({ id: z.string(), threadId: z.string(), resolved: z.boolean(), stamp: z.string().length(64) }).parse(input); await workbench.updateThread(p.id, p.threadId, p.resolved, p.stamp); }
       else if (path === '/decision') { const p = z.object({ issueId: z.string(), stage: z.string(), reason: z.string().max(4000) }).parse(input); workbench.decide(p.issueId, p.stage, p.reason); }
       else if (path === '/cancel') workbench.cancel(z.object({ id: z.string() }).parse(input).id);
       else if (path === '/retry') { const id = z.object({ id: z.string() }).parse(input).id; send(res, 200, { ...workbench.retry(id), errors: [] }); return; }

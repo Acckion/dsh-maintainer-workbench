@@ -21,6 +21,13 @@ export async function apply(ctx: Context) {
   store.put('repos', { ...store.repos()[0], id: 'fixture/metadata', fullName: 'fixture/metadata', localPath: '' });
   store.put('issues', { ...store.issues()[0], id: 'fixture/metadata#2', repoId: 'fixture/metadata', number: 2, title: 'Metadata-only issue', body: 'Classify from provided discussion only' });
   workbench.enqueue(['fixture/metadata#2'], 'triage');
-  void workbench.drain().then(async () => { await writeFile(join(dir, 'result.json'), JSON.stringify(workbench.snapshot(), null, 2)); console.log('NATIVE_FIXTURE_RESULT', store.jobs()[0].status, store.jobs()[0].error ?? ''); });
+  void workbench.drain().then(async () => {
+    const implementation = store.jobs().find(job => job.kind === 'fix')!;
+    if (implementation.status === 'awaiting_review') {
+      workbench.enqueue(['fixture/native#1'], 'validate', { sourceJobId: implementation.id });
+      await workbench.drain();
+    }
+    await writeFile(join(dir, 'result.json'), JSON.stringify(workbench.snapshot(), null, 2)); console.log('NATIVE_FIXTURE_RESULT', store.jobs()[0].status, store.jobs()[0].error ?? '');
+  });
   ctx.effect(() => () => workbench.close());
 }

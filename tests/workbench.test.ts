@@ -38,15 +38,16 @@ test('cancelled work never overwrites cancellation with completed; retry keeps o
 test('terminal and format-retry jobs clear stale approval waits while preserving inspectable evidence', async () => {
   const store = new Store(':memory:'); seedFixture(store); const issue = store.issues()[0];
   let stop!: () => void;
+  let entered!: () => void; const ready = new Promise<void>(resolve => { entered = resolve; });
   const runner: Runner = async ({ progress, signal }) => {
-    progress('等待宿主审批', undefined, '等待权限审批');
+    progress('等待宿主审批', undefined, '等待权限审批'); entered();
     await new Promise<void>((resolve) => { stop = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
     signal.throwIfAborted();
     throw new Error('fixture failure');
   };
   const workbench = new Workbench(store, '/tmp/maintainer-state-evidence', runner, undefined, false);
   const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump();
-  await new Promise<void>(resolve => setImmediate(resolve));
+  await ready;
   assert.equal(store.get<Job>('jobs', id)?.waitingReason, '等待权限审批');
   workbench.cancel(id); await workbench.drain();
   const cancelled = store.get<Job>('jobs', id)!;

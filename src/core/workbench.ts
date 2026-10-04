@@ -15,6 +15,10 @@ import { revision } from './revision.ts';
 import { validationState } from './workflow-state.ts';
 import { validationAcceptance } from './validation-acceptance.ts';
 import { resolveDelivery, type DeliveryTarget } from './delivery.ts';
+import { issuePlanSchema, planBlocker, receiveReplies, sameQuestions } from './issue-flow.ts';
+import { reviewFollowups } from './finding-followup.ts';
+import { readExecutionLog, saveExecutionLog } from './execution-evidence.ts';
+import { reconcileTestExecutions } from './execution-links.ts';
 import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type Settings, type Snapshot, type HostStatus } from './types.ts';
 export { revision } from './revision.ts';
 const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
@@ -51,7 +55,7 @@ export class Workbench {
           await this.sync(repo.fullName);
           if (this.closed || !(repo.policy?.autoTriage ?? settings.autoTriage)) continue;
           const current = this.repo(repo.id);
-          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
+          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && !['answered','deferred'].includes(i.workflow?.stage ?? '') && !i.informationRequests?.some(r => ['asked','reply_received'].includes(r.state)) && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
           if (ids.length) this.enqueue(ids, 'triage');
         } catch (error) { if (!this.closed) this.store.audit('automation.failed', `${repo.fullName}: ${error instanceof Error ? error.message : String(error)}`); }
       }
@@ -83,12 +87,26 @@ export class Workbench {
     const prev = this.store.get<Repo>('repos', repo.id);
     repo.localPath = prev?.localPath ?? ''; repo.policy = prev?.policy;
     if (prev?.profile?.revision === repo.headSha) repo.profile = prev.profile;
+    const replies = new Map<string, { replies: import('./types.ts').InformationRequest['replies']; partial: boolean }>();
+    const replyErrors = new Map<string, string>();
+    for (const issue of issues) {
+      const old = this.store.get<Issue>('issues', issue.id);
+      const active = old?.informationRequests?.filter(r => ['asked','reply_received'].includes(r.state)) ?? [];
+      if (!active.length || old?.comments === issue.comments && old?.updatedAt === issue.updatedAt && active.every(r => r.checkedAt && !r.warning)) continue;
+      try { replies.set(issue.id, await this.github.informationReplies(repo, issue, active.map(r => r.askedAt).sort()[0])); }
+      catch (error) { replyErrors.set(issue.id, error instanceof Error ? error.message : '回复读取失败'); }
+    }
     this.store.transaction(() => {
       this.store.put('repos', repo);
       for (const issue of issues) {
         const old = this.store.get<Issue>('issues', issue.id);
+        issue.plan = old?.plan;
         if (old?.analysis && old.analysisRevision === revision(issue, repo)) { issue.analysis = old.analysis; issue.analysisRevision = old.analysisRevision; }
-        this.store.put('issues', { ...issue, linkedPullRequests: old?.linkedPullRequests, workflow: old?.workflow && revision(old, prev ?? repo) === revision(issue, repo) ? old.workflow : undefined });
+        const response = replies.get(issue.id);
+        const informationRequests = old?.informationRequests?.map(request => response ? receiveReplies(request, response.replies, response.partial) : replyErrors.has(issue.id) && ['asked','reply_received'].includes(request.state) ? { ...request, warning: replyErrors.get(issue.id) } : request);
+        const changedReply = informationRequests?.some(request => request.state === 'reply_received' && request.replies.length > (old?.informationRequests?.find(r => r.id === request.id)?.replies.length ?? 0));
+        const persistent = informationRequests?.some(r => ['asked','reply_received'].includes(r.state)) || ['answered','deferred'].includes(old?.workflow?.stage ?? '');
+        this.store.put('issues', { ...issue, informationRequests, linkedPullRequests: old?.linkedPullRequests, workflow: changedReply ? { stage: 'decision', reason: '等待的用户有新回复，请核对补充内容后重新评估；未自动重新执行。', updatedAt: new Date().toISOString() } : old?.workflow && (persistent || revision(old, prev ?? repo) === revision(issue, repo)) ? old.workflow : undefined });
       }
       this.store.audit('repo.sync', `${repo.fullName}：同步 ${issues.length} 条记录${repo.syncWarning ? '（部分覆盖）' : ''}`);
     });
@@ -132,6 +150,8 @@ export class Workbench {
       if (kind === 'triage' && issue.type === 'pr') throw new Error('PR 请使用变更预检，不执行 Issue 分诊');
       if (issue.state === 'closed') throw new Error('已关闭记录不可派发任务');
       if ((kind === 'fix' || kind === 'docs') && !this.nativeRunner) throw new Error('修复与文档编辑需要在 Harness 中运行；工作区会自动准备');
+      const blocker = planBlocker(issue, kind); if (blocker) throw new Error(blocker);
+      if (kind === 'triage' && issue.informationRequests?.some(r => r.state === 'asked')) throw new Error('补充信息尚未收到新回复，请先核对或结束已有追问，避免重复分诊。');
       return { issue, repo };
     });
     if (options.sourceJobId) {
@@ -146,7 +166,7 @@ export class Workbench {
         const prior = this.store.jobs().find(j => j.issueId === issue.id && j.kind === kind && j.revision === rev && j.sourceJobId === options.sourceJobId && (j.instructions ?? '') === (options.instructions ?? '') && !['failed', 'cancelled', 'rejected'].includes(j.status));
         if (prior) { reused.push(prior.id); this.store.audit('job.deduplicated', `重复派发复用已有任务 #${issue.number}`, prior.id); continue; }
         const now = new Date().toISOString();
-        const handoff = this.store.jobs().filter(j => j.issueId === issue.id && j.result && (j.revision === revision(issue, repo, j.kind) || j.kind === 'review' || j.id === options.sourceJobId)).slice(-8).map(j => ({ stale: j.revision !== revision(issue, repo, j.kind), id: j.id, kind: j.kind, revision: j.revision, artifact: j.artifact, result: j.artifact ? undefined : j.result, feedback: j.reviewNote, findings: j.findingDecisions }));
+        const handoff = this.store.jobs().filter(j => j.issueId === issue.id && j.result && (j.revision === revision(issue, repo, j.kind) || j.kind === 'review' || j.id === options.sourceJobId)).slice(-8).map(j => ({ stale: j.revision !== revision(issue, repo, j.kind), id: j.id, kind: j.kind, revision: j.revision, artifact: j.artifact, result: j.artifact ? undefined : j.result, feedback: j.reviewNote, followups: j.findingFollowups, findings: j.findingDecisions }));
         const job: Job = { handoff, sourceJobId: options.sourceJobId, instructions: options.instructions?.slice(0, 8000), id: randomUUID(), repoId: repo.id, issueId: issue.id, kind, status: 'queued', revision: rev, baseSha: repo.headSha, issueSnapshot: structuredClone(issue), attempt: 1 + Math.max(0, ...this.store.jobs().filter(j => j.issueId === issue.id && j.kind === kind && j.revision === rev).map(j => j.attempt)), createdAt: now, updatedAt: now };
         this.store.put('jobs', job); this.store.audit('job.queued', `${kind} · ${repo.fullName}#${issue.number}`, job.id); created.push(job.id);
       }
@@ -208,19 +228,109 @@ export class Workbench {
     return {};
   }
   finding(id: string, findingId: string, decision: FindingDecision): void {
+    this.findings(id, [findingId], decision);
+  }
+  findings(id: string, findingIds: string[], decision: FindingDecision): void {
     const job = this.job(id);
     if (job.publications?.review?.status === 'published') throw new Error('此审查已发布，新的处置请创建后续审查任务');
-    if (job.artifact?.stage !== 'review' || !job.artifact.findings.some(f => f.id === findingId)) throw new Error('审查发现不存在');
+    const ids = [...new Set(z.array(z.string()).min(1).max(40).parse(findingIds))];
+    if (job.artifact?.stage !== 'review' || ids.some(id => !job.artifact || job.artifact.stage !== 'review' || !job.artifact.findings.some(f => f.id === id))) throw new Error('审查发现不存在');
+    if (!['completed','awaiting_review','approved'].includes(job.status)) throw new Error('当前审查尚不可处置');
     if (job.revision !== revision(this.store.get<Issue>('issues', job.issueId)!, this.repo(job.repoId), job.kind)) throw new Error('审查版本已过期');
-    this.saveJob({ ...job, status: 'awaiting_review', findingDecisions: { ...job.findingDecisions, [findingId]: decision } });
-    this.store.audit('finding.decision', `${findingId}: ${decision}`, id);
+    this.saveJob({ ...job, status: 'awaiting_review', findingDecisions: { ...job.findingDecisions, ...Object.fromEntries(ids.map(id => [id, decision])) } });
+    this.store.audit('finding.decision', `${ids.join(', ')}: ${decision}`, id);
   }
   decide(issueId: string, stage: string, reason: string): void {
     const issue = this.store.get<Issue>('issues', issueId); if (!issue) throw new Error('事项不存在');
-    if (!['accepted', 'needs_info', 'deferred', 'decision'].includes(stage)) throw new Error('无效的处理阶段');
+    if (!['accepted', 'needs_info', 'deferred', 'decision', 'answered'].includes(stage)) throw new Error('无效的处理阶段');
+    if (stage === 'answered' && ((issue.plan?.category ?? issue.analysis?.category) !== 'question' || !reason.trim())) throw new Error('仅使用提问可记录答复并结束本地处理，请填写答复或已发布链接。');
     this.store.put('issues', { ...issue, workflow: { stage, reason, updatedAt: new Date().toISOString() } });
     this.store.audit('item.decision', `${issueId}: ${stage} · ${reason}`);
   }
+  savePlan(issueId: string, value: unknown): void {
+    const issue = this.store.get<Issue>('issues', issueId); if (!issue || issue.type !== 'issue' || issue.state !== 'open') throw new Error('只能为开放 Issue 保存类型和验收计划');
+    const plan = issuePlanSchema.parse(value);
+    this.store.put('issues', { ...issue, plan, workflow: { stage: plan.decision === 'accepted' ? 'accepted' : plan.decision === 'deferred' ? 'deferred' : 'decision', reason: plan.goal || '等待明确目标与验收条件', updatedAt: new Date().toISOString() } });
+    this.store.audit('item.plan', `${issueId}: ${plan.category} · ${plan.decision}`);
+  }
+  askInformation(issueId: string, questions: string[], waitingFor: string, askedAt?: string): { id: string; reused: boolean } {
+    const issue = this.store.get<Issue>('issues', issueId); if (!issue || issue.type !== 'issue' || issue.state !== 'open') throw new Error('只能为开放 Issue 记录追问');
+    const values = [...new Set(z.array(z.string().trim().min(1).max(1000)).min(1).max(20).parse(questions))];
+    const login = z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/).parse(waitingFor);
+    const requests = issue.informationRequests ?? [];
+    const previous = requests.find(request => sameQuestions(request, values, login));
+    if (previous) return { id: previous.id, reused: true };
+    const pending = requests.filter(r => ['asked','reply_received'].includes(r.state) && r.waitingFor.toLowerCase() === login.toLowerCase());
+    const asked = new Set(pending.flatMap(r => r.questions.map(q => q.trim().replace(/\s+/g, ' ').toLowerCase())));
+    const fresh = values.filter(q => !asked.has(q.trim().replace(/\s+/g, ' ').toLowerCase()));
+    if (!fresh.length) return { id: pending[0].id, reused: true };
+    if (requests.length >= 100) throw new Error('追问记录已达到 100 条，请导出历史后整理事项。');
+    const now = new Date().toISOString(), id = randomUUID();
+    const time = askedAt ? z.string().datetime().parse(askedAt) : now;
+    if (Date.parse(time) > Date.now() + 1000) throw new Error('实际提问时间不能在未来');
+    this.store.put('issues', { ...issue, informationRequests: [...requests, { id, questions: fresh, waitingFor: login, askedAt: time, baselineComments: issue.comments, state: 'asked', source: 'maintainer_record', replies: [] }], workflow: { stage: 'needs_info', reason: `等待 ${login} 补充 ${fresh.length} 项信息`, updatedAt: now } });
+    this.store.audit('information.asked', `${issueId}: 已记录向 ${login} 提出的 ${fresh.length} 项追问；未发送外部消息`);
+    return { id, reused: false };
+  }
+  finishInformation(issueId: string, requestId: string, state: 'fulfilled' | 'dismissed'): void {
+    const issue = this.store.get<Issue>('issues', issueId); const request = issue?.informationRequests?.find(r => r.id === requestId);
+    if (!issue || !request || !['asked','reply_received'].includes(request.state)) throw new Error('没有可核对的追问记录');
+    const requests = issue.informationRequests!.map(r => r.id === requestId ? { ...r, state } : r);
+    this.store.put('issues', { ...issue, informationRequests: requests, workflow: { stage: requests.some(r => ['asked','reply_received'].includes(r.state)) ? 'needs_info' : 'decision', reason: '追问已由维护者核对，请依据当前证据决定下一步。', updatedAt: new Date().toISOString() } });
+    this.store.audit('information.finished', `${issueId}: ${requestId} · ${state}`);
+  }
+  followup(id: string, value: import('./types.ts').FindingFollowup): void {
+    const job = this.job(id);
+    if (job.artifact?.stage !== 'review' || !['completed','awaiting_review','approved'].includes(job.status) || job.publications?.review?.status === 'published' || job.revision !== revision(this.store.get<Issue>('issues', job.issueId)!, this.repo(job.repoId), job.kind)) throw new Error('当前审查不可修改复核结论');
+    const values = [...(job.findingFollowups ?? []).filter(item => item.sourceJobId !== value.sourceJobId || item.findingId !== value.findingId), value];
+    const followups = reviewFollowups(job, values);
+    this.saveJob({ ...job, findingFollowups: followups, status: 'awaiting_review' });
+    this.store.audit('finding.followup', `${value.sourceJobId}/${value.findingId}: ${value.status} · ${value.evidence}`, id);
+  }
+  async syncThreads(id: string): Promise<void> {
+    const job = this.job(id); if (job.kind !== 'review' || job.issueSnapshot.type !== 'pr') throw new Error('只有 PR 审查可以同步讨论串');
+    const snapshot = await this.github.threads(this.repo(job.repoId), job.issueSnapshot.number);
+    this.saveJob({ ...this.job(id), reviewThreads: snapshot });
+    this.store.audit('threads.synced', `只读同步 ${snapshot.threads.length} 条讨论串${snapshot.partial ? '（部分覆盖）' : ''}`, id);
+  }
+  linkThread(id: string, findingId: string, threadId: string): void {
+    const job = this.job(id);
+    if (job.artifact?.stage !== 'review' || !job.artifact.findings.some(f => f.id === findingId) || !job.reviewThreads?.threads.some(t => t.id === threadId)) throw new Error('发现或讨论串不存在，请先同步');
+    if (job.revision !== revision(this.store.get<Issue>('issues', job.issueId)!, this.repo(job.repoId), job.kind) || job.reviewThreads.headSha !== job.prContext?.headSha || job.reviewThreads.baseSha !== job.prContext?.baseSha) throw new Error('请先审查并同步当前版本，再关联讨论串');
+    const links = Object.fromEntries(Object.entries(job.findingThreadLinks ?? {}).filter(([id, thread]) => id !== findingId && thread !== threadId));
+    this.saveJob({ ...job, findingThreadLinks: { ...links, [findingId]: threadId } });
+  }
+  private threadBinding(job: Job, thread: import('./types.ts').ReviewThread, resolved: boolean, snapshot: import('./types.ts').ThreadSnapshot): string {
+    return patchHash(JSON.stringify([job.id, job.revision, job.status, job.findingDecisions, job.findingFollowups, job.findingThreadLinks, snapshot.headSha, snapshot.baseSha, thread, resolved]));
+  }
+  async previewThread(id: string, threadId: string, resolved: boolean) {
+    const job = this.job(id), issue = this.store.get<Issue>('issues', job.issueId)!;
+    if (job.kind !== 'review' || issue.type !== 'pr' || !job.prContext || !['completed','awaiting_review','approved'].includes(job.status) || job.revision !== revision(issue, this.repo(job.repoId), job.kind)) throw new Error('请对当前版本完成 PR 审查后再操作讨论串');
+    const snapshot = await this.github.threads(this.repo(job.repoId), issue.number);
+    if (snapshot.headSha !== job.prContext.headSha || snapshot.baseSha !== job.prContext.baseSha) throw new Error('PR 版本已变化，请重新审查');
+    const current = this.job(id);
+    if (current.revision !== revision(this.store.get<Issue>('issues', job.issueId)!, this.repo(job.repoId), job.kind) || JSON.stringify(current) !== JSON.stringify(job)) throw new Error('核对期间审查已变化，请重新预览');
+    const thread = snapshot.threads.find(thread => thread.id === threadId); if (!thread) throw new Error('此讨论串不属于当前 PR 的可见范围');
+    if (thread.isResolved !== resolved && !(resolved ? thread.viewerCanResolve : thread.viewerCanUnresolve)) throw new Error('当前 GitHub 身份无权修改此讨论串');
+    return { thread, headSha: snapshot.headSha, baseSha: snapshot.baseSha, resolved, stamp: this.threadBinding(current, thread, resolved, snapshot) };
+  }
+  async updateThread(id: string, threadId: string, resolved: boolean, stamp: string): Promise<void> {
+    const key = `thread:${threadId}`; if (this.publishing.has(key)) throw new Error('讨论串正在更新，请等待');
+    this.publishing.add(key);
+    try {
+      const preview = await this.previewThread(id, threadId, resolved);
+      if (preview.stamp !== stamp) throw new Error('讨论串或审查已变化，请重新预览后确认');
+      const assertCurrent = () => {
+        const current = this.job(id), issue = this.store.get<Issue>('issues', current.issueId)!;
+        if (current.revision !== revision(issue, this.repo(current.repoId), current.kind) || current.prContext?.headSha !== preview.headSha || current.prContext?.baseSha !== preview.baseSha || this.threadBinding(current, preview.thread, resolved, { headSha: preview.headSha, baseSha: preview.baseSha, threads: [], partial: false, syncedAt: '' }) !== stamp) throw new Error('确认期间审查已变化，未修改远端讨论串');
+      };
+      assertCurrent();
+      if (preview.thread.isResolved !== resolved) await this.github.setThreadResolved(threadId, resolved, assertCurrent);
+      this.store.audit('thread.updated', `${threadId}: ${resolved ? 'resolved' : 'unresolved'} · GitHub 已确认`, id);
+      await this.syncThreads(id);
+    } finally { this.publishing.delete(key); }
+  }
+  executionOutput(id: string, recordId: string) { return readExecutionLog(this.dataDir, this.job(id), recordId); }
   async previewPublish(id: string, action: PublishAction) {
     const job = this.job(id);
     return previewPublication(this.store, job, this.repo(job.repoId), action, this.github);
@@ -325,7 +435,12 @@ export class Workbench {
       }
       inputPatchHash = patchHash(job.worktree && readOnlyCode(job.kind) ? await collectPatch(job.worktree, job.baseSha) : '');
       const runner = this.nativeRunner ?? modelRunner;
-      output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordOutput: text => {
+      output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordExecution: (record, raw) => {
+        saveExecutionLog(this.dataDir, job.id, record.id, raw);
+        const records = [...(this.job(job.id).executionRecords ?? []).filter(item => item.id !== record.id), record];
+        job = { ...job, executionRecords: records };
+        this.saveJob({ ...this.job(job.id), executionRecords: records });
+      }, recordOutput: text => {
         if (controller.signal.aborted) return;
         job = { ...job, rawOutput: text.slice(0, 200000) };
         this.saveJob({ ...this.job(job.id), rawOutput: job.rawOutput });
@@ -337,13 +452,19 @@ export class Workbench {
       controller.signal.throwIfAborted();
       if (readOnlyCode(job.kind) && patchHash(patch) !== inputPatchHash) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
       if ((job.kind === 'fix' || job.kind === 'docs') && !patch) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
+      if (output.artifact) {
+        output.artifact = reconcileTestExecutions(output.artifact, { ...job, patchSha256: patchHash(patch) });
+        if ('tests' in output.artifact) output.result = { ...output.result, tests: output.artifact.tests };
+      }
+      if (output.artifact?.stage === 'review') job.findingFollowups = reviewFollowups(job, output.artifact.followups ?? []);
       this.store.transaction(() => {
         const currentIssue = this.store.get<Issue>('issues', job.issueId)!;
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });
-        this.saveJob({ ...job, ...output, patch, formatRecovery: undefined, waitingReason: undefined, status: lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
+        this.saveJob({ ...job, ...output, patch, patchSha256: patchHash(patch), formatRecovery: undefined, waitingReason: undefined, status: lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
         const artifact = output.artifact;
         const validation = validationState(artifact);
-        const stage = validation ? (validation.state === 'passed' ? 'validated' : 'blocked') : artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
+        const waiting = currentIssue.informationRequests?.some(r => r.state === 'asked'), replies = currentIssue.informationRequests?.some(r => r.state === 'reply_received');
+        const stage = replies ? 'decision' : waiting ? 'needs_info' : ['answered','deferred'].includes(currentIssue.workflow?.stage ?? '') ? currentIssue.workflow!.stage : validation ? (validation.state === 'passed' ? 'validated' : 'blocked') : artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
         if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: validation?.reason ?? artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });
         this.store.audit('job.completed', `${output.engine} · 产物已保存，未发布远端`, job.id);
       });
