@@ -26,6 +26,11 @@ try {
     job.executionRecords = [record]; saveExecutionLog(dir, job.id, record.id, JSON.stringify({ fixture: true, exitCode: 1, output: 'Fixture assertion failed' })); store.put('jobs', job);
     let writes = 0;
     const threadSnapshot = { headSha: pr.headSha, baseSha: pr.prBaseSha, syncedAt: new Date().toISOString(), partial: false, threads: [{ id: 'thread-fixture', path: 'sum.ts', line: 1, isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: true, url: 'https://github.com/fixture/queue/pull/135#discussion', body: 'Fixture thread' }] };
+    github.remotePR = async (_repo,url) => ({ url,number:135,headSha:pr.headSha,baseSha:pr.prBaseSha,state:'OPEN',draft:false,review:'CHANGES_REQUESTED',mergeState:'DIRTY',mergedAt:null,checks:[{name:'Fixture CI',status:'COMPLETED',conclusion:'FAILURE'}],closingIssues:[],partial:false,syncedAt:new Date().toISOString() });
+    github.request = async () => ({number:135,state:'open'});
+    github.pullRequest = async () => job.prContext;
+    github.actions = async () => ({headSha:pr.headSha,syncedAt:new Date().toISOString(),jobs:[{id:42,runId:30,attempt:2,headSha:pr.headSha,name:'Fixture Actions failure',url:'https://github.com/fixture/queue/actions/runs/30',status:'completed',conclusion:'failure',steps:[{name:'Fixture regression step',number:3,status:'completed',conclusion:'failure'}]}],warnings:[]});
+    github.actionLog = async () => ({jobId:42,runId:30,attempt:2,headSha:pr.headSha,text:'FIXTURE_ACTIONS_ASSERTION_FAILED',truncated:false,fetchedAt:new Date().toISOString()});
     github.threads = async () => structuredClone(threadSnapshot);
     github.setThreadResolved = async (_id, resolved, beforeSend) => { beforeSend?.(); writes++; threadSnapshot.threads[0].isResolved = resolved; };
     github.sync = async () => ({ repo, issues: store.issues().map(issue => issue.informationRequests?.length ? { ...issue, comments: issue.comments + 1, updatedAt: new Date().toISOString() } : issue) });
@@ -70,6 +75,14 @@ try {
 
       await page.getByRole('button', { name: '待我审核' }).click();
       await page.locator('#mw-item-review-current').click();
+      await page.getByRole('button',{name:'刷新关联 PR 进度',exact:true}).click();
+      await page.getByText('审查要求修改',{exact:true}).waitFor();
+      await page.getByText('存在合并冲突',{exact:true}).waitFor();
+      await page.getByRole('button',{name:'读取 PR #135 Actions',exact:true}).click();
+      await page.getByText(/Fixture regression step/).waitFor();
+      await page.getByRole('button',{name:'读取 job 42 日志',exact:true}).click();
+      await page.getByText('FIXTURE_ACTIONS_ASSERTION_FAILED',{exact:true}).waitFor();
+      await page.screenshot({path:join(dir,`remote-progress-${width}.png`),fullPage:true});
       await page.getByText('批量处置审查发现', { exact: true }).click();
       await page.getByLabel('P1 · Fixture regression', { exact: true }).check();
       await page.getByLabel('批量处置', { exact: true }).selectOption('needs_evidence');

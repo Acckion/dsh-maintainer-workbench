@@ -153,3 +153,14 @@ REGRESSION_PASSED
 - `npm run test:native`：真实 Harness、Bash 和临时 Git worktree 完成修复后交接独立验证；宿主返回 `node test.cjs` 实际退出码 0，报告关联 executionId 和同一补丁指纹。模型仍为确定性夹具，权限机制沿用宿主。
 
 付费模型调用 0，外部 GitHub 写入 0。本轮未验证真实模型维护质量、真实 GitHub 讨论串权限或远端写入；浏览器的讨论串确认仅修改本地夹具。源指纹记录的是本次验收工作树，不包含后续提交对象本身。
+
+
+## 2026-10-05：关联 PR 进度与 Actions 失败证据
+
+分支 `codex/pr-progress-actions`，起点 `016c300`。行为和覆盖限制见 [产品说明](product/REMOTE-PR-ACTIONS.md)，源指纹与结果见 [验收摘要](evidence/pr-actions-2026-10-05/summary.json)。
+
+- 严格类型检查、159 项测试及完整构建通过；新增 9 项测试覆盖 PR 交付阻塞、合并与实际 Issue 关闭分离、读取失败保留快照、PR 范围约束、版本漂移拒绝、Actions 各次执行和部分覆盖、日志下载不转发认证与上限、未知 job/其他 run/不支持域名/过期日志拒绝、GraphQL 投影及 CI 任务实际输入绑定。
+- 1440px、390px 的真实客户端/本地 API/SQLite 浏览器交互通过：进度刷新、审查要求修改与冲突提示、Actions 失败步骤、指定 job 日志读取，以及既有计划、追问、批量处置、发现复核和讨论串两步确认流程。GitHub 与 Agent 返回夹具，确认操作没有外部写入。截图：[桌面进度](evidence/pr-actions-2026-10-05/remote-progress-1440.png)、[手机进度](evidence/pr-actions-2026-10-05/remote-progress-390.png)。
+- 既有原生修复 → 独立验证夹具回归通过，真实 Harness/Bash 返回退出码 0，executionId 与补丁指纹关联成立；模型仍为脚本夹具。它验证原生链路回归，不验证真实 GitHub Actions 日志下载或模型 CI 分类准确性。
+
+付费模型调用 0，外部 GitHub 写入 0。真实远端权限、日志下载及真实模型诊断效果未做端到端验收。证据对应本轮源工作树，不将旧快照重标为当前构建。

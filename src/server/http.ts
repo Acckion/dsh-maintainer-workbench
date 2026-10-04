@@ -24,6 +24,7 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
     try {
       if (req.method === 'GET' && path === '/github/connection') { send(res, 200, await workbench.githubConnection()); return; }
       if (req.method === 'GET' && path === '/state') { send(res, 200, workbench.snapshot()); return; }
+      if (req.method === 'GET' && path === '/actions/log') { send(res,200,await workbench.actionsLog(z.string().min(1).parse(url.searchParams.get('issueId')),z.coerce.number().int().positive().parse(url.searchParams.get('jobId')))); return; }
       if (req.method === 'GET' && path === '/execution-output') { send(res, 200, workbench.executionOutput(z.string().min(1).parse(url.searchParams.get('id')), z.string().min(1).parse(url.searchParams.get('recordId')))); return; }
       if (req.method === 'GET' && path.startsWith('/export/')) {
         const job = workbench.store.get<Job>('jobs', decodeURIComponent(path.slice('/export/'.length)));
@@ -51,6 +52,8 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
         send(res,200,{created,reused,errors});return;
       }
       else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds), sourceJobId: z.string().optional(), instructions: z.string().max(8000).optional() }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind, { sourceJobId: p.sourceJobId, instructions: p.instructions })); return; }
+      else if (path === '/remote/sync') { await workbench.syncRemote(z.object({issueId:z.string()}).parse(input).issueId); }
+      else if (path === '/actions/sync') { const p=z.object({issueId:z.string(),number:z.number().int().positive().optional()}).parse(input); await workbench.syncActions(p.issueId,p.number); }
       else if (path === '/finding') { const p = z.object({ id: z.string(), findingId: z.string(), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.finding(p.id, p.findingId, p.decision); }
       else if (path === '/findings') { const p = z.object({ id: z.string(), findingIds: z.array(z.string()).min(1).max(40), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.findings(p.id, p.findingIds, p.decision); }
       else if (path === '/finding-followup') { const p = z.object({ id: z.string(), sourceJobId: z.string(), findingId: z.string(), status: z.enum(['resolved','still_present','unverified']), evidence: z.string().trim().min(1).max(6000) }).parse(input); workbench.followup(p.id, p); }

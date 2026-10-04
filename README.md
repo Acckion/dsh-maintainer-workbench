@@ -129,3 +129,5 @@ Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host.
 ### 类型化事项与当前版本复核
 
 Issue 详情现支持类型化目标与验收计划、已提出的问题和等待用户记录；同步后提示新回复，维护者核对后再继续。后续审查显式追踪历史发现，支持批量处置和经预览确认的 GitHub 讨论串状态更新。原生测试报告可直接关联工具调用、实际退出码、执行基线、补丁指纹和原始日志。用法、证据限制和浏览器复现见 [本轮实现说明](docs/product/ISSUE-REVIEW-EVIDENCE.md)。
+
+关联 PR 的审查、CI、合并和源 Issue 关闭进度，以及 GitHub Actions 失败步骤和日志读取，见 [远端跟踪与 Actions 说明](docs/product/REMOTE-PR-ACTIONS.md)。

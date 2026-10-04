@@ -1,3 +1,4 @@
+import { prNumber } from './remote-progress.ts';
 import { lightweight, type FindingDecision } from './artifacts.ts';
 import { localRepositoryProfile } from './repository-context.ts';
 import { mkdir } from 'node:fs/promises';
@@ -36,6 +37,7 @@ export class Workbench {
   private preparationControllers = new Map<string, AbortController>();
   private preparations = new Map<string, Promise<void>>();
   private profiles = new Map<string, Promise<import("./types.ts").RepositoryProfile>>();
+  private remoteSyncs = new Map<string, Promise<void>>();
   private syncs = new Map<string, Promise<void>>();
   constructor(public store: Store, private dataDir: string, private nativeRunner?: Runner, private github = new GitHub(), private autoStart = true, private hostStatus?: () => HostStatus) {
     for (const job of store.jobs()) if (job.status === 'running') { this.saveJob({ ...job, status: 'failed', waitingReason: undefined, error: '上次进程中断。为避免重复修改，未自动重新执行；请检查 worktree 后重试。', finishedAt: new Date().toISOString() }); store.audit('job.interrupted', '进程重启后恢复为待人工重试', job.id); }
@@ -55,7 +57,7 @@ export class Workbench {
           await this.sync(repo.fullName);
           if (this.closed || !(repo.policy?.autoTriage ?? settings.autoTriage)) continue;
           const current = this.repo(repo.id);
-          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && !['answered','deferred'].includes(i.workflow?.stage ?? '') && !i.informationRequests?.some(r => ['asked','reply_received'].includes(r.state)) && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
+          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && !i.linkedPullRequests?.length && !['answered','deferred'].includes(i.workflow?.stage ?? '') && !i.informationRequests?.some(r => ['asked','reply_received'].includes(r.state)) && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
           if (ids.length) this.enqueue(ids, 'triage');
         } catch (error) { if (!this.closed) this.store.audit('automation.failed', `${repo.fullName}: ${error instanceof Error ? error.message : String(error)}`); }
       }
@@ -105,11 +107,48 @@ export class Workbench {
         const response = replies.get(issue.id);
         const informationRequests = old?.informationRequests?.map(request => response ? receiveReplies(request, response.replies, response.partial) : replyErrors.has(issue.id) && ['asked','reply_received'].includes(request.state) ? { ...request, warning: replyErrors.get(issue.id) } : request);
         const changedReply = informationRequests?.some(request => request.state === 'reply_received' && request.replies.length > (old?.informationRequests?.find(r => r.id === request.id)?.replies.length ?? 0));
-        const persistent = informationRequests?.some(r => ['asked','reply_received'].includes(r.state)) || ['answered','deferred'].includes(old?.workflow?.stage ?? '');
-        this.store.put('issues', { ...issue, informationRequests, linkedPullRequests: old?.linkedPullRequests, workflow: changedReply ? { stage: 'decision', reason: '等待的用户有新回复，请核对补充内容后重新评估；未自动重新执行。', updatedAt: new Date().toISOString() } : old?.workflow && (persistent || revision(old, prev ?? repo) === revision(issue, repo)) ? old.workflow : undefined });
+        const persistent = old?.workflow?.stage === 'track' && !!old.linkedPullRequests?.length || informationRequests?.some(r => ['asked','reply_received'].includes(r.state)) || ['answered','deferred'].includes(old?.workflow?.stage ?? '');
+        this.store.put('issues', { ...issue, informationRequests, linkedPullRequests: old?.linkedPullRequests, remotePRs: old?.remotePRs, remoteWarning: old?.remoteWarning, actions: old?.actions, workflow: changedReply ? { stage: 'decision', reason: '等待的用户有新回复，请核对补充内容后重新评估；未自动重新执行。', updatedAt: new Date().toISOString() } : old?.workflow && (persistent || revision(old, prev ?? repo) === revision(issue, repo)) ? old.workflow : undefined });
       }
       this.store.audit('repo.sync', `${repo.fullName}：同步 ${issues.length} 条记录${repo.syncWarning ? '（部分覆盖）' : ''}`);
     });
+    const tracked=this.store.issues().filter(i=>i.repoId===repo.id && i.linkedPullRequests?.length);
+    for(const issue of tracked.slice(0,20)) await this.syncRemote(issue.id);
+    if(tracked.length>20) { const current=this.repo(repo.id);this.store.put('repos',{...current,syncWarning:[current.syncWarning,'本次自动跟踪仅覆盖前 20 个关联事项，其余请手动刷新'].filter(Boolean).join('；')});this.store.audit('remote.partial','本次自动跟踪仅覆盖前 20 个事项，其余可手动刷新'); }
+  }
+  async syncRemote(issueId: string): Promise<void> {
+    const existing=this.remoteSyncs.get(issueId);if(existing) return existing;
+    const task=this.performRemoteSync(issueId).finally(()=>this.remoteSyncs.delete(issueId));this.remoteSyncs.set(issueId,task);return task;
+  }
+  private async performRemoteSync(issueId: string): Promise<void> {
+    const issue=this.store.get<Issue>('issues',issueId); if(!issue) throw Error('事项不存在');
+    const repo=this.repo(issue.repoId), urls=issue.type==='pr' ? [issue.url] : issue.linkedPullRequests ?? [];
+    const snapshots: import('./remote-progress.ts').RemotePR[]=[];
+    for(const url of urls.slice(0,10)) {
+      try { snapshots.push(await this.github.remotePR(repo,url)); }
+      catch(e) {const old=issue.remotePRs?.find(p=>p.url===url); snapshots.push({...old,url,number:old?.number ?? 0,headSha:old?.headSha ?? '',baseSha:old?.baseSha ?? '',state:old?.state ?? 'UNKNOWN',draft:old?.draft ?? false,review:old?.review ?? null,mergeState:old?.mergeState ?? 'UNKNOWN',mergedAt:old?.mergedAt ?? null,checks:old?.checks ?? [],closingIssues:old?.closingIssues ?? [],partial:true,syncedAt:old?.syncedAt ?? '',error:e instanceof Error ? e.message:'读取失败'});}
+    }
+    let state=issue.state, warning=urls.length>10 ? '仅同步前 10 个关联 PR' : undefined;
+    try { const remote=z.object({number:z.number(),state:z.enum(['open','closed'])}).parse(await this.github.request(`/repos/${repo.fullName}/issues/${issue.number}`));if(remote.number!==issue.number) throw Error('事项目标不一致');state=remote.state; }
+    catch(e){warning=[warning,`Issue 状态读取失败：${e instanceof Error ? e.message:'未知错误'}`].filter(Boolean).join('；');}
+    const current=this.store.get<Issue>('issues',issueId)!;
+    const allowed=current.type==='pr' ? [current.url] : current.linkedPullRequests ?? [];
+    this.store.put('issues',{...current,state,remotePRs:snapshots.filter(p=>allowed.includes(p.url)),remoteWarning:warning});
+    this.store.audit('remote.synced',`${issueId}：只读同步 ${snapshots.length} 个 PR`);
+  }
+  async syncActions(issueId: string, targetNumber?: number): Promise<void> {
+    const issue=this.store.get<Issue>('issues',issueId);if(!issue) throw Error('事项不存在');
+    const repo=this.repo(issue.repoId), number=targetNumber ?? (issue.type==='pr' ? issue.number : 0);
+    if(!number || !(issue.type==='pr' && issue.number===number) && !issue.linkedPullRequests?.some(url=>prNumber(url,repo.fullName)===number)) throw Error('PR 不属于当前事项关联范围');
+    const pr=await this.github.pullRequest(repo,number);
+    const actions=await this.github.actions(repo,pr.headSha);
+    actions.prNumber=number;
+    const after=await this.github.pullRequest(repo,number);if(after.headSha!==pr.headSha || after.baseSha!==pr.baseSha) throw Error('PR 已更新，请重新同步 Actions');
+    this.store.put('issues',{...this.store.get<Issue>('issues',issueId)!,actions});
+  }
+  async actionsLog(issueId: string, jobId: number) {
+    const issue=this.store.get<Issue>('issues',issueId);if(!issue?.actions) throw Error('请先同步 Actions');
+    return this.github.actionLog(this.repo(issue.repoId),issue.actions,jobId);
   }
   async bindPath(repoId: string, localPath: string): Promise<void> {
     const repo = this.repo(repoId);
@@ -434,6 +473,16 @@ export class Workbench {
         if (patchHash(currentPatch) !== checkpoint.patchHash || (job.worktree && await git(job.worktree, ['rev-parse', 'HEAD']) !== job.baseSha)) throw new Error('工作区在输出失败后已变化，不能整理旧产物；请重新派发');
       }
       inputPatchHash = patchHash(job.worktree && readOnlyCode(job.kind) ? await collectPatch(job.worktree, job.baseSha) : '');
+      if(job.kind==='ci' && job.issueSnapshot.type==='pr' && !job.formatOnly) {
+        try {
+          const snapshot=await this.github.actions(repo,job.prContext!.headSha,controller.signal), logs:import('./remote-progress.ts').ActionsLog[]=[];
+          for(const item of snapshot.jobs.filter(j=>j.conclusion==='failure' || j.conclusion==='timed_out').slice(0,3)) {
+            try {const log=await this.github.actionLog(repo,snapshot,item.id,controller.signal);logs.push({...log,text:log.text.slice(-16000),truncated:log.truncated || log.text.length>16000});}
+            catch(e){if(controller.signal.aborted) throw e;snapshot.warnings.push(`job ${item.id} 日志读取失败：${e instanceof Error ? e.message:'未知错误'}`);}
+          }
+          job={...job,ciEvidence:{snapshot,logs}};this.saveJob(job);
+        } catch(e) {if(controller.signal.aborted) throw e;job={...job,ciEvidence:{snapshot:{headSha:job.prContext!.headSha,syncedAt:new Date().toISOString(),jobs:[],warnings:[e instanceof Error ? e.message:'Actions 读取失败']},logs:[]}};this.saveJob(job);}
+      }
       const runner = this.nativeRunner ?? modelRunner;
       output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordExecution: (record, raw) => {
         saveExecutionLog(this.dataDir, job.id, record.id, raw);

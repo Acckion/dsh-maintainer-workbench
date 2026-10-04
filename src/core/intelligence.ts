@@ -1,3 +1,4 @@
+import { ciGuidance, ciPromptEvidence } from './remote-progress.ts';
 import { artifactSchemas, artifactPrompt, asAnalysis, lightweight, withoutExecutedTests } from './artifacts.ts';
 import { z } from 'zod';
 import { analysisSchema, type Runner } from './types.ts';
@@ -45,7 +46,7 @@ export const modelRunner: Runner = async ({ repo, issue, related, job, settings,
   progress(`调用 ${settings.model}；输入按不可信仓库资料处理`);
   const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: settings.model, max_tokens: settings.maxTokens, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `${artifactPrompt(job.kind)}\n\n${taskPrompt(job.kind, false)}\n${issueTaskGuidance(issue)}` }, { role: 'user', content: JSON.stringify({ repository: repo.profile, handoff: job.handoff, instructions: job.instructions, pr: job.prContext, task: job.kind, revision: job.revision, checkoutSha: job.baseSha, comparisonBaseSha: job.prContext?.baseSha, issue: issuePromptContext(issue), related: related.map(i => ({ number: i.number, title: i.title, body: i.body.slice(0, 1200) })).slice(0, 35), context, constraint: 'Remote metadata analysis only. No local code was read and no tests can be run. Explicitly state this limitation.' }) }] }),
+    body: JSON.stringify({ model: settings.model, max_tokens: settings.maxTokens, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `${artifactPrompt(job.kind)}\n\n${taskPrompt(job.kind, false)}\n${issueTaskGuidance(issue)}\n${job.kind === 'ci' ? ciGuidance() : ''}` }, { role: 'user', content: JSON.stringify({ repository: repo.profile, handoff: job.handoff, instructions: job.instructions, pr: job.prContext, ciEvidence: ciPromptEvidence(job.ciEvidence), task: job.kind, revision: job.revision, checkoutSha: job.baseSha, comparisonBaseSha: job.prContext?.baseSha, issue: issuePromptContext(issue), related: related.map(i => ({ number: i.number, title: i.title, body: i.body.slice(0, 1200) })).slice(0, 35), context, constraint: 'Remote metadata analysis only. No local code was read and no tests can be run. Explicitly state this limitation.' }) }] }),
   });
   if (!response.ok) throw new Error(`模型服务返回 HTTP ${response.status}，请检查模型、端点和密钥配置`);
   const payload = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1), usage: z.object({ total_tokens: z.number() }).optional() }).parse(await response.json());
