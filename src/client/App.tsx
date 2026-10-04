@@ -500,10 +500,9 @@ export function App({
   const moveFocusToDetail = () => focusDetail({ frame: requestAnimationFrame, focus: id => {
     const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element;
   } });
-  const rememberOrigin = () => {
+  const rememberOrigin = (focus = page === 'inbox' ? focused : jobFocus) => {
     if (!['inbox', 'reviews', 'tasks'].includes(page)) return;
-    const selection = page === 'inbox' ? focused : jobFocus;
-    originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused: selection, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: selection ? `mw-item-${selection}` : `mw-list-${page}` });
+    originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused: focus, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: focus ? `mw-item-${focus}` : `mw-list-${page}` });
   };
   const returnToOrigin = () => {
     navigationGeneration.current += 1;
@@ -517,6 +516,7 @@ export function App({
     setFilter(origin.filter); setType(origin.type); setSelected(origin.selected);
     if (origin.page === 'inbox') setFocused(origin.focused); else setJobFocus(origin.focused);
     restoreOrigin(origin, repoId, { frame: callback => requestAnimationFrame(() => requestAnimationFrame(callback)), scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element; } });
+    requestAnimationFrame(() => requestAnimationFrame(() => console.log('origin-return', { target: origin?.scrollTop, scrollTop: mainRef.current?.scrollTop, scrollHeight: mainRef.current?.scrollHeight, clientHeight: mainRef.current?.clientHeight, active: document.activeElement?.id })));
   };
   async function action(
     label: string,
@@ -921,7 +921,7 @@ export function App({
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { navigationGeneration.current += 1; rememberOrigin(); navigate('tasks', repoId, true); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
+                open={id => { navigationGeneration.current += 1; rememberOrigin(id); navigate('tasks', repoId, true); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
               />
               {page === "inbox" && (
                 <div className="mw-workarea">
@@ -1061,6 +1061,7 @@ export function App({
                               id={`mw-item-${i.id}`}
                               className="mw-issue-content"
                               onClick={() => {
+                                rememberOrigin(i.id);
                                 navigationGeneration.current += 1;
                                 setFocused(i.id);
                                 setJobFocus(undefined);
@@ -1196,6 +1197,7 @@ export function App({
                           id={`mw-item-${j.id}`}
                           className={`mw-task-row ${jobFocus === j.id ? "focused" : ""}`}
                           onClick={() => {
+                            rememberOrigin(j.id);
                             navigationGeneration.current += 1;
                             setJobFocus(j.id);
                             setFocused(undefined);
