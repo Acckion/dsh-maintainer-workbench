@@ -1,3 +1,4 @@
+import { organizeTaskWorkspaces } from './task-workspaces.ts';
 import type { Context } from '@deepseek-ai/cordis';
 import type {} from '@deepseek-ai/dsh-host-webserver';
 import type {} from '@deepseek-ai/dsh-workspace';
@@ -21,6 +22,7 @@ export async function apply(ctx: Context): Promise<void> {
   const workbench = new Workbench(new Store(resolve(dataDir, 'workbench.sqlite')), dataDir, harnessRunner(ctx), undefined, true, () => hostStatus(ctx));
   let discovering = false;
   const discover = async () => { if(discovering)return; discovering=true; try {await workbench.discover(ctx.workspaceRegistry.list().map(w=>w.path));} finally {discovering=false;} };
+  await organizeTaskWorkspaces(ctx,workbench.store.jobs(),workbench.store.repos());
   await discover();
   const discoveryTimer=setInterval(()=>void discover(),5000);
   ctx.effect(()=>()=>clearInterval(discoveryTimer));

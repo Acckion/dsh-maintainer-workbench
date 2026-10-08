@@ -21,7 +21,7 @@ test('PR and Issue have appropriate traditional browsing tabs and retain origina
   const html = renderToStaticMarkup(React.createElement(RepositoryDetail, props));
   assert.match(html, /Activity/); assert.match(html, /Original body/); assert.doesNotMatch(html, /Files changed/);
   const pr = renderToStaticMarkup(React.createElement(RepositoryDetail, { ...props, issue: { ...issue, type: 'pr' } }));
-  for (const name of ['Summary', 'Activity', 'Files changed', 'Commits', 'Checks', 'Agent']) assert.ok(pr.includes(name));
+  for (const name of ['Summary', 'Activity', 'Changes', 'Triage', 'Execution', 'Review']) assert.ok(pr.includes(name));
 });
 
 test('diff coordinates preserve old/new locations across deletions, additions and separate hunks', () => {
@@ -36,6 +36,6 @@ test('embedded task details expose the complete Agent panel without a modal or b
   assert.doesNotMatch(html, /<dialog/);
   assert.match(html, /<section class="mw-reader-embedded"/);
   assert.match(html, /审核产物/);
-  assert.match(html, /aria-current="page"[^>]*>Agent/);
+  assert.match(html, /aria-current="page"[^>]*>Review/);
   assert.doesNotMatch(html, /正在读取|同步时的快照/);
 });

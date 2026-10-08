@@ -187,26 +187,21 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
 </button>
 </div>
 <nav className="mw-global-tabs" aria-label="工作台页面">{nav.map(n => <button key={n.id} aria-current={page === n.id ? 'page' : undefined} className={`${page === n.id ? 'active' : ''} ${n.id === 'repository-settings' ? 'mw-repo-settings-tab' : ''}`} onClick={() => { setPage(n.id); setJobFocus(undefined); setSearch(''); setDetailOpen(false); }}>
-<n.icon size={16} />{n.label}{n.count > 0 && <span>{n.count}</span>}</button>)}</nav>
+<n.icon size={16} />{n.label}{n.count > 0 && <span>{n.count}</span>}</button>)}<button className="mw-tab-sync" disabled={!!busy || !repo || repo.mode === 'local' && !repo.githubName} onClick={() => void action('sync', '/sync', { fullName: repo?.githubName ?? repo?.fullName }, '仓库同步完成')}>
+<RefreshCw size={15} className={busy === 'sync' ? 'mw-spin' : ''} />同步仓库</button></nav>
 </header>
 <main className={`mw-main ${['inbox', 'tasks', 'reviews'].includes(page) ? 'mw-queue-page' : ''}`} data-page={page}>
-<div className="mw-page-heading">
-<div>
-<h1>{{ organize: '仓库整理', attention: '需要我处理', inbox: '维护收件箱', tasks: '执行任务', reviews: '待我审核', activity: '活动记录', settings: '全局设置', 'repository-settings':'仓库设置' }[page]}</h1>
-</div>
-<button className="mw-button" disabled={!!busy || !repo || repo.mode === 'local' && !repo.githubName} onClick={() => void action('sync', '/sync', { fullName: repo?.githubName ?? repo?.fullName }, '仓库同步完成')}>
-<RefreshCw size={15} className={busy === 'sync' ? 'mw-spin' : ''} />同步仓库</button>
-</div>{loadError && <div className="mw-callout red">
+{loadError && <div className="mw-callout red">
 <TriangleAlert size={18} />
 <span>连接中断：{loadError}。正在重试，当前显示上次成功读取的数据。</span>
-</div>}{repo?.discovered && <div className="mw-callout">
+</div>}{repo?.discovered && <details className="mw-workspace-notice"><summary>工作区 · {repo.localPath}</summary>
 <div>
 <strong>自动发现 · {repo.localPath}</strong>
 <p>{repo.localKind === 'folder' ? '普通文件夹：可执行只读仓库检查。' : `当前分支：${repo.defaultBranch} · ${repo.dirty ? '有未提交修改：可只读检查；隔离修改暂需提交后执行' : '工作区干净，可执行隔离任务'}`}</p>
 <p>{repo.githubName ? `GitHub：${repo.githubName}，同步时复用已有登录` : repo.remoteCandidates?.length ? '存在多个 GitHub 远端，暂不自动选择协作目标。' : '本地模式，无需 GitHub 登录。'}</p>
 </div>
-</div>}{repo?.syncWarning && <div className="mw-callout amber">
-<TriangleAlert size={18} />{repo.syncWarning}</div>}{!state ? <Empty title="正在连接工作台" text="读取仓库与任务状态…" /> : state.repos.length === 0 && page !== 'settings' ? <section className="mw-onboarding">
+</details>}{repo?.syncWarning && <details className="mw-compact-notice"><summary>同步详情</summary>
+<p>{repo.syncWarning}</p></details>}{!state ? <Empty title="正在连接工作台" text="读取仓库与任务状态…" /> : state.repos.length === 0 && page !== 'settings' ? <section className="mw-onboarding">
 <GitBranch size={40} />
 <h2>自动发现 Harness 工作区</h2>
 <p>在 Harness 添加或打开开发目录，插件会自动识别。<br />无需先连接 GitHub；也可手动添加其他远程仓库。</p>
@@ -319,24 +314,24 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
 <strong>{a.detail}</strong>
 <small>{a.action}{a.jobId ? ` · ${a.jobId.slice(0, 8)}` : ''}</small>
 </div>
-</div>)}</section>}{page === 'settings' && <section className="mw-settings-card mw-repository-manager">
-<div className="mw-section-title">
-<GitBranch size={19} />已连接仓库 · {state.repos.length}</div>
+</div>)}</section>}{page === 'repository-settings' && <RepositoryPolicy key={repoId} state={state} repoId={repoId} busy={!!busy} save={value=>void action('policy','/policy',value,'仓库策略已保存')} />}{(page === 'settings' || page === 'repository-settings') && <SettingsView key={page} scope={page === 'repository-settings' ? 'repository' : 'global'} state={state} repoId={repoId} busy={!!busy} prepare={() => void action('prepare', '/prepare', { repoId }, '独立仓库已准备完成')} save={s => void action('settings', '/settings', s, '设置已保存')} credentials={c => void action('credentials', '/credentials', c, '连接配置已保存')} bind={path => void action('bind', '/bind', { repoId, localPath: path }, '工作区绑定成功')} />}{page === 'settings' && <section className="mw-repository-manager mw-repository-table">
+<div className="mw-repository-toolbar"><div className="mw-section-title">
+<GitBranch size={19} />已连接仓库 · {state.repos.length}</div><button className="mw-button" disabled={!!busy} onClick={() => {setRepoInput('');setConnectionResults([]);setConnect(true);}}><Plus size={16} />添加仓库</button></div>
 <p>点击仓库切换工作区。Issue、任务、审核和本地克隆分别归属各自仓库；模型和 GitHub 登录由工作台共享。</p>
 <button className="mw-button" disabled={!!busy || !state.repos.length} onClick={async () => { const r = await action('sync-all', '/sync-all', {}, '全部仓库同步检查完成'); if (r) { setConnectionResults(r.results); setRepoInput(state.repos.map(r => r.fullName).join('\n')); setConnect(true); } }}>同步全部仓库</button>
 <div className="mw-repository-list">{state.repos.map(r => <button className={`mw-button ${r.id === repoId ? 'is-current' : ''}`} aria-pressed={r.id === repoId} disabled={!!busy} key={r.id} onClick={() => {setRepoId(r.id);setPage('repository-settings');}}>
 <GitBranch size={16} />
 <span className="mw-repository-name">
 <strong>{r.fullName}</strong>
-<small>{r.private ? '私有仓库' : '公开仓库'} · {state.issues.filter(i => i.repoId === r.id && i.state === 'open').length} 条开放记录</small>
+<small>{r.mode === 'local' && !r.githubName ? '本地工作区' : r.private ? '私有仓库' : '公开仓库'} · {state.issues.filter(i => i.repoId === r.id && i.state === 'open').length} 条开放记录</small>
 </span>{r.id === repoId ? <Tag tone="green">
 <Check size={12} />当前仓库</Tag> : <ChevronRight size={16} />}</button>)}</div>
-</section>}{page === 'repository-settings' && <RepositoryPolicy key={repoId} state={state} repoId={repoId} busy={!!busy} save={value=>void action('policy','/policy',value,'仓库策略已保存')} />}{(page === 'settings' || page === 'repository-settings') && <SettingsView key={page} scope={page === 'repository-settings' ? 'repository' : 'global'} state={state} repoId={repoId} busy={!!busy} prepare={() => void action('prepare', '/prepare', { repoId }, '独立仓库已准备完成')} save={s => void action('settings', '/settings', s, '设置已保存')} credentials={c => void action('credentials', '/credentials', c, '连接配置已保存')} bind={path => void action('bind', '/bind', { repoId, localPath: path }, '工作区绑定成功')} />}</>}</main>
+</section>}</>}</main>
 </div>{toast && <div role="status" className={`mw-toast ${toast.error ? 'error' : ''}`}>{toast.error ? <TriangleAlert size={19} /> : <Check size={19} />}<span>{toast.text}</span>
 <button aria-label="关闭提示" onClick={() => setToast(undefined)}>
 <X size={16} />
 </button>
-</div>}{detailOpen && displayedIssue && <RepositoryDetail key={`${displayedIssue.id}:${displayedIssue.updatedAt}`} issue={displayedIssue} repository={state?.repos.find(r => r.id === displayedIssue.repoId)?.fullName ?? ''} hasGitHub={!displayedIssue.origin && !!state?.repos.find(r => r.id === displayedIssue.repoId && (r.mode === 'github' || r.githubName))} close={() => setDetailOpen(false)} agentPanel={<>
+</div>}{detailOpen && displayedIssue && <RepositoryDetail key={`${displayedIssue.id}:${displayedIssue.updatedAt}`} issue={displayedIssue} repository={state?.repos.find(r => r.id === displayedIssue.repoId)?.fullName ?? ''} hasGitHub={!displayedIssue.origin && !!state?.repos.find(r => r.id === displayedIssue.repoId && (r.mode === 'github' || r.githubName))} close={() => setDetailOpen(false)} renderAgentPanel={renderStage} agentPanel={<>
 <WorkflowPanel key={displayedIssue.id} issue={issues.find(i => i.id === displayedIssue.id) ?? displayedIssue} job={job} history={jobs.filter(j => j.issueId === displayedIssue.id)} busy={!!busy} act={(path,data,message) => action('workflow',path,data,message)} />{job?.error && <div className="mw-callout red">{job.error}</div>}{result && <Result result={result} />}<button className="mw-button" onClick={() => { setDetailOpen(false); setDetailTab('evidence'); }}>查看 Agent 证据与审核</button>
 </>} />}{publishAction && previewJob && <Modal title="发布预览" busy={!!busy} close={() => setPublishAction(undefined)}>
 <div className="mw-modal" onClick={e => e.stopPropagation()}>
@@ -369,7 +364,25 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
 
   function renderReader() {
     if (!displayedIssue) return null;
-    return <RepositoryDetail key={`${page}:${displayedIssue.id}:${jobFocus ?? ''}:${displayedIssue.updatedAt}`} embedded initialTab={page === 'inbox' ? 'summary' : 'agent'} issue={displayedIssue} repository={state?.repos.find(r => r.id === displayedIssue.repoId)?.fullName ?? ''} hasGitHub={!displayedIssue.origin && !!state?.repos.find(r => r.id === displayedIssue.repoId && (r.mode === 'github' || r.githubName))} close={() => { setFocused(undefined); setJobFocus(undefined); }} agentPanel={renderDetail()} />;
+    return <RepositoryDetail key={`${page}:${displayedIssue.id}:${jobFocus ?? ''}:${displayedIssue.updatedAt}`} embedded initialTab={page === 'inbox' ? 'triage' : page === 'tasks' ? job?.kind === 'review' ? 'review' : 'execution' : 'review'} issue={displayedIssue} repository={state?.repos.find(r => r.id === displayedIssue.repoId)?.fullName ?? ''} hasGitHub={!displayedIssue.origin && !!state?.repos.find(r => r.id === displayedIssue.repoId && (r.mode === 'github' || r.githubName))} close={() => { setFocused(undefined); setJobFocus(undefined); }} renderAgentPanel={renderStage} agentPanel={renderDetail()} />;
+  }
+
+  function renderStage(stage:'triage'|'execution'|'review') {
+    if(!displayedIssue) return null;
+    const history=jobs.filter(j=>j.issueId===displayedIssue.id);
+    const relevant=history.filter(j=>stage==='triage' ? ['triage','preflight'].includes(j.kind) : stage==='execution' ? ['investigate','fix','docs','ci','validate'].includes(j.kind) : j.kind==='review');
+    const latest=relevant[0];
+    if(stage==='review') return <>{relevant.length>0 && <div className="mw-stage-jobs">{relevant.map(j=><button key={j.id} className="mw-button" onClick={()=>openEvidenceJob(j.id,'overview')}>审查 · {taskStatus(j).label} · {date(j.createdAt)}</button>)}</div>}<p className="mw-muted">核对补丁、验证结果和审查发现，再接受或退回本地产物。</p>{renderDetail()}</>;
+    return <section className="mw-stage-panel">
+      <div className="mw-stage-flow"><span className={stage==='triage' ? 'active':''}>1 · Triage</span><ArrowRight size={14}/><span className={stage==='execution' ? 'active':''}>2 · Execution</span><ArrowRight size={14}/><span>3 · Review</span></div>
+      <p className="mw-muted">{stage==='triage' ? '分类、优先级与下一步路由；PR 使用快速预检。结果按版本保存，未变化时直接复用。' : '从调查到实施和验证，查看任务进度及执行记录。'}</p>
+      <div className="mw-detail-actions">{(stage==='triage' ? [displayedIssue.type==='pr' ? 'preflight':'triage'] : displayedIssue.type==='pr' ? ['review','ci'] : ['investigate','fix']).map(kind=><button key={kind} className="mw-button" disabled={!!busy} onClick={()=>void enqueue(kind as JobKind,[displayedIssue.id])}>{kindNames[kind as JobKind]}</button>)}</div>
+      {relevant.length>0 && <div className="mw-stage-jobs">{relevant.map(j=><button className="mw-button" key={j.id} onClick={()=>openEvidenceJob(j.id,'overview')}>{kindNames[j.kind]} · {taskStatus(j).label} · {date(j.createdAt)}</button>)}</div>}
+      {stage==='triage' && <WorkflowPanel hideSummary issue={displayedIssue} job={latest} history={history} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>}
+      {latest?.error && <div className="mw-callout red">{latest.error}</div>}
+      {latest?.result ? <Result result={latest.result} classification={stage==='triage'}/> : <Empty title={stage==='triage' ? '尚无分诊结果':'尚无执行结果'} text="选择上方操作启动对应阶段；切换页签不会调用模型。"/>}
+      {stage==='execution' && latest && <section>{state?.audit.filter(a=>a.jobId===latest.id).slice().reverse().map(a=><div className="mw-job-log" key={a.id}><time>{date(a.at)}</time><p>{a.detail}</p></div>)}</section>}
+    </section>;
   }
 
   function renderDetail() {
@@ -545,6 +558,7 @@ function SettingsView({ scope, state, repoId, busy, save, bind, credentials, pre
 </label>
         <label>每批任务上限<input type="number" min="1" max="50" value={settings.maxJobsPerBatch} onChange={e => setSettings({ ...settings, maxJobsPerBatch: +e.target.value })} />
 </label>
+        <label>同步记录上限（0 表示无上限）<input type="number" min="0" max="1000000" value={settings.syncLimit ?? 1000} onChange={e=>setSettings({...settings,syncLimit:+e.target.value})} /></label>
         <label>定时同步（分钟，0 表示关闭）<input type="number" min="0" max="1440" value={settings.syncIntervalMinutes} onChange={e => setSettings({ ...settings, syncIntervalMinutes: +e.target.value })} />
 </label>
         <label className="mw-check-label">

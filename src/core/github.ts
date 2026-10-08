@@ -20,29 +20,31 @@ export class GitHub {
       return { source: auth.source, authenticated: true, login: user.login };
     } catch (error) { return { source: auth.source, authenticated: false, error: error instanceof Error ? error.message : '连接验证失败', errorKind: error && typeof error === 'object' && 'kind' in error ? String(error.kind) : 'unknown' }; }
   }
-  async sync(fullName: string): Promise<{ repo: Repo; issues: Issue[] }> {
+  async sync(fullName: string, limit = 1000): Promise<{ repo: Repo; issues: Issue[] }> {
     nameSchema.parse(fullName);
+    z.number().int().min(0).max(1000000).parse(limit);
     const meta = z.object({ full_name: z.string(), description: z.string().nullable(), default_branch: z.string(), private: z.boolean().optional() }).parse(await this.request(`/repos/${fullName}`));
     const commit = z.object({ sha: z.string() }).parse(await this.request(`/repos/${fullName}/commits/${encodeURIComponent(meta.default_branch)}`));
     const issues: Issue[] = [];
     let truncated = false;
-    for (let page = 1; page <= 10; page++) {
+    for (let page = 1; ; page++) {
       const rows = z.array(issueSchema).parse(await this.request(`/repos/${fullName}/issues?state=all&sort=updated&direction=desc&per_page=100&page=${page}`));
-      for (const row of rows) issues.push({ id: `${meta.full_name}#${row.number}`, repoId: meta.full_name, number: row.number, type: row.pull_request ? 'pr' : 'issue', merged: row.pull_request?.merged_at ? true : row.pull_request?.merged_at === null ? false : undefined, title: row.title, body: row.body ?? '', author: row.user?.login ?? 'deleted', labels: row.labels.map(l => typeof l === 'string' ? l : l.name), state: row.state, comments: row.comments, updatedAt: row.updated_at, url: row.html_url });
+      const remaining=limit ? Math.max(0,limit-issues.length) : rows.length;
+      for (const row of rows.slice(0,remaining)) issues.push({ id: `${meta.full_name}#${row.number}`, repoId: meta.full_name, number: row.number, type: row.pull_request ? 'pr' : 'issue', merged: row.pull_request?.merged_at ? true : row.pull_request?.merged_at === null ? false : undefined, title: row.title, body: row.body ?? '', author: row.user?.login ?? 'deleted', labels: row.labels.map(l => typeof l === 'string' ? l : l.name), state: row.state, comments: row.comments, updatedAt: row.updated_at, url: row.html_url });
+      if(limit && issues.length>=limit) {truncated=rows.length===100 || rows.length>remaining;break;}
       if (rows.length < 100) break;
-      if (page === 10) truncated = true;
     }
     let prWarning = '';
     if (issues.some(i => i.type === 'pr' && i.state === 'open')) {
       try {
-        for (let page = 1; page <= 10; page++) {
+        for (let page = 1; ; page++) {
           const prs = z.array(z.object({ number: z.number(), head: z.object({ sha:z.string() }), base:z.object({ sha:z.string() }) })).parse(await this.request(`/repos/${fullName}/pulls?state=open&per_page=100&page=${page}`));
           for (const pr of prs) { const issue = issues.find(i => i.type === 'pr' && i.number === pr.number); if (issue) { issue.headSha = pr.head.sha; issue.prBaseSha = pr.base.sha; } }
-          if (prs.length < 100) break;
+          if (prs.length < 100 || issues.filter(i=>i.type==='pr' && i.state==='open').every(i=>i.headSha)) break;
         }
       } catch { prWarning = 'PR 版本列表未完整获取；执行和发布前会再次固定远端版本。'; }
     }
-    return { repo: { id: meta.full_name, fullName: meta.full_name, description: meta.description ?? '', private: meta.private, defaultBranch: meta.default_branch, headSha: commit.sha, localPath: '', mode: 'github', syncedAt: new Date().toISOString(), syncWarning: [truncated ? '只同步最近更新的 1000 条记录，较早的记录未覆盖。' : '', prWarning].filter(Boolean).join(' ') || null }, issues };
+    return { repo: { id: meta.full_name, fullName: meta.full_name, description: meta.description ?? '', private: meta.private, defaultBranch: meta.default_branch, headSha: commit.sha, localPath: '', mode: 'github', syncedAt: new Date().toISOString(), syncLimited:truncated, syncWarning: prWarning || null }, issues };
   }
   async profile(repo: Repo, signal?: AbortSignal) {
     try {

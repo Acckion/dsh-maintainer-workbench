@@ -1,3 +1,4 @@
+import { taskWorkspaceTitle } from './task-workspaces.ts';
 import { triageInput, triageBudgetPrompt, preflightInput, preflightBudgetPrompt } from '../core/triage-input.ts';
 import type {} from '@deepseek-ai/dsh-user-approval';
 import type {} from '@deepseek-ai/dsh-tools';
@@ -33,12 +34,14 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
     const permission = !(issue.organizeMode === 'audit' && job.kind === 'investigate') && !job.formatOnly && ['fix', 'docs', 'investigate', 'validate'].includes(job.kind) ? (settings.permissionPreset === 'inherit' ? ctx.permissionPresets.defaultPreset : settings.permissionPreset) : 'read-only';
     ctx.permissionPresets.resolve(permission);
     const sessionId = `maintainer-${job.id}` as SessionId;
-    const workspace = await ctx.workspaceRegistry.create(cwd);
-    const handle = await ctx.agents.create({ sessionId, signal, meta: { cwd: workspace.path, agentPreset: preset.id }, agentOptions: { ...selection, maxTokens: settings.maxTokens }, setup: async agentCtx => { if (lightweight(job.kind) || job.formatOnly) { agentCtx.tools.restrict({ allow: [] }); agentCtx.tools.guard(() => '此阶段仅整理提供的元数据，禁止执行工具'); } else { await ctx.agentPresets.mount(agentCtx, preset.id); } } });
+    const workspace = lightweight(job.kind) || job.formatOnly ? undefined : await ctx.workspaceRegistry.create(cwd,taskWorkspaceTitle(repo,job));
+    const handle = await ctx.agents.create({ sessionId, signal, meta: { cwd: workspace?.path ?? cwd, agentPreset: preset.id }, agentOptions: { ...selection, maxTokens: settings.maxTokens }, setup: async agentCtx => { if (lightweight(job.kind) || job.formatOnly) { agentCtx.tools.restrict({ allow: [] }); agentCtx.tools.guard(() => '此阶段仅整理提供的元数据，禁止执行工具'); } else { await ctx.agentPresets.mount(agentCtx, preset.id); } } });
     let remove = () => {};
     const abort = () => handle.agent.cancel({ kind: 'user' });
     try {
-      await workspace.attachSession(sessionId);
+      if(workspace) await workspace.attachSession(sessionId);
+      const titles=Reflect.get(ctx,'sessionTitle') as {rename:(session:typeof handle.agent.session,title:string)=>unknown}|undefined;
+      titles?.rename(handle.agent.session,taskWorkspaceTitle(repo,job));
       ctx.permissionPresets.set(handle.agent.session, permission);
       signal.throwIfAborted();
       progress('已创建 Harness Session；可在宿主会话中查看工具执行与处理审批', sessionId);
@@ -87,6 +90,6 @@ ${issue.organizeMode === 'audit' && repo.mode === 'local' ? 'CURRENT WORKSPACE R
       if (result.duplicateOf !== null && !related.some(i => i.number === result.duplicateOf)) throw new Error('重复候选不在本批上下文中，结果未被接受');
       result.evidence = [...result.evidence, ...toolEvidence.slice(-8)].slice(-30);
       return { artifact, result, engine: `Harness / ${selection.provider}/${selection.model}` };
-    } finally { remove(); signal.removeEventListener('abort', abort); await handle.dispose(); }
+    } finally { remove(); signal.removeEventListener('abort', abort); await handle.dispose(); if(lightweight(job.kind) || job.formatOnly) { try { await ctx.workspaceRegistry.archiveSession(sessionId); } catch { progress('会话暂未归档，任务记录已保留'); } } }
   };
 }

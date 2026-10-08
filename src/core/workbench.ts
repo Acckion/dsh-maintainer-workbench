@@ -21,7 +21,7 @@ import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type
 export { revision } from './revision.ts';
 const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
 const readOnlyCode = (kind: JobKind): boolean => ['review', 'validate', 'ci'].includes(kind);
-const settingsSchema = z.object({ autoPreflight:z.boolean().default(false), triageMaxTokens:z.number().int().min(500).max(8000).default(1800), concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
+const settingsSchema = z.object({ syncLimit:z.number().int().min(0).max(1000000).default(1000), autoPreflight:z.boolean().default(false), triageMaxTokens:z.number().int().min(500).max(8000).default(1800), concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
 
 export class Workbench {
   private active = new Map<string, AbortController>();
@@ -36,6 +36,7 @@ export class Workbench {
   private profiles = new Map<string, Promise<import("./types.ts").RepositoryProfile>>();
   private syncs = new Map<string, Promise<void>>();
   constructor(public store: Store, private dataDir: string, private nativeRunner?: Runner, private github = new GitHub(), private autoStart = true, private hostStatus?: () => HostStatus) {
+    for(const repo of store.repos()) if(repo.syncWarning?.includes('只同步最近更新的 1000 条记录，较早的记录未覆盖。')) store.put('repos',{...repo,syncLimited:true,syncWarning:repo.syncWarning.replace('只同步最近更新的 1000 条记录，较早的记录未覆盖。','').trim() || null});
     for (const job of store.jobs()) if (job.status === 'running') { this.saveJob({ ...job, status: 'failed', error: '上次进程中断。为避免重复修改，未自动重新执行；请检查 worktree 后重试。', finishedAt: new Date().toISOString() }); store.audit('job.interrupted', '进程重启后恢复为待人工重试', job.id); }
     for (const job of store.jobs()) if (job.publications) { let changed = false; for (const receipt of Object.values(job.publications)) if (receipt.status === 'publishing') { receipt.status = 'failed'; receipt.error = '上次发布过程被中断；重试时将先按任务标识核对远端结果'; changed = true; } if (changed) { this.saveJob(job); store.audit('publish.interrupted', '恢复中断的发布记录', job.id); } }
     if (autoStart) { queueMicrotask(() => this.pump()); this.pollTimer = setInterval(() => void this.poll(), 60000); this.pollTimer.unref(); }
@@ -92,7 +93,7 @@ export class Workbench {
   githubConnection() { return this.github.connection(); }
   snapshot(): Snapshot {
     const host = this.hostStatus?.();
-    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.5' };
+    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.6' };
   }
   saveJob(job: Job): void { this.store.put('jobs', { ...job, updatedAt: new Date().toISOString() }); }
   async syncMany(names: string[]) {
@@ -111,7 +112,8 @@ export class Workbench {
     const task = this.performSync(fullName).finally(() => this.syncs.delete(key)); this.syncs.set(key, task); return task;
   }
   private async performSync(fullName: string): Promise<void> {
-    const { repo, issues } = await this.github.sync(fullName);
+    const configured=this.store.repos().find(r=>(r.githubName ?? r.fullName).toLowerCase()===fullName.toLowerCase());
+    const { repo, issues } = await this.github.sync(fullName,configured?.policy?.syncLimit ?? this.store.settings().syncLimit ?? 1000);
     const prev = this.store.repos().find(r=>r.discovered && r.githubName?.toLowerCase()===repo.fullName.toLowerCase()) ?? this.store.get<Repo>('repos', repo.id);
     if(prev?.discovered) { const remoteId=repo.id; Object.assign(repo,{id:prev.id,mode:'local',discovered:true,localKind:prev.localKind,workspacePaths:prev.workspacePaths,githubName:prev.githubName,remoteCandidates:prev.remoteCandidates,dirty:prev.dirty,headSha:prev.headSha});for(const issue of issues){issue.repoId=repo.id;issue.id=issue.id.replace(remoteId,repo.id);} }
     repo.localPath = prev?.localPath ?? ''; repo.policy = prev?.policy;
@@ -280,7 +282,7 @@ export class Workbench {
     finally { this.publishing.delete(id); this.publishing.delete(target); }
   }
   updatePolicy(repoId: string, input: unknown): void {
-    const policy = z.object({ autoPreflight:z.boolean().optional(), autoTriage:z.boolean(), syncIntervalMinutes:z.number().int().min(0).max(1440), timeoutMs:z.number().int().min(1000).max(1800000), maxTokens:z.number().int().min(500).max(32000) }).parse(input);
+    const policy = z.object({ syncLimit:z.number().int().min(0).max(1000000).optional(), autoPreflight:z.boolean().optional(), autoTriage:z.boolean(), syncIntervalMinutes:z.number().int().min(0).max(1440), timeoutMs:z.number().int().min(1000).max(1800000), maxTokens:z.number().int().min(500).max(32000) }).parse(input);
     this.store.put('repos', { ...this.repo(repoId), policy }); this.store.audit('repo.policy', `${repoId}: 更新仓库策略`);
   }
   updateSettings(input: unknown): void { const settings = settingsSchema.parse(input); this.store.put('settings', { ...settings, id: 'main' }); this.store.audit('settings.updated', '更新并发、批量上限和模型配置'); if (this.autoStart) this.pump(); }
