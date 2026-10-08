@@ -1,0 +1,53 @@
+{
+  "checkedAt": "2026-10-02T03:21:54.471Z",
+  "pluginPeerRange": ">=4.0.3 <4.1.0",
+  "lockedDevelopmentCordis": "4.0.3",
+  "freshInstallHost": {
+    "dsh": "0.1.7-alpha.1",
+    "cordis": "4.0.4"
+  },
+  "profile": {
+    "autoInstallPeers": false,
+    "hostCordisLinkUsesSameRealPath": true,
+    "peerCheck": "No peer dependency issues found"
+  },
+  "transitives": [
+    {
+      "name": "@deepseek-ai/dsh-brand",
+      "version": "0.1.7-rc.2",
+      "cordisPeer": "~4.0.4"
+    },
+    {
+      "name": "@deepseek-ai/dsh-timeout",
+      "version": "0.1.7-rc.2",
+      "cordisPeer": "~4.0.4"
+    },
+    {
+      "name": "@deepseek-ai/dsh-typert-protocol",
+      "version": "0.1.7-rc.2",
+      "cordisPeer": "~4.0.4"
+    },
+    {
+      "name": "@deepseek-ai/dsh-util-crypto",
+      "version": "0.1.7-rc.2",
+      "cordisPeer": "~4.0.4"
+    },
+    {
+      "name": "@deepseek-ai/dsh-util-values",
+      "version": "0.1.7-rc.2",
+      "cordisPeer": "~4.0.4"
+    }
+  ],
+  "installedBackend": {
+    "workflow": "three-item classification, investigation, partial implementation, failing validation, feedback implementation, passing validation, read-only review, local approval",
+    "passed": true,
+    "remoteWrites": 0,
+    "modelMode": "scripted local provider, actual Harness tools"
+  },
+  "limits": [
+    "Raw pnpm checks cannot see the externally supplied host; this test explicitly linked the same host instance",
+    "No ignored peer rules or independent Cordis copy",
+    "Cloud-browser URL policy blocked localhost UI; no visual QA claim",
+    "This does not measure model intelligence"
+  ]
+}

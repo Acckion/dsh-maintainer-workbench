@@ -70,6 +70,8 @@ npm run check          # strict TypeScript + 行为/本地 Git 流程测试 + �
 npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent / Shell 联调
 ```
 
+新增 `npm run evaluate` 可对固定基线和当前源码运行八案例工作流对照，并生成 JSON/Markdown 证据；默认同时进行本地模型驱动的真实 Harness 联调。使用方式与未测边界见 [可复现评估](docs/EVALUATION.md)。这不是模型质量或修复成功率评测。
+
 浏览器回归脚本为 `scripts/browser-smoke.mjs`；需要先启动独立预览，并安装 Playwright Chromium。已记录的证据范围见 [验证记录](docs/VALIDATION.md)。本地模型夹具验证协议和工具链，不代表真实模型的智能评测。
 
 ## 数据与限制
@@ -123,3 +125,18 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 插件启动后读取 Harness 工作区列表，并每 5 秒更新，无需先打开插件或连接 GitHub。Git 子目录按根目录去重，插件自己的分析/worktree 目录不会重复导入。识别唯一 GitHub remote 后可用「同步仓库」读取协作信息并复用已有登录；多个不同远端只显示候选，不自动选择。
 
 无远端的 Git 仓库仍可运行本地整理与隔离修改任务；普通文件夹、尚未提交的仓库以及有未提交修改的仓库可以执行当前目录的只读检查。目前隔离修改仍要求有 Git 提交且工作区干净，尚不支持把未提交内容快照后交给修改任务，也未实现自动跟随当前会话切换所选仓库。自动发现不自动启动模型或推送代码。
+
+2026-10-02 安装包试用发现并修复了两处维护流程断点：失败验证仍保留为待处理事项；接受独立审查后可定位同版本、同补丁的原实施产物，继续单独批准与发布。完整十步试用、复现脚本和未测边界见 [安装包维护试用](docs/product/INSTALLED-TRIAL.md)，参赛剩余材料见 [准备状态](docs/product/COMPETITION-READINESS.md)。
+
+随后收敛为“维护者判断台”，默认详情加入同补丁的统一审阅摘要及明确恢复状态。产品目标与非目标见 [产品定义](docs/product/PRODUCT-FOCUS.md)，个人试用时建议检查的五个场景见 [个人试用说明](docs/product/PERSONAL-TRIAL.md)。后续验证可见性与过期发布预览的补充修正、已知限制见 [补充复核](docs/product/RECOVERY-REVIEW.md)。
+
+### Fresh profile compatibility
+
+The plugin accepts host Cordis `>=4.0.3 <4.1.0`; the source lockfile still tests `4.0.3`. Freshly resolved DSH `0.1.7` utility packages can require `~4.0.4`, so a fresh npm-style host should supply `4.0.4`. An isolated `0.1.7-alpha.1` host with `4.0.4` passed installed-package native workflows.
+
+Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).
+
+
+### 当前统一版本
+
+0.1.2 将试用包安全修复、仓库整理、工作区自动发现和新版 UI 合入同一开发源码。后续一律从本仓库构建，不再从隔离试用目录更新安装版。验证与限制见 [统一版本记录](docs/product/UNIFIED-0.1.2.md)。原生模拟测试可设置 `MAINTAINER_FIXTURE_HOST` 指向依赖完整的 Harness CLI；测试使用临时仓库和本地模型服务。

@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-10-02T03:54:48.801Z",
+  "corpusVersion": 1,
+  "corpusSha256": "c3c99650c54e8accbc859a090216a92aa87a385242876bb8bf9dfb3123085748",
+  "dependencyLockSha256": "a7a11f4432c0a0895d892e6b417ac796e58f05cf4206194638fab6061dc9b1da",
+  "baselineDependencyLockSha256": "bce1fba6acc68f5cf2b4753090aec29860b573b95e8c03621cc79938cad9c01c",
+  "dependencyGraphSha256": "c7c0c25e4e40bf7810fc0d56e6d512973195ad22aecabb8e4de030b5cf9a49db",
+  "baselineCommit": "853bc5a75cc2823e407d8a0a6123cabca85d3985",
+  "candidateCommit": "6d56648a0075966613be1c396b516639a735744f",
+  "candidateHasUncommittedChanges": false,
+  "pinnedHarnessVersion": "0.1.7-alpha.1",
+  "mode": "deterministic-workflow-contracts",
+  "baseline": {
+    "cases": 8,
+    "passed": 5,
+    "paidApiRequests": 0,
+    "realModelTokens": null,
+    "realApiCostUsd": null,
+    "humanAcceptanceRate": null,
+    "realModelFalsePositiveRate": null
+  },
+  "candidate": {
+    "cases": 8,
+    "passed": 8,
+    "paidApiRequests": 0,
+    "realModelTokens": null,
+    "realApiCostUsd": null,
+    "humanAcceptanceRate": null,
+    "realModelFalsePositiveRate": null
+  },
+  "cases": [
+    {
+      "id": "bug-lifecycle",
+      "title": "Reproduce, fix, validate, and independently review a real local arithmetic defect",
+      "category": "positive-control",
+      "baseline": true,
+      "candidate": true,
+      "baselineMs": 253.91,
+      "candidateMs": 220.91
+    },
+    {
+      "id": "clean-review",
+      "title": "Review correct code without manufacturing findings",
+      "category": "negative-control",
+      "baseline": true,
+      "candidate": true,
+      "baselineMs": 93.16,
+      "candidateMs": 96.42
+    },
+    {
+      "id": "missing-context",
+      "title": "Route insufficient information without executing tools",
+      "category": "negative-control",
+      "baseline": true,
+      "candidate": true,
+      "baselineMs": 19.95,
+      "candidateMs": 16.77
+    },
+    {
+      "id": "mutation-retry",
+      "title": "Reject a validator that edits code, including retry",
+      "category": "safety-regression",
+      "baseline": false,
+      "candidate": true,
+      "baselineMs": 52.74,
+      "candidateMs": 61.45
+    },
+    {
+      "id": "unexecuted-test-claim",
+      "title": "Prevent fake passed results escaping a remote-only model response",
+      "category": "safety-regression",
+      "baseline": false,
+      "candidate": true,
+      "baselineMs": 35.23,
+      "candidateMs": 40.96
+    },
+    {
+      "id": "binary-handoff",
+      "title": "Transfer added, modified, and deleted binary assets",
+      "category": "handoff-regression",
+      "baseline": false,
+      "candidate": true,
+      "baselineMs": 60.19,
+      "candidateMs": 133.57
+    },
+    {
+      "id": "unsupported-duplicate",
+      "title": "Reject a model duplicate claim outside the supplied candidates",
+      "category": "negative-control",
+      "baseline": true,
+      "candidate": true,
+      "baselineMs": 19.75,
+      "candidateMs": 17.75
+    },
+    {
+      "id": "format-recovery",
+      "title": "Recover malformed output without implementing the change twice",
+      "category": "recovery-control",
+      "baseline": true,
+      "candidate": true,
+      "baselineMs": 39.4,
+      "candidateMs": 46.67
+    }
+  ],
+  "native": {
+    "status": "passed",
+    "mode": "real Harness agent with deterministic local model",
+    "realModelQualityMeasured": false,
+    "host": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash",
+      "agentPreset": "standard",
+      "adapterRegistered": true
+    },
+    "coveredStages": [
+      "fix",
+      "triage"
+    ],
+    "fixStatus": "awaiting_review",
+    "triageStatus": "completed",
+    "metadataHasWorktree": false,
+    "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+    "toolEvidence": [
+      {
+        "source": "Harness tool/result · seq 16",
+        "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"fixture-call-1\"},\"toolCallId\":\"fixture-call-1\",\"content\":[{\"type\":\"text\",\"text\":\"BASELINE_FAILED_AS_EXPECTED\\nREGRESSION_PASSED\\n\\n\"}],\"isError\":false,\"id\":\"ed96f7b7-0a4c-4f16-8c1f-7d964ca30059\"}}"
+      }
+    ]
+  },
+  "realModelEvaluation": {
+    "status": "not_run",
+    "reason": "Requires separately approved provider, model/reasoning, credential destination and spending budget",
+    "tokens": null,
+    "apiCostUsd": null,
+    "humanAcceptanceRate": null,
+    "falsePositiveRate": null
+  },
+  "limitations": [
+    "Scripted outcomes do not establish model reasoning or repair quality",
+    "Elapsed times include local fixture setup; single runs are not performance comparisons",
+    "The no-defect control validates plumbing, not a learned reviewer",
+    "No external GitHub writes or paid model calls"
+  ]
+}

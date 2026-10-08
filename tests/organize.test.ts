@@ -45,7 +45,19 @@ test('real isolated organization patch is preserved and no-change runs complete 
  const {GitHub}=await import('../src/core/github.ts');const paths:string[]=[];
  const fake:typeof fetch=async(input,init)=>{const url=String(input);paths.push(url);assert.ok(!url.includes('/issues/0'));if(url.includes('/branches/'))return Response.json({commit:{sha:done.baseSha}});if(url.includes('/pulls?'))return Response.json([]);if(url.endsWith('/pulls') && init?.method==='POST'){const body=JSON.parse(String(init.body));assert.ok(!body.body.includes('Refs #0'));return Response.json({html_url:'https://github.com/test/repo/pull/9'});}throw new Error(url);};
  const old=process.env.GITHUB_TOKEN;process.env.GITHUB_TOKEN='fixture';
- try {const urls=await publish(store,store.get<Job>('jobs',id)!,store.repos()[0],'pr',new GitHub('fixture',fake),async()=> 'mock push');assert.equal(urls.length,1);assert.equal(paths.length,3);} finally {if(old===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=old;}
+ try {const urls=await publish(store,store.get<Job>('jobs',id)!,store.repos()[0],'pr',new GitHub('fixture',fake),async()=> 'mock push');assert.equal(urls.length,1);assert.equal(paths.filter(p=>p.includes('/branches/')).length,3);assert.equal(paths.filter(p=>p.endsWith('/pulls')).length,1);} finally {if(old===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=old;}
  const noChange=w.organize(repo.id,'docs').created[0];w.pump();await w.drain();assert.equal(store.get<Job>('jobs',noChange)!.status,'completed');assert.equal(store.get<Job>('jobs',noChange)!.patch,'');
  await w.close();
+});
+
+test('merged publication preview binds a local repository task to its GitHub branch without querying Issue 0',async()=>{
+ const {previewPublication}=await import('../src/core/publish.ts');const {GitHub}=await import('../src/core/github.ts');
+ const store=new Store(':memory:');seedFixture(store);const original=store.repos()[0];const repo={...original,id:'local:fixture',fullName:'Local folder',mode:'local' as const,githubName:original.fullName};store.put('repos',repo);
+ const issue:Issue={...store.issues()[0],id:'repository-task',repoId:repo.id,origin:'repository',number:0};store.put('issues',issue);
+ const job={id:'repository-job',repoId:repo.id,issueId:issue.id,kind:'docs',status:'approved',revision:revision(issue,repo,'docs'),issueSnapshot:issue,baseSha:repo.headSha,result:fixtureAnalysis(issue,'docs'),updatedAt:issue.updatedAt} as Job;store.put('jobs',job);
+ const paths:string[]=[];let sha=repo.headSha;const fake:typeof fetch=async(input,init)=>{const url=String(input);paths.push(url);assert.equal(init?.method??'GET','GET');assert.ok(url.includes(`/repos/${repo.githubName}/branches/`));return Response.json({commit:{sha}});};
+ const gh=new GitHub('fixture',fake);const preview=await previewPublication(store,job,repo,'pr',gh);assert.ok(preview.stamp);assert.equal(paths.length,1);assert.ok(!paths.some(p=>p.includes('/issues/0')));
+ sha='changed';await assert.rejects(previewPublication(store,job,repo,'pr',gh),/代码基线已变化/);
+ await assert.rejects(previewPublication(store,job,repo,'labels',gh),/仓库整理/);
+ store.put('repos',{...repo,githubName:undefined});await assert.rejects(previewPublication(store,job,{...repo,githubName:undefined},'pr',gh),/未关联唯一/);store.close();
 });

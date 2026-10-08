@@ -1,0 +1,61 @@
+{
+  "codeCommit": "b73c7804a11d8cec233b973b353c3b3b5798052c",
+  "mode": "Installed native backend trial plus separate component projection checks",
+  "tests": 107,
+  "independentFocusedTests": 26,
+  "paidModelCalls": 0,
+  "externalGitHubWrites": 0,
+  "installedAssets": {
+    "dist/plugin.js": "6d4bcf51fa45292d472b17601f314a15ed00e41d3615ec64796aa66aecd6d421",
+    "dist/client.js": "4c58baa2c77ee15e6cd55c85bbe358f898a03385f611f2bd4f7cf713639c16b6"
+  },
+  "host": "DSH 0.1.7-alpha.1",
+  "hostCordis": "4.0.4",
+  "sharedHostInstance": true,
+  "peerCheck": "No peer dependency issues found",
+  "installedTenStepTrial": {
+    "checkedAt": "2026-10-02T04:36:59.344Z",
+    "steps": 10,
+    "elapsedMs": 7234,
+    "observations": {
+      "failedValidation": {
+        "status": "completed",
+        "testStatus": "failed",
+        "workflow": {
+          "stage": "blocked",
+          "reason": "1 项验证失败，需要修订实施后重新验证",
+          "updatedAt": "2026-10-02T04:36:57.149Z"
+        }
+      },
+      "finalReview": {
+        "status": "approved",
+        "stage": "review",
+        "patchPresent": true,
+        "codePublicationSupportedForThisJob": false,
+        "deliveryImplementationJobId": "58ded684-17aa-45d8-b286-9271adfdb93f",
+        "deliveryValidationJobId": "b3a971b0-b5ab-4940-bbee-5a23b5ec8f8b",
+        "implementationStatus": "awaiting_review"
+      },
+      "originalImplementationJobId": "58ded684-17aa-45d8-b286-9271adfdb93f",
+      "sourceCheckoutUnchanged": true
+    }
+  },
+  "reviewProjection": {
+    "implementationId": "58ded684-17aa-45d8-b286-9271adfdb93f",
+    "validationIds": [
+      "b3a971b0-b5ab-4940-bbee-5a23b5ec8f8b"
+    ],
+    "reviewId": "250b5ac7-fa06-4d9b-92df-c632f1bbe5eb",
+    "warnings": [],
+    "implementationLimitationsRendered": true,
+    "validationSourceRendered": true
+  },
+  "visualUIVerified": false,
+  "realModelQualityMeasured": false,
+  "humanClicksOrTimeMeasured": false,
+  "limits": [
+    "The component markup is rendered separately from the installed browser client; no cloud-browser UI navigation was performed",
+    "Native Agent, local tools, Git worktrees and commands are real; provider replies and GitHub metadata are scripted",
+    "Recorded reports and callbacks do not certify model correctness, usability, or universal publication policy"
+  ]
+}

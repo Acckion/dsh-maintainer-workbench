@@ -7,14 +7,20 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { publish, type PublishAction } from './publish.ts';
+import { previewPublication, publish, type PublishAction } from './publish.ts';
 import { retrieveRelated } from './retrieval.ts';
 import { Store } from './store.ts';
 import { GitHub } from './github.ts';
 import { collectPatch, prepareWorktree, validateCheckout, prepareManagedCheckout, git, fetchPullRequestRevision } from './git.ts';
 import { modelRunner } from './intelligence.ts';
+import { ArtifactFormatError } from './execution-errors.ts';
+import { revision } from './revision.ts';
+import { validationState } from './workflow-state.ts';
+import { resolveDelivery, type DeliveryTarget } from './delivery.ts';
 import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type Settings, type Snapshot, type HostStatus } from './types.ts';
-export function revision(issue: Issue, repo: Repo, kind: JobKind = 'triage'): string { return createHash('sha256').update(JSON.stringify([issue.updatedAt, issue.title, issue.body, issue.state, issue.headSha ?? '', issue.type === 'pr' ? [issue.prBaseSha ?? repo.headSha, issue.headSha ?? 'unknown'] : lightweight(kind) ? 'issue-v2' : repo.headSha])).digest('hex'); }
+export { revision } from './revision.ts';
+const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
+const readOnlyCode = (kind: JobKind): boolean => ['review', 'validate', 'ci'].includes(kind);
 const settingsSchema = z.object({ concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
 
 export class Workbench {
@@ -35,14 +41,17 @@ export class Workbench {
     if (autoStart) { queueMicrotask(() => this.pump()); this.pollTimer = setInterval(() => void this.poll(), 60000); this.pollTimer.unref(); }
   }
   async discover(paths: string[]): Promise<void> {
+    const seen=new Set<string>();
     for (const path of paths) {
       if(this.closed)return;
       try {
         const found = await discoverWorkspace(path,this.dataDir); if (!found || this.closed) continue;
         const old = this.store.repos().find(r=>r.localPath===found.localPath || !r.discovered && found.githubName && r.fullName.toLowerCase()===found.githubName.toLowerCase()) ?? this.store.get<Repo>('repos',found.id);
-        this.store.put('repos',{description:'Harness 自动发现的工作区',syncedAt:null,syncWarning:null,defaultBranch:'',...old,...found,id:old?.id ?? found.id,workspacePaths:[...new Set([...(old?.workspacePaths ?? []),...(found.workspacePaths ?? [])])]});
+        seen.add(old?.id ?? found.id);
+        this.store.put('repos',{description:'Harness 自动发现的工作区',syncedAt:null,syncWarning:null,defaultBranch:'',...old,...found,id:old?.id ?? found.id,discoveryActive:true,workspacePaths:[...new Set([...(old?.workspacePaths ?? []),...(found.workspacePaths ?? [])])]});
       } catch { /* Removed or inaccessible host workspaces do not block other directories. */ }
     }
+    for(const repo of this.store.repos()) if(repo.discovered && !seen.has(repo.id)) this.store.put('repos',{...repo,discoveryActive:false});
   }
   async poll(): Promise<void> {
     const settings = this.store.settings();
@@ -71,7 +80,7 @@ export class Workbench {
   githubConnection() { return this.github.connection(); }
   snapshot(): Snapshot {
     const host = this.hostStatus?.();
-    return { repos: this.store.repos(), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.1' };
+    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.2' };
   }
   saveJob(job: Job): void { this.store.put('jobs', { ...job, updatedAt: new Date().toISOString() }); }
   async syncMany(names: string[]) {
@@ -194,7 +203,7 @@ export class Workbench {
     if (this.active.has(id)) throw new Error('任务仍在停止，请稍后重试');
     const current = this.store.get<Issue>('issues', job.issueId)!;
     if (revision(current, this.repo(job.repoId), job.kind) !== job.revision) throw new Error('输入版本已变化，请从收件箱重新派发');
-    if (this.nativeRunner && job.rawOutput && !job.result && (job.worktree || job.analysisPath)) {
+    if (this.nativeRunner && job.status === 'failed' && job.formatRecovery && job.rawOutput && !job.result && (job.worktree || job.analysisPath)) {
       const now = new Date().toISOString();
       const recovered: Job = { ...job, id: randomUUID(), formatOnly: true, status: 'queued', attempt: job.attempt + 1, createdAt: now, updatedAt: now, startedAt: undefined, finishedAt: undefined, error: undefined, sessionId: undefined, publications: undefined };
       this.store.put('jobs', recovered); this.store.audit('job.format_retry', `仅整理 ${job.id} 的已保存输出，不重新实施`, recovered.id); if (this.autoStart) this.pump();
@@ -202,16 +211,31 @@ export class Workbench {
     }
     this.enqueue([job.issueId], job.kind, { sourceJobId: job.sourceJobId, instructions: job.instructions });
   }
-  async review(id: string, decision: 'approve' | 'reject', note: string): Promise<void> {
+  async review(id: string, decision: 'approve' | 'reject', note: string): Promise<{ delivery?: DeliveryTarget; deliveryBlockedReason?: string }> {
     const job = this.job(id); if (!['awaiting_review', 'completed'].includes(job.status)) throw new Error('任务不在待审核状态');
+    const original = JSON.stringify(job);
     if (decision === 'approve') {
+      if (job.deliveryReviewId) {
+        const delivery = await resolveDelivery(this.store, this.repo(job.repoId), job.deliveryReviewId, this.github);
+        if (delivery.implementationJobId !== job.id) throw new Error('实施产物与批准的审查目标不一致');
+      }
       if (job.prContext) { const live = await this.github.pullRequest(this.repo(job.repoId), job.issueSnapshot.number); if (live.headSha !== job.prContext.headSha || live.baseSha !== job.prContext.baseSha) throw new Error('PR head/base 已更新，请重新审查'); }
       const current = this.store.get<Issue>('issues', job.issueId)!;
       if (revision(current, this.repo(job.repoId), job.kind) !== job.revision) throw new Error('输入已变化，旧结果不可批准；请重新派发任务');
       if (job.worktree && await collectPatch(job.worktree, job.baseSha) !== (job.patch ?? '')) throw new Error('worktree 内容已变化，原差异已过期；请重新执行');
     }
+    if (JSON.stringify(this.job(id)) !== original) throw new Error('审核期间产物状态或发现处置已变化，请重新查看后确认');
     this.saveJob({ ...job, status: decision === 'approve' ? 'approved' : 'rejected', reviewNote: note });
     this.store.audit(`job.${decision}`, note || (decision === 'approve' ? '审核通过，仅记录本地决定；未推送代码或发布回复' : '退回，等待重新调查'), id);
+    if (decision === 'approve' && job.kind === 'review' && job.patch && job.sourceJobId) {
+      try {
+        const delivery = await resolveDelivery(this.store, this.repo(job.repoId), id, this.github);
+        this.saveJob({ ...this.job(delivery.implementationJobId), deliveryReviewId: id });
+        this.store.audit('job.delivery_prepared', '已定位同一补丁的实施产物，实施审批与远端发布仍单独确认', id);
+        return { delivery };
+      } catch (error) { return { deliveryBlockedReason: error instanceof Error ? error.message : '无法核验实施交接' }; }
+    }
+    return {};
   }
   finding(id: string, findingId: string, decision: FindingDecision): void {
     const job = this.job(id);
@@ -227,13 +251,17 @@ export class Workbench {
     this.store.put('issues', { ...issue, workflow: { stage, reason, updatedAt: new Date().toISOString() } });
     this.store.audit('item.decision', `${issueId}: ${stage} · ${reason}`);
   }
-  async publish(id: string, action: PublishAction): Promise<string[]> {
+  async previewPublish(id: string, action: PublishAction) {
+    const job = this.job(id);
+    return previewPublication(this.store, job, this.repo(job.repoId), action, this.github);
+  }
+  async publish(id: string, action: PublishAction, expectedPreview?: string): Promise<string[]> {
     if (this.publishing.has(id)) throw new Error('此任务正在发布，请等待当前操作完成');
     const targetJob = this.job(id);
     const target = `${targetJob.repoId}:${targetJob.prContext?.headRef ?? targetJob.branch ?? targetJob.issueId}`;
     if (this.publishing.has(target)) throw new Error('同一目标分支正在发布，请稍后重试');
     this.publishing.add(id); this.publishing.add(target);
-    try { const job = this.job(id); return await publish(this.store, job, this.repo(job.repoId), action, this.github); }
+    try { const job = this.job(id); return await publish(this.store, job, this.repo(job.repoId), action, this.github, undefined, expectedPreview); }
     finally { this.publishing.delete(id); this.publishing.delete(target); }
   }
   updatePolicy(repoId: string, input: unknown): void {
@@ -269,6 +297,7 @@ export class Workbench {
       if (waitingReason !== undefined) { job.waitingReason = waitingReason; this.saveJob({ ...this.job(job.id), waitingReason }); }
       if (sessionId) { job.sessionId = sessionId; this.saveJob({ ...this.job(job.id), sessionId }); }
     };
+    let inputPatchHash: string | undefined;
     try {
       let repo = this.repo(job.repoId);
       if (job.revision !== revision(this.store.get<Issue>('issues',job.issueId)!, repo, job.kind)) throw new Error('排队期间输入版本已变化，请重新派发');
@@ -282,7 +311,9 @@ export class Workbench {
       }
       if (job.issueSnapshot.type === 'pr') {
         progress('固定 PR head/base，并读取可见 CI 与审查状态');
-        job.prContext = await this.github.pullRequest(repo, job.issueSnapshot.number, controller.signal);
+        const livePR = await this.github.pullRequest(repo, job.issueSnapshot.number, controller.signal);
+        if (job.formatOnly && (!job.prContext || livePR.headSha !== job.prContext.headSha || livePR.baseSha !== job.prContext.baseSha)) throw new Error('PR head/base 已变化，不能整理旧版本产物；请重新同步并派发');
+        job.prContext = livePR;
         if (job.prContext.merged) throw new Error('PR 已合并，请重新同步');
         if (job.issueSnapshot.headSha && job.issueSnapshot.headSha !== job.prContext.headSha) throw new Error('PR 已更新，请先同步仓库再派发');
         job.baseSha = job.prContext.headSha;
@@ -324,7 +355,13 @@ export class Workbench {
         }
       }
       const readOnlyStage = ['review','validate','ci'].includes(job.kind) || job.issueSnapshot.organizeMode === 'audit' && job.kind === 'investigate';
-      const inputPatch = job.worktree && readOnlyStage ? await collectPatch(job.worktree, job.baseSha) : '';
+      if (job.formatOnly) {
+        const checkpoint = job.formatRecovery;
+        if (!checkpoint || checkpoint.baseSha !== job.baseSha) throw new Error('缺少可信的输出整理检查点；请重新派发');
+        const currentPatch = job.worktree ? await collectPatch(job.worktree, job.baseSha) : '';
+        if (patchHash(currentPatch) !== checkpoint.patchHash || (job.worktree && await git(job.worktree, ['rev-parse', 'HEAD']) !== job.baseSha)) throw new Error('工作区在输出失败后已变化，不能整理旧产物；请重新派发');
+      }
+      inputPatchHash = patchHash(job.worktree && readOnlyStage ? await collectPatch(job.worktree, job.baseSha) : '');
       const runner = this.nativeRunner ?? modelRunner;
       output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordOutput: text => {
         if (controller.signal.aborted) return;
@@ -334,20 +371,36 @@ export class Workbench {
       controller.signal.throwIfAborted();
       const patch = job.worktree ? await collectPatch(job.worktree, job.baseSha) : '';
       controller.signal.throwIfAborted();
-      if (readOnlyStage && patch !== inputPatch) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
+      if (job.formatOnly && (patchHash(patch) !== job.formatRecovery!.patchHash || (job.worktree && await git(job.worktree, ['rev-parse', 'HEAD']) !== job.baseSha))) throw new Error('工作区在结果整理期间已变化，不能接受旧产物；请重新派发');
+      controller.signal.throwIfAborted();
+      if (readOnlyStage && patchHash(patch) !== inputPatchHash) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
       if ((job.kind === 'fix' || job.kind === 'docs') && !patch && !job.issueSnapshot.origin && !job.instructions?.startsWith('Repository documentation maintenance.')) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
       this.store.transaction(() => {
         const currentIssue = this.store.get<Issue>('issues', job.issueId)!;
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });
-        this.saveJob({ ...job, ...output, patch, waitingReason: undefined, status: ((job.issueSnapshot.origin || job.instructions?.startsWith('Repository documentation maintenance.')) && !patch) || lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
+        this.saveJob({ ...job, ...output, patch, formatRecovery: undefined, waitingReason: undefined, status: ((job.issueSnapshot.origin || job.instructions?.startsWith('Repository documentation maintenance.')) && !patch) || lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
         const artifact = output.artifact;
-        const stage = artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
-        if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });
+        const validation = validationState(artifact);
+        const stage = validation ? (validation.state === 'passed' ? 'validated' : 'blocked') : artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
+        if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: validation?.reason ?? artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });
         this.store.audit('job.completed', `${output.engine} · 产物已保存，未发布远端`, job.id);
       });
     } catch (error) {
       const current = this.job(job.id);
-      if (current.status !== 'cancelled') this.saveJob({ ...current, status: 'failed', error: controller.signal.aborted ? String(controller.signal.reason?.message ?? '已中断') : error instanceof Error ? error.message : String(error), finishedAt: new Date().toISOString() });
+      let formatRecovery: Job['formatRecovery'];
+      if (error instanceof ArtifactFormatError && current.status !== 'cancelled' && current.rawOutput && !controller.signal.aborted) {
+        try {
+          const patch = current.worktree ? await collectPatch(current.worktree, current.baseSha) : '';
+          const digest = patchHash(patch);
+          if (current.formatOnly && (!current.formatRecovery || current.formatRecovery.baseSha !== current.baseSha || digest !== current.formatRecovery.patchHash)) throw new Error('工作区在结果整理期间已变化，不能整理旧产物；请重新派发');
+          if (readOnlyCode(current.kind) && digest !== inputPatchHash) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
+          if (current.worktree && await git(current.worktree, ['rev-parse', 'HEAD']) !== current.baseSha) throw new Error('工作区 HEAD 已变化，不能仅整理输出；请重新派发');
+          if (['fix', 'docs'].includes(current.kind) && !patch) throw new Error('Agent 未产生可审核的代码差异，请重新派发');
+          formatRecovery = { baseSha: current.baseSha, patchHash: digest };
+        } catch (integrityError) { error = integrityError; }
+      }
+      const latest = this.job(job.id);
+      if (latest.status !== 'cancelled') this.saveJob({ ...latest, status: 'failed', formatRecovery: controller.signal.aborted ? undefined : formatRecovery, error: controller.signal.aborted ? String(controller.signal.reason?.message ?? '已中断') : error instanceof Error ? error.message : String(error), finishedAt: new Date().toISOString() });
       this.store.audit('job.stopped', this.job(job.id).error ?? '已取消', job.id);
     } finally { clearTimeout(timer); }
   }

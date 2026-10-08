@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-02T03:49:42.800Z",
+  "kind": "Controlled installed-product workflow trial; not an AI benchmark",
+  "baselineCommit": "49f752b",
+  "candidateCodeCommit": "4dd2a7d531fcb72ee42ae9198cf8a82a2978e836",
+  "workflowActionsBefore": 10,
+  "workflowActionsAfter": 10,
+  "sameActionSequence": true,
+  "sameDemoBaseSha": true,
+  "baseline": {
+    "elapsedMs": 6951,
+    "observations": {
+      "failedValidation": {
+        "status": "completed",
+        "testStatus": "failed",
+        "workflow": {
+          "stage": "validate",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:48.154Z"
+        }
+      },
+      "finalReview": {
+        "status": "approved",
+        "stage": "review",
+        "patchPresent": true,
+        "codePublicationSupportedForThisJob": false
+      },
+      "originalImplementationJobId": "b5ddf765-b244-4f49-8e03-0b16941c1a98",
+      "sourceCheckoutUnchanged": true
+    }
+  },
+  "candidate": {
+    "elapsedMs": 7440,
+    "observations": {
+      "failedValidation": {
+        "status": "completed",
+        "testStatus": "failed",
+        "workflow": {
+          "stage": "blocked",
+          "reason": "1 项验证失败，需要修订实施后重新验证",
+          "updatedAt": "2026-10-02T03:49:40.657Z"
+        }
+      },
+      "finalReview": {
+        "status": "approved",
+        "stage": "review",
+        "patchPresent": true,
+        "codePublicationSupportedForThisJob": false,
+        "deliveryImplementationJobId": "6279c039-e212-40a2-ac9d-e2feced35294",
+        "deliveryValidationJobId": "23f4cf94-200f-44bc-82bb-3bd2f84abc89",
+        "implementationStatus": "awaiting_review"
+      },
+      "originalImplementationJobId": "6279c039-e212-40a2-ac9d-e2feced35294",
+      "sourceCheckoutUnchanged": true
+    },
+    "installedAssets": {
+      "dist/plugin.js": "6d4bcf51fa45292d472b17601f314a15ed00e41d3615ec64796aa66aecd6d421",
+      "dist/client.js": "c7fa277eeb2670eed3e018697a0f7bc08ca13f79cee865768d852aefe90e39ee"
+    }
+  },
+  "freshInstall": {
+    "host": "@deepseek-ai/dsh 0.1.7-alpha.1",
+    "hostCordis": "4.0.4",
+    "pluginLockedDevelopmentCordis": "4.0.3",
+    "singleSharedHostInstance": true,
+    "peerCheck": "No peer dependency issues found"
+  },
+  "visualUIVerified": false,
+  "realModelQualityMeasured": false,
+  "humanClicksOrThinkingTimeMeasured": false,
+  "paidModelCalls": 0,
+  "externalGitHubWrites": 0,
+  "limitations": [
+    "Provider responses and patch helpers are scripted; not AI-quality measurement",
+    "Action counts are API-driven trial steps, not measured human clicks or thinking time",
+    "Remote sync metadata is a fixture; no real GitHub repository or publication"
+  ]
+}

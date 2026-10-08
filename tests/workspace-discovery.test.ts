@@ -28,3 +28,10 @@ test('automatic discovery needs no GitHub and read-only local audit uses the act
  assert.throws(()=>w.organize(repo.id,'agents'),/Git 提交/);
  const id=w.organize(repo.id,'audit').created[0];w.pump();await w.drain();const job=store.jobs().find(j=>j.id===id)!;assert.equal(job.status,'completed',job.error);await w.close();
 });
+
+
+test('other-profile task directories are excluded without deleting stored history',async()=>{
+ const root=await mkdtemp(join(tmpdir(),'mw-other-profile-'));const data=await mkdtemp(join(tmpdir(),'mw-current-profile-'));const task=join(root,'worktrees','task');await mkdir(task,{recursive:true});await writeFile(join(root,'workbench.sqlite'),'marker');
+ assert.equal(await discoverWorkspace(task,data),undefined);
+ const store=new Store(':memory:');const w=new Workbench(store,data,undefined,undefined,false);await w.discover([data,root]);const before=store.repos()[0];assert.ok(before);await w.discover([task]);assert.equal(store.repos().length,1);assert.equal(w.snapshot().repos.length,0);assert.equal(store.repos()[0].discoveryActive,false);await w.discover([root]);assert.equal(w.snapshot().repos.length,1);await w.close();
+});

@@ -1,5 +1,5 @@
-import {realpath} from 'node:fs/promises';
-import {resolve,relative,basename} from 'node:path';
+import {realpath,stat} from 'node:fs/promises';
+import {resolve,relative,basename,dirname,join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {git} from './git.ts';
 import type {Repo} from './types.ts';
@@ -10,6 +10,12 @@ export function githubRemote(value:string):string|undefined {
 export async function discoverWorkspace(path:string, dataDir:string):Promise<Partial<Repo> & Pick<Repo,'id'|'fullName'|'localPath'|'headSha'|'mode'>|undefined> {
  const canonical=await realpath(path);const rel=relative(await realpath(dataDir).catch(()=>resolve(dataDir)),canonical);
  if(rel==='' || (!rel.startsWith('..') && !rel.startsWith('/')))return;
+ // Exclude task directories owned by another profile or an earlier local host.
+ let ancestor=canonical;
+ while(dirname(ancestor)!==ancestor){
+  if(['analysis','worktrees'].includes(basename(ancestor)) && await stat(join(dirname(ancestor),'workbench.sqlite')).then(s=>s.isFile()).catch(()=>false))return;
+  ancestor=dirname(ancestor);
+ }
  let root=canonical,head='',branch='',dirty=false,isGit=false;
  try {root=await realpath(await git(canonical,['rev-parse','--show-toplevel']));isGit=true;head=await git(root,['rev-parse','HEAD']).catch(()=> '');branch=await git(root,['symbolic-ref','--short','HEAD']).catch(()=> 'HEAD');dirty=!!await git(root,['status','--porcelain']);}catch{}
  const remotes:string[]=[];

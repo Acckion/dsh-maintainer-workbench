@@ -143,6 +143,7 @@ test('fix -> real failing/passing test -> review -> commit/push -> draft PR requ
   const requests: { url: string; body?: unknown }[] = [];
   const fake: typeof fetch = async (input, init) => {
     const url = String(input); requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (url.includes('/commits/')) return Response.json({ sha });
     if (url.includes('/issues/')) return Response.json({ updated_at: issue.updatedAt });
     if (url.includes('?state=')) return Response.json([]);
     return Response.json({ html_url: 'https://github.com/fixture/local/pull/2' });
@@ -174,7 +175,7 @@ test('comment publication recovers an ambiguous POST without posting a duplicate
   const { publish } = await import('../src/core/publish.ts');
   const { workbench, store, issue } = fixture();
   const id = workbench.enqueue([issue.id], 'triage').created[0]; await workbench.drain(); await workbench.review(id, 'approve', '');
-  const original = store.repos()[0]; const repo = { ...original, mode: 'github' as const, fullName: 'fixture/repo' };
+  const repo = store.repos()[0];
   let posted = '', writes = 0;
   const fake: typeof fetch = async (input, init) => {
     if (String(input).includes('/comments')) {
