@@ -106,7 +106,7 @@ test('valid confirmation posts once; an already-published receipt remains a read
 
 test('a lost comment response can reconcile read-only after sync makes its source stale', async t => {
   const f = await setup(t); f.loseNextResponse();
-  await assert.rejects(f.workbench.publish(f.id, 'comment'), /lost response/);
+  await assert.rejects(f.workbench.publish(f.id, 'comment'), /写入结果尚未确认/);
   f.setRemoteIssue('2026-10-05T00:00:00Z');
   f.store.put('issues', { ...f.issue, updatedAt: '2026-10-05T00:00:00Z' });
   f.store.put('repos', { ...f.repo, headSha: 'e'.repeat(40) }); f.setRemoteSha('e'.repeat(40));
@@ -124,7 +124,7 @@ test('a lost comment response can reconcile read-only after sync makes its sourc
 
 test('a disappeared recovery marker never permits a fresh POST with stale inputs', async t => {
   const f = await setup(t); f.loseNextResponse();
-  await assert.rejects(f.workbench.publish(f.id, 'comment'), /lost response/);
+  await assert.rejects(f.workbench.publish(f.id, 'comment'), /写入结果尚未确认/);
   f.store.put('issues', { ...f.issue, updatedAt: '2026-10-05T00:00:00Z' });
   const preview = await f.workbench.previewPublish(f.id, 'comment');
   f.clearPublishedMarker();
@@ -134,7 +134,7 @@ test('a disappeared recovery marker never permits a fresh POST with stale inputs
 
 test('receipt-only preview cannot become a new send when its marker disappears but inputs remain current', async t => {
   const f = await setup(t); f.loseNextResponse();
-  await assert.rejects(f.workbench.publish(f.id, 'comment'), /lost response/);
+  await assert.rejects(f.workbench.publish(f.id, 'comment'), /写入结果尚未确认/);
   const preview = await f.workbench.previewPublish(f.id, 'comment');
   assert.ok(preview.alreadyPublished?.length); f.clearPublishedMarker();
   await assert.rejects(f.workbench.publish(f.id, 'comment', preview.stamp), /仅核对回执，不会重新发送/);

@@ -1,3 +1,5 @@
+import { RepositoryDetail } from "./RepositoryDetail.tsx";
+import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
 import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
 import { WorkflowPanel } from "./WorkflowPanel.tsx";
@@ -19,8 +21,19 @@ import {
   taskStatus,
 } from "./review-evidence.ts";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
-import { operationFailureRecord, operationRecordFromResponse, pageSearchKey, restoreInboxContext, reviewNoteForTask } from "./operation-state.ts";
-import { captureOrigin, focusDetail, restoreOrigin, type NavigationOrigin } from "./navigation-origin.ts";
+import {
+  operationFailureRecord,
+  operationRecordFromResponse,
+  pageSearchKey,
+  restoreInboxContext,
+  reviewNoteForTask,
+} from "./operation-state.ts";
+import {
+  captureOrigin,
+  focusDetail,
+  restoreOrigin,
+  type NavigationOrigin,
+} from "./navigation-origin.ts";
 import React, {
   useCallback,
   useEffect,
@@ -82,12 +95,14 @@ const categoryNames: Record<string, string> = {
   maintenance: "维护",
 };
 type Page =
+  | "organize"
   | "attention"
   | "inbox"
   | "tasks"
   | "reviews"
   | "activity"
-  | "settings";
+  | "settings"
+  | "repository-settings";
 function date(value: string) {
   return new Date(value).toLocaleString("zh-CN", {
     month: "2-digit",
@@ -199,6 +214,7 @@ function GitHubConnection({
     source: string;
     login?: string;
     error?: string;
+    errorKind?: string;
   }>();
   const [error, setError] = useState("");
   const refresh = useCallback(() => {
@@ -221,15 +237,18 @@ function GitHubConnection({
             (connection
               ? connection.authenticated
                 ? `已连接 GitHub · ${connection.login}`
-                : "尚未登录 GitHub"
+                : "公开仓库可直接读取（未登录）"
               : "正在检查 GitHub 连接…")}
         </strong>
         <p>
-          {connection?.authenticated
-            ? connection.source === "gh"
-              ? "已自动复用本机 GitHub CLI 登录，无需重复填写令牌。"
-              : "正在使用已配置的 GitHub 令牌。"
-            : "公开仓库可直接读取。私有仓库请先在本机登录 GitHub CLI，或在“设置与连接”填写有仓库读取权限的令牌。"}
+          {connection?.errorKind === "network" ||
+          connection?.errorKind === "timeout"
+            ? "网络检查失败，不代表令牌失效或没有仓库权限。请检查网络后重试，无需因此更换令牌。"
+            : connection?.authenticated
+              ? connection.source === "gh"
+                ? "已自动复用本机 GitHub CLI 登录，无需重复填写令牌。"
+                : "正在使用已配置的 GitHub 令牌。"
+              : "他人的公开仓库也可读取，无需拥有仓库。私有仓库需要本机 GitHub CLI 登录或具有目标仓库读取权限的令牌。"}
         </p>
         <button
           type="button"
@@ -341,14 +360,16 @@ function Result({
           </ul>
         </section>
       )}
-      <section>
-        <h4>建议下一步</h4>
-        <ol>
-          {result.nextSteps.map((s) => (
-            <li key={s}>{s}</li>
-          ))}
-        </ol>
-      </section>
+      {result.nextSteps.length > 0 && (
+        <section>
+          <h4>建议下一步</h4>
+          <ol>
+            {result.nextSteps.map((s) => (
+              <li key={s}>{s}</li>
+            ))}
+          </ol>
+        </section>
+      )}
       {result.tests.length > 0 && (
         <section>
           <h4>
@@ -379,10 +400,21 @@ function Result({
       )}
       <section>
         <h4>
-          回复草稿 <span className="mw-muted">· 尚未发布</span>
+          对外回复
+          {result.responseDraft.trim() && (
+            <span className="mw-muted"> · 草稿，尚未发布</span>
+          )}
         </h4>
-        <div className="mw-draft">{result.responseDraft || "无回复草稿"}</div>
-        <CopyDraft text={result.responseDraft} />
+        {result.responseDraft.trim() ? (
+          <>
+            <div className="mw-draft">{result.responseDraft}</div>
+            <CopyDraft text={result.responseDraft} />
+          </>
+        ) : (
+          <p className="mw-muted">
+            暂无需要向作者发布的内容，可继续处理下一阶段。
+          </p>
+        )}
       </section>
     </div>
   );
@@ -408,6 +440,8 @@ export function App({
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
   const [type, setType] = useState("all");
+  const [listLimit, setListLimit] = useState(50);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("overview");
   const [busy, setBusy] = useState("");
   const [toast, setToast] = useState<{ text: string; error?: boolean }>();
@@ -440,10 +474,23 @@ export function App({
   currentContext.current = { repoId, page };
   const searchKey = pageSearchKey(repoId, page);
   const search = pageSearch[searchKey] ?? "";
-  const setSearchValue = (value: string) => setPageSearch(values => ({ ...values, [searchKey]: value }));
+  useEffect(() => {
+    setListLimit(50);
+  }, [page, repoId, search, filter, type]);
+
+  const setSearchValue = (value: string) =>
+    setPageSearch((values) => ({ ...values, [searchKey]: value }));
   const refresh = useCallback(() => {
     if (refreshInFlight.current) return refreshInFlight.current;
-    const pending = request("/state").then(snapshot => { setState(snapshot); setLoadError(""); }).catch(e => setLoadError((e as Error).message)).finally(() => { refreshInFlight.current = undefined; });
+    const pending = request("/state")
+      .then((snapshot) => {
+        setState(snapshot);
+        setLoadError("");
+      })
+      .catch((e) => setLoadError((e as Error).message))
+      .finally(() => {
+        refreshInFlight.current = undefined;
+      });
     refreshInFlight.current = pending;
     return pending;
   }, []);
@@ -489,35 +536,87 @@ export function App({
     const timer = setTimeout(() => setToast(undefined), 7000);
     return () => clearTimeout(timer);
   }, [toast]);
-  const navigate = (nextPage: Page, nextRepoId = currentContext.current.repoId, preserveOrigin = false) => {
+  const navigate = (
+    nextPage: Page,
+    nextRepoId = currentContext.current.repoId,
+    preserveOrigin = false,
+  ) => {
     const previous = currentContext.current;
     if (previous.page !== nextPage || previous.repoId !== nextRepoId)
       navigationGeneration.current += 1;
-    if (!preserveOrigin && (previous.repoId !== nextRepoId || previous.page !== nextPage)) originRef.current = undefined;
+    if (
+      !preserveOrigin &&
+      (previous.repoId !== nextRepoId || previous.page !== nextPage)
+    )
+      originRef.current = undefined;
     currentContext.current = { repoId: nextRepoId, page: nextPage };
     if (nextRepoId !== previous.repoId) setRepoId(nextRepoId);
     if (nextPage !== previous.page) setPage(nextPage);
   };
-  const moveFocusToDetail = () => focusDetail({ frame: requestAnimationFrame, focus: id => {
-    const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element;
-  } });
-  const rememberOrigin = (focus = page === 'inbox' ? focused : jobFocus) => {
-    if (!['inbox', 'reviews', 'tasks'].includes(page)) return;
-    originRef.current = captureOrigin(originRef.current, { repoId, page: page as NavigationOrigin['page'], search, filter, type, selected, focused: focus, scrollTop: mainRef.current?.scrollTop ?? 0, focusId: focus ? `mw-item-${focus}` : `mw-list-${page}` });
+  const moveFocusToDetail = () =>
+    focusDetail({
+      frame: requestAnimationFrame,
+      focus: (id) => {
+        const element = document.getElementById(id) as HTMLElement | null;
+        element?.focus({ preventScroll: true });
+        return document.activeElement === element;
+      },
+    });
+  const rememberOrigin = (focus = page === "inbox" ? focused : jobFocus) => {
+    if (!["inbox", "reviews", "tasks"].includes(page)) return;
+    originRef.current = captureOrigin(originRef.current, {
+      repoId,
+      page: page as NavigationOrigin["page"],
+      search,
+      filter,
+      type,
+      selected,
+      focused: focus,
+      scrollTop: mainRef.current?.scrollTop ?? 0,
+      focusId: focus ? `mw-item-${focus}` : `mw-list-${page}`,
+    });
   };
   const returnToOrigin = () => {
     navigationGeneration.current += 1;
     const origin = originRef.current;
     originRef.current = undefined;
     setJobFocus(undefined);
-    if (!origin || origin.repoId !== currentContext.current.repoId) { setFocused(undefined); return; }
+    if (!origin || origin.repoId !== currentContext.current.repoId) {
+      setFocused(undefined);
+      return;
+    }
     // Compute this key from the destination, rather than the source closure.
     navigate(origin.page, origin.repoId, true);
-    setPageSearch(values => ({ ...values, [pageSearchKey(origin.repoId, origin.page)]: origin.search }));
-    setFilter(origin.filter); setType(origin.type); setSelected(origin.selected);
-    if (origin.page === 'inbox') setFocused(origin.focused); else setJobFocus(origin.focused);
-    restoreOrigin(origin, repoId, { frame: callback => requestAnimationFrame(() => requestAnimationFrame(callback)), scrollTo: top => mainRef.current?.scrollTo({ top }), focus: id => { const element = document.getElementById(id) as HTMLElement | null; element?.focus({ preventScroll: true }); return document.activeElement === element; } });
-    requestAnimationFrame(() => requestAnimationFrame(() => console.log('origin-return', { target: origin?.scrollTop, scrollTop: mainRef.current?.scrollTop, scrollHeight: mainRef.current?.scrollHeight, clientHeight: mainRef.current?.clientHeight, active: document.activeElement?.id })));
+    setPageSearch((values) => ({
+      ...values,
+      [pageSearchKey(origin.repoId, origin.page)]: origin.search,
+    }));
+    setFilter(origin.filter);
+    setType(origin.type);
+    setSelected(origin.selected);
+    if (origin.page === "inbox") setFocused(origin.focused);
+    else setJobFocus(origin.focused);
+    restoreOrigin(origin, repoId, {
+      frame: (callback) =>
+        requestAnimationFrame(() => requestAnimationFrame(callback)),
+      scrollTo: (top) => mainRef.current?.scrollTo({ top }),
+      focus: (id) => {
+        const element = document.getElementById(id) as HTMLElement | null;
+        element?.focus({ preventScroll: true });
+        return document.activeElement === element;
+      },
+    });
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        console.log("origin-return", {
+          target: origin?.scrollTop,
+          scrollTop: mainRef.current?.scrollTop,
+          scrollHeight: mainRef.current?.scrollHeight,
+          clientHeight: mainRef.current?.clientHeight,
+          active: document.activeElement?.id,
+        }),
+      ),
+    );
   };
   async function action(
     label: string,
@@ -526,16 +625,29 @@ export function App({
     success = "已完成",
   ) {
     if (busy) return;
-    const actionRepoId = currentContext.current.repoId, actionNavigation = navigationGeneration.current;
+    const actionRepoId = currentContext.current.repoId,
+      actionNavigation = navigationGeneration.current;
     setBusy(label);
     try {
       const result = await request(path, data);
       await refresh();
-      if (["/jobs", "/classify", "/retry", "/rerun"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
+      if (
+        ["/jobs", "/classify", "/retry", "/rerun"].includes(path) &&
+        (Array.isArray(result.created) ||
+          Array.isArray(result.reused) ||
+          Array.isArray(result.errors))
+      ) {
         const record = operationRecordFromResponse(result);
-        setOperationRecords(records => ({ ...records, [actionRepoId]: record }));
+        setOperationRecords((records) => ({
+          ...records,
+          [actionRepoId]: record,
+        }));
       }
-      if (result.delivery?.implementationJobId && currentContext.current.repoId === actionRepoId && navigationGeneration.current === actionNavigation) {
+      if (
+        result.delivery?.implementationJobId &&
+        currentContext.current.repoId === actionRepoId &&
+        navigationGeneration.current === actionNavigation
+      ) {
         rememberOrigin();
         navigate("tasks", actionRepoId, true);
         setFocused(undefined);
@@ -555,8 +667,13 @@ export function App({
       return result;
     } catch (e) {
       if (["/jobs", "/classify", "/retry", "/rerun"].includes(path)) {
-        const ids = ["/retry", "/rerun"].includes(path) ? [String((data as { id?: string }).id ?? "retry")] : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
-        setOperationRecords(records => ({ ...records, [actionRepoId]: operationFailureRecord(ids, e) }));
+        const ids = ["/retry", "/rerun"].includes(path)
+          ? [String((data as { id?: string }).id ?? "retry")]
+          : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
+        setOperationRecords((records) => ({
+          ...records,
+          [actionRepoId]: operationFailureRecord(ids, e),
+        }));
       }
       setToast({ text: (e as Error).message, error: true });
     } finally {
@@ -568,7 +685,7 @@ export function App({
   const jobs = state?.jobs.filter((j) => j.repoId === repoId) ?? [];
   const pending = reviewQueue(jobs);
   const running = jobs.filter((j) => ["running", "queued"].includes(j.status));
-  const open = issues.filter((i) => i.state === "open");
+  const open = issues.filter((i) => i.state === "open" && !i.origin);
   const triaged = open.filter((i) => i.type === "issue" && i.analysis);
   const filtered = issues.filter(
     (i) =>
@@ -628,7 +745,11 @@ export function App({
     }
   }
   async function enqueue(kind: JobKind, ids = selected, forceNew = false) {
-    const requestContext = { ...currentContext.current, navigation: navigationGeneration.current, ids };
+    const requestContext = {
+      ...currentContext.current,
+      navigation: navigationGeneration.current,
+      ids,
+    };
     const response = await action(
       "dispatch",
       kind === "triage" ? "/classify" : "/jobs",
@@ -636,15 +757,27 @@ export function App({
       "任务已进入队列",
     );
     if (response) {
-      const record: OperationRecord = { ids: response.created ?? [], reused: response.reused ?? [], errors: response.errors ?? [], at: new Date().toISOString() };
+      const record: OperationRecord = {
+        ids: response.created ?? [],
+        reused: response.reused ?? [],
+        errors: response.errors ?? [],
+        at: new Date().toISOString(),
+      };
       setToast({
         text: `已记录本次派发：新建 ${record.ids.length}，复用 ${record.reused.length}，失败 ${record.errors.length}`,
       });
-      if (currentContext.current.repoId === requestContext.repoId && currentContext.current.page === requestContext.page && navigationGeneration.current === requestContext.navigation)
-        setSelected(current => current.filter(id => !requestContext.ids.includes(id)));
+      if (
+        currentContext.current.repoId === requestContext.repoId &&
+        currentContext.current.page === requestContext.page &&
+        navigationGeneration.current === requestContext.navigation
+      )
+        setSelected((current) =>
+          current.filter((id) => !requestContext.ids.includes(id)),
+        );
     }
   }
   const nav = [
+    { id: "organize", label: "仓库整理", icon: FileCheck2, count: 0 },
     { id: "attention", label: "需要我处理", icon: CheckCheck, count: 0 },
     { id: "inbox", label: "维护收件箱", icon: Inbox, count: open.length },
     { id: "tasks", label: "执行任务", icon: Layers3, count: running.length },
@@ -655,176 +788,90 @@ export function App({
       count: pending.length,
     },
     { id: "activity", label: "活动记录", icon: Activity, count: 0 },
+    { id: "repository-settings", label: "仓库设置", icon: Settings2, count: 0 },
   ] as const;
   return (
-    <div className="mw">
-      <aside className="mw-sidebar">
-        <a className="mw-brand" href="#" onClick={(e) => e.preventDefault()}>
-          <span className="mw-logo">
-            <GitBranch size={23} />
-          </span>
-          <div>
-            Maintainer<span>开源维护工作台</span>
-          </div>
-        </a>
-        <div className="mw-workspace-label">
-          仓库 · {state?.repos.length ?? 0}
-        </div>
-        <div className="mw-repo-switch">
-          <Code2 size={17} />
-          <select
-            aria-label="选择仓库"
-            value={repoId}
-            onChange={(e) => navigate(page, e.target.value)}
-          >
-            {state?.repos.map((r) => (
-              <option value={r.id} key={r.id}>
-                {r.fullName}
-              </option>
-            ))}
-          </select>
-          <ChevronDown size={14} />
-        </div>
-        <button
-          title="接入仓库"
-          aria-label="接入仓库"
-          className="mw-add-repo"
-          onClick={(e) => {
-            e.currentTarget.focus();
-            setConnectionResults([]);
-            setRepoInput("");
-            setConnect(true);
-          }}
-        >
-          <Plus size={14} />
-          接入仓库
-        </button>
-        <nav>
-          {nav.map((n) => (
-            <button
-              key={n.id}
-              title={n.label}
-              aria-label={n.label}
-              aria-current={page === n.id ? "page" : undefined}
-              className={page === n.id ? "active" : ""}
-              onClick={() => {
-                navigate(n.id);
-                setJobFocus(undefined);
-              }}
-            >
-              <n.icon size={18} />
-              {n.label}
-              {n.count > 0 && <span>{n.count}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="mw-sidebar-note">
-          <div className="mw-orbit">
-            <Sparkles size={18} />
-          </div>
-          <strong>让维护回归判断</strong>
-          <p>
-            把重复的调查交给 Agent，
-            <br />
-            把重要的决定留给你。
-          </p>
-          <div>
-            <span className="mw-dot" />{" "}
-            {state?.capabilities.harness ? "Harness 原生插件" : "独立开发预览"}
-          </div>
-        </div>
-        <button
-          aria-label="设置与连接"
-          title="设置与连接"
-          className={`mw-settings-nav ${page === "settings" ? "active" : ""}`}
-          onClick={() => navigate("settings")}
-        >
-          <Settings2 size={17} /> 设置与连接
-        </button>
-        <div className="mw-sidebar-footer">
-          <span className="mw-avatar">M</span>
-          <div>
-            维护者工作区<small>LOCAL · v0.1.0</small>
-          </div>
-          <MoreHorizontal size={17} />
-        </div>
-      </aside>
+    <div className="mw mw-layout-tabs">
       <div className="mw-shell">
-        <header className="mw-topbar">
-          <div>
-            <span>工作区</span>
-            <ChevronRight size={14} />
-            <strong title={repo?.fullName}>
-              {repo?.fullName ?? "选择仓库"}
-            </strong>
-            <label className="mw-mobile-repo">
-              <span className="mw-sr-only">切换当前仓库</span>
+        <header className="mw-header">
+          <div className="mw-header-controls">
+            <div className="mw-header-brand">
+              <GitBranch size={20} />
+              <strong>Maintainer</strong>
+              <small>v{state?.version ?? "…"}</small>
+            </div>
+            <div className="mw-repo-switch">
+              <Code2 size={16} />
               <select
+                aria-label="选择仓库"
+                disabled={!!busy}
                 value={repoId}
                 onChange={(e) => navigate(page, e.target.value)}
               >
-                {!state?.repos.length && <option value="">尚未连接仓库</option>}
+                {!state?.repos.length && <option value="">选择仓库</option>}
                 {state?.repos.map((r) => (
-                  <option key={r.id} value={r.id}>
+                  <option value={r.id} key={r.id}>
                     {r.fullName}
                   </option>
                 ))}
               </select>
-            </label>
-            {repo && (
-              <Tag tone="green">{repo.private ? "私有仓库" : "GitHub"}</Tag>
-            )}
-          </div>
-          <div className="mw-top-status">
-            <span className="mw-dot" />
-            {state?.capabilities.harness ? "Harness 已连接" : "本地运行"}
-            <span className="mw-separator" />
-            <span>
+              <ChevronDown size={14} />
+            </div>
+            <button
+              title="接入仓库"
+              aria-label="接入仓库"
+              className="mw-button"
+              onClick={(e) => {
+                e.currentTarget.focus();
+                setConnectionResults([]);
+                setRepoInput("");
+                setConnect(true);
+              }}
+            >
+              <Plus size={15} />
+            </button>
+            <div className="mw-header-status">
+              <span className="mw-dot" />
               {state?.capabilities.model
                 ? state.capabilities.modelName
                 : "模型未配置"}
-            </span>
-          </div>
-        </header>
-        <main id="mw-main" tabIndex={-1} className="mw-main" ref={mainRef}>
-          <div className="mw-page-heading">
-            <div>
-              <div className="mw-eyebrow">REPOSITORY OPERATIONS</div>
-              <h1>
-                {
-                  {
-                    attention: "先处理真正需要你的事项。",
-                    inbox: "让每个问题，都有下一步。",
-                    tasks: "从想法，到可审核的结果。",
-                    reviews: "关键决定，由你掌握。",
-                    activity: "每一步，都有据可查。",
-                    settings: "连接你的维护工作流。",
-                  }[page]
-                }
-              </h1>
-              <p>
-                {
-                  {
-                    attention:
-                      "跨仓库查看阻塞、需求决策和待审核变更；分析完成不等于问题解决。",
-                    inbox: "集中浏览、智能分诊与批量派发，让仓库维护有条不紊。",
-                    tasks: "追踪 Agent 执行、检查证据，随时停止或重试。",
-                    reviews: "检查结论、测试与代码差异，再决定是否接受。",
-                    activity: "同步、派发、执行与审核的持久化时间线。",
-                    settings:
-                      "管理仓库、模型与任务执行策略。密钥保存在服务端，不返回浏览器。",
-                  }[page]
-                }
-              </p>
             </div>
             <button
-              className="mw-button"
-              disabled={!!busy || !repo}
+              className={`mw-button ${page === "settings" ? "active" : ""}`}
+              aria-label="全局设置"
+              onClick={() => navigate("settings")}
+            >
+              <Settings2 size={16} />
+            </button>
+          </div>
+          <nav className="mw-global-tabs" aria-label="工作台页面">
+            {nav.map((n) => (
+              <button
+                key={n.id}
+                aria-current={page === n.id ? "page" : undefined}
+                className={`${page === n.id ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
+                onClick={() => {
+                  navigate(n.id);
+                  setJobFocus(undefined);
+                  setSearchValue("");
+                  setDetailOpen(false);
+                }}
+              >
+                <n.icon size={16} />
+                {n.label}
+                {n.count > 0 && <span>{n.count}</span>}
+              </button>
+            ))}
+            <button
+              className="mw-tab-sync"
+              disabled={
+                !!busy || !repo || (repo.mode === "local" && !repo.githubName)
+              }
               onClick={() =>
                 void action(
                   "sync",
                   "/sync",
-                  { fullName: repo?.fullName },
+                  { fullName: repo?.githubName ?? repo?.fullName },
                   "仓库同步完成",
                 )
               }
@@ -835,7 +882,13 @@ export function App({
               />
               同步仓库
             </button>
-          </div>
+          </nav>
+        </header>
+        <main
+          id="mw-main" tabIndex={-1} ref={mainRef}
+          className={`mw-main ${["inbox", "tasks", "reviews"].includes(page) ? "mw-queue-page" : ""}`}
+          data-page={page}
+        >
           {loadError && (
             <div className="mw-callout red">
               <TriangleAlert size={18} />
@@ -844,22 +897,42 @@ export function App({
               </span>
             </div>
           )}
+          {repo?.discovered && (
+            <details className="mw-workspace-notice">
+              <summary>工作区 · {repo.localPath}</summary>
+              <div>
+                <strong>自动发现 · {repo.localPath}</strong>
+                <p>
+                  {repo.localKind === "folder"
+                    ? "普通文件夹：可执行只读仓库检查。"
+                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：可只读检查；隔离修改暂需提交后执行" : "工作区干净，可执行隔离任务"}`}
+                </p>
+                <p>
+                  {repo.githubName
+                    ? `GitHub：${repo.githubName}，同步时复用已有登录`
+                    : repo.remoteCandidates?.length
+                      ? "存在多个 GitHub 远端，暂不自动选择协作目标。"
+                      : "本地模式，无需 GitHub 登录。"}
+                </p>
+              </div>
+            </details>
+          )}
           {repo?.syncWarning && (
-            <div className="mw-callout amber">
-              <TriangleAlert size={18} />
-              {repo.syncWarning}
-            </div>
+            <details className="mw-compact-notice">
+              <summary>同步详情</summary>
+              <p>{repo.syncWarning}</p>
+            </details>
           )}
           {!state ? (
             <Empty title="正在连接工作台" text="读取仓库与任务状态…" />
           ) : state.repos.length === 0 && page !== "settings" ? (
             <section className="mw-onboarding">
               <GitBranch size={40} />
-              <h2>连接你的第一个仓库</h2>
+              <h2>自动发现 Harness 工作区</h2>
               <p>
-                填写 GitHub 仓库地址，开始同步 Issue 与 PR。
+                在 Harness 添加或打开开发目录，插件会自动识别。
                 <br />
-                模型沿用 Harness 配置，代码任务自动准备独立工作区。
+                无需先连接 GitHub；也可手动添加其他远程仓库。
               </p>
               <button
                 className="mw-button primary"
@@ -871,11 +944,55 @@ export function App({
                 }}
               >
                 <Plus size={16} />
-                连接 GitHub 仓库
+                添加其他远程仓库
               </button>
             </section>
           ) : (
             <>
+              <OperationTracker
+                record={operationRecords[repoId]}
+                jobs={jobs}
+                close={() =>
+                  setOperationRecords((records) => {
+                    const next = { ...records };
+                    delete next[repoId];
+                    return next;
+                  })
+                }
+                open={(id) => {
+                  navigationGeneration.current += 1;
+                  rememberOrigin(id);
+                  navigate("tasks", repoId, true);
+                  setFocused(undefined);
+                  setJobFocus(id);
+                  setDetailTab("overview");
+                  setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
+                  moveFocusToDetail();
+                }}
+              />
+              {page === "organize" && (
+                <RepositoryOrganize
+                  state={state}
+                  repoId={repoId}
+                  busy={!!busy}
+                  run={async (data) => {
+                    const r = await action(
+                      "organize",
+                      "/organize",
+                      data,
+                      "整理任务已派发",
+                    );
+                    if (r) {
+                      setPage("tasks");
+                      setJobFocus(r.created[0] ?? r.reused[0]);
+                    }
+                  }}
+                  open={(id) => {
+                    setPage("tasks");
+                    setJobFocus(id);
+                  }}
+                />
+              )}
               {page === "attention" && (
                 <Attention
                   state={state}
@@ -884,49 +1001,13 @@ export function App({
                   }}
                 />
               )}
-              {["inbox", "tasks", "reviews"].includes(page) && (
-                <div className="mw-stats">
-                  <Stat
-                    label="待处理问题"
-                    value={open.filter((i) => i.type === "issue").length}
-                    sub={`${open.filter((i) => i.type === "pr").length} 个 PR 等待关注`}
-                    icon={<Inbox />}
-                  />
-                  <Stat
-                    label="已完成分诊"
-                    value={triaged.length}
-                    sub={
-                      open.some((i) => i.type === "issue")
-                        ? `${Math.round((triaged.length / open.filter((i) => i.type === "issue").length) * 100)}% 的开放 Issue 已有结论`
-                        : repo?.syncedAt
-                          ? "暂无需要分诊的开放记录"
-                          : "等待同步仓库"
-                    }
-                    icon={<Sparkles />}
-                  />
-                  <Stat
-                    label="正在执行"
-                    value={running.length}
-                    sub={`并发上限 ${state.settings.concurrency} · 自动去重`}
-                    icon={<Zap />}
-                  />
-                  <Stat
-                    label="等待你审核"
-                    value={pending.length}
-                    sub="结论与差异集中检查"
-                    icon={<ShieldCheck />}
-                  />
-                </div>
-              )}
-              <OperationTracker
-                record={operationRecords[repoId]}
-                jobs={jobs}
-                close={() => setOperationRecords(records => { const next = { ...records }; delete next[repoId]; return next; })}
-                open={id => { navigationGeneration.current += 1; rememberOrigin(id); navigate('tasks', repoId, true); setFocused(undefined); setJobFocus(id); setDetailTab('overview'); setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote)); moveFocusToDetail(); }}
-              />
               {page === "inbox" && (
                 <div className="mw-workarea">
-                  <section id="mw-list-inbox" tabIndex={-1} className="mw-list-panel">
+                  <section
+                    id="mw-list-inbox"
+                    tabIndex={-1}
+                    className="mw-list-panel"
+                  >
                     <div className="mw-panel-top">
                       <div className="mw-tabs">
                         <button
@@ -986,11 +1067,27 @@ export function App({
                           aria-label="选择当前列表"
                           checked={
                             filtered.length > 0 &&
-                            filtered.every((i) => selected.includes(i.id))
+                            filtered
+                              .slice(0, listLimit)
+                              .every((i) => selected.includes(i.id))
                           }
                           onChange={(e) =>
                             setSelected(
-                              e.target.checked ? filtered.map((i) => i.id) : [],
+                              e.target.checked
+                                ? [
+                                    ...new Set([
+                                      ...selected,
+                                      ...filtered
+                                        .slice(0, listLimit)
+                                        .map((i) => i.id),
+                                    ]),
+                                  ]
+                                : selected.filter(
+                                    (id) =>
+                                      !filtered
+                                        .slice(0, listLimit)
+                                        .some((i) => i.id === id),
+                                  ),
                             )
                           }
                         />
@@ -1021,14 +1118,20 @@ export function App({
                           disabled={!selected.length || !!busy}
                           onChange={(e) =>
                             e.target.value &&
-                            void enqueue(e.target.value.replace("rerun:", "") as JobKind, selected, e.target.value.startsWith("rerun:"))
+                            void enqueue(
+                              e.target.value.replace("rerun:", "") as JobKind,
+                              selected,
+                              e.target.value.startsWith("rerun:"),
+                            )
                           }
                         >
                           <option value="">更多操作</option>
                           <option value="fix">修复与验证</option>
                           <option value="preflight">PR 预检</option>
                           <option value="review">PR 审查</option>
-                          <option value="rerun:review">重新运行 PR 审查（原始 PR）</option>
+                          <option value="rerun:review">
+                            重新运行 PR 审查（原始 PR）
+                          </option>
                           <option value="validate">验证变更</option>
                           <option value="ci">诊断 CI</option>
                           <option value="docs">文档维护</option>
@@ -1036,7 +1139,7 @@ export function App({
                       </div>
                     </div>
                     <div className="mw-issues">
-                      {filtered.map((i) => {
+                      {filtered.slice(0, listLimit).map((i) => {
                         const current = jobs.find(
                           (j) =>
                             j.issueId === i.id &&
@@ -1067,6 +1170,7 @@ export function App({
                                 navigationGeneration.current += 1;
                                 setFocused(i.id);
                                 setJobFocus(undefined);
+                                setDetailOpen(false);
                                 setDetailTab("overview");
                                 moveFocusToDetail();
                               }}
@@ -1134,6 +1238,14 @@ export function App({
                           </div>
                         );
                       })}
+                      {filtered.length > listLimit && (
+                        <button
+                          className="mw-list-more"
+                          onClick={() => setListLimit((v) => v + 50)}
+                        >
+                          加载更多 · 还有 {filtered.length - listLimit} 条
+                        </button>
+                      )}
                       {filtered.length === 0 && (
                         <Empty
                           title="这里暂时没有问题"
@@ -1141,42 +1253,32 @@ export function App({
                         />
                       )}
                     </div>
-                    <div className="mw-list-footer">
-                      <ShieldCheck size={14} />
-                      审核后可发布回复、应用标签或创建草稿
-                      PR；合并由维护者决定。
-                    </div>
                   </section>
                   {displayedIssue ? (
-                    renderDetail()
+                    renderReader()
                   ) : (
-                    <aside className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}>
+                    <aside
+                      className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}
+                    >
                       <div className="mw-detail-art">
                         <GitBranch size={38} />
                         <span>
                           <Sparkles size={16} />
                         </span>
                       </div>
-                      <h3>从一个问题开始</h3>
-                      <p>
-                        选择 Issue 查看上下文与建议，
-                        <br />
-                        或勾选多项，让 Agent 批量调查。
-                      </p>
-                      <div className="mw-mini-flow">
-                        <span>分诊</span>
-                        <ArrowRight size={12} />
-                        <span>执行</span>
-                        <ArrowRight size={12} />
-                        <span>审核</span>
-                      </div>
+                      <h3>选择 PR 或 Issue</h3>
+                      <p>从左侧列表选择一项查看详情。</p>
                     </aside>
                   )}
                 </div>
               )}
               {(page === "tasks" || page === "reviews") && (
                 <div className="mw-workarea">
-                  <section id={`mw-list-${page}`} tabIndex={-1} className="mw-list-panel">
+                  <section
+                    id={`mw-list-${page}`}
+                    tabIndex={-1}
+                    className="mw-list-panel"
+                  >
                     <div className="mw-panel-top">
                       <h3>
                         {page === "reviews" ? "待审核结果" : "所有任务"}{" "}
@@ -1193,7 +1295,7 @@ export function App({
                       </label>
                     </div>
                     {listJobs.length ? (
-                      listJobs.map((j) => (
+                      listJobs.slice(0, listLimit).map((j) => (
                         <button
                           key={j.id}
                           id={`mw-item-${j.id}`}
@@ -1220,9 +1322,11 @@ export function App({
                           <div>
                             <strong>{j.issueSnapshot.title}</strong>
                             <p>
-                              #{j.issueSnapshot.number} <span>·</span>{" "}
-                              {kindNames[j.kind]} <span>·</span> 第 {j.attempt}{" "}
-                              次尝试
+                              {j.issueSnapshot.origin === "repository"
+                                ? "仓库整理"
+                                : `#${j.issueSnapshot.number}`}{" "}
+                              <span>·</span> {kindNames[j.kind]} <span>·</span>{" "}
+                              第 {j.attempt} 次尝试
                             </p>
                             <small>
                               {j.engine ?? "等待执行器"} · {date(j.createdAt)} ·{" "}
@@ -1245,18 +1349,39 @@ export function App({
                         text="从收件箱选择问题并派发，任务与执行证据会显示在这里。"
                       />
                     )}
+                    {listJobs.length > listLimit && (
+                      <button
+                        className="mw-list-more"
+                        onClick={() => setListLimit((v) => v + 50)}
+                      >
+                        加载更多 · 还有 {listJobs.length - listLimit} 个任务
+                      </button>
+                    )}
                   </section>
                   {displayedIssue && job ? (
-                    renderDetail()
+                    renderReader()
                   ) : (
-                    <aside className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}>
+                    <aside
+                      className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}
+                    >
                       {originRef.current && (
-                        <button aria-label="返回来源列表" onClick={returnToOrigin}>返回列表</button>
+                        <button
+                          aria-label="返回来源列表"
+                          onClick={returnToOrigin}
+                        >
+                          返回列表
+                        </button>
                       )}
                       <ShieldCheck size={36} />
-                      <h3>{jobFocus ? "任务已不在当前列表中" : "结果可追溯，决策可检查"}</h3>
+                      <h3>
+                        {jobFocus
+                          ? "任务已不在当前列表中"
+                          : "结果可追溯，决策可检查"}
+                      </h3>
                       <p>
-                        {jobFocus ? "该任务可能已删除或已切换仓库。你可以返回原来的列表继续处理。" : "选择任务查看输入版本、执行证据、"}
+                        {jobFocus
+                          ? "该任务可能已删除或已切换仓库。你可以返回原来的列表继续处理。"
+                          : "选择任务查看输入版本、执行证据、"}
                         <br />
                         代码差异与待审核草稿。
                       </p>
@@ -1287,11 +1412,74 @@ export function App({
                   ))}
                 </section>
               )}
+              {page === "repository-settings" && (
+                <RepositoryPolicy
+                  key={repoId}
+                  state={state}
+                  repoId={repoId}
+                  busy={!!busy}
+                  save={(value) =>
+                    void action("policy", "/policy", value, "仓库策略已保存")
+                  }
+                />
+              )}
+              {(page === "settings" || page === "repository-settings") && (
+                <SettingsView
+                  key={page}
+                  scope={
+                    page === "repository-settings" ? "repository" : "global"
+                  }
+                  state={state}
+                  repoId={repoId}
+                  busy={!!busy}
+                  prepare={() =>
+                    void action(
+                      "prepare",
+                      "/prepare",
+                      { repoId },
+                      "独立仓库已准备完成",
+                    )
+                  }
+                  save={(s) =>
+                    void action("settings", "/settings", s, "设置已保存")
+                  }
+                  credentials={(c) =>
+                    void action(
+                      "credentials",
+                      "/credentials",
+                      c,
+                      "连接配置已保存",
+                    )
+                  }
+                  bind={(path) =>
+                    void action(
+                      "bind",
+                      "/bind",
+                      { repoId, localPath: path },
+                      "工作区绑定成功",
+                    )
+                  }
+                />
+              )}
               {page === "settings" && (
-                <section className="mw-settings-card mw-repository-manager">
-                  <div className="mw-section-title">
-                    <GitBranch size={19} />
-                    已连接仓库 · {state.repos.length}
+                <section className="mw-repository-manager mw-repository-table">
+                  <div className="mw-repository-toolbar">
+                    <div className="mw-section-title">
+                      <GitBranch size={19} />
+                      已连接仓库 · {state.repos.length}
+                    </div>
+                    <button
+                      className="mw-button"
+                      disabled={!!busy}
+                      onClick={() => {
+                        setRepoInput("");
+                        setConnectionResults([]);
+                        setConnect(true);
+                      }}
+                    >
+                      <Plus size={16} />
+                      添加仓库
+                    </button>
                   </div>
                   <p>
                     点击仓库切换工作区。Issue、任务、审核和本地克隆分别归属各自仓库；模型和
@@ -1325,13 +1513,20 @@ export function App({
                         aria-pressed={r.id === repoId}
                         disabled={!!busy}
                         key={r.id}
-                        onClick={() => navigate(page, r.id)}
+                        onClick={() => {
+                          navigate("repository-settings", r.id);
+                        }}
                       >
                         <GitBranch size={16} />
                         <span className="mw-repository-name">
                           <strong>{r.fullName}</strong>
                           <small>
-                            {r.private ? "私有仓库" : "公开仓库"} ·{" "}
+                            {r.mode === "local" && !r.githubName
+                              ? "本地工作区"
+                              : r.private
+                                ? "私有仓库"
+                                : "公开仓库"}{" "}
+                            ·{" "}
                             {
                               state.issues.filter(
                                 (i) => i.repoId === r.id && i.state === "open",
@@ -1353,63 +1548,9 @@ export function App({
                   </div>
                 </section>
               )}
-              {page === "settings" && (
-                <RepositoryPolicy
-                  key={repoId}
-                  state={state}
-                  repoId={repoId}
-                  busy={!!busy}
-                  save={(value) =>
-                    void action("policy", "/policy", value, "仓库策略已保存")
-                  }
-                />
-              )}
-              {page === "settings" && (
-                <SettingsView
-                  state={state}
-                  repoId={repoId}
-                  busy={!!busy}
-                  prepare={() =>
-                    void action(
-                      "prepare",
-                      "/prepare",
-                      { repoId },
-                      "独立仓库已准备完成",
-                    )
-                  }
-                  save={(s) =>
-                    void action("settings", "/settings", s, "设置已保存")
-                  }
-                  credentials={(c) =>
-                    void action(
-                      "credentials",
-                      "/credentials",
-                      c,
-                      "连接配置已保存",
-                    )
-                  }
-                  bind={(path) =>
-                    void action(
-                      "bind",
-                      "/bind",
-                      { repoId, localPath: path },
-                      "工作区绑定成功",
-                    )
-                  }
-                />
-              )}
             </>
           )}
         </main>
-        <footer className="mw-bottom">
-          <span>
-            <GitBranch size={13} /> Maintainer Workbench
-          </span>
-          <span>
-            Built for DeepSeek Harness <span className="mw-footer-dot">·</span>{" "}
-            Evidence before action
-          </span>
-        </footer>
       </div>
       {toast && (
         <div role="status" className={`mw-toast ${toast.error ? "error" : ""}`}>
@@ -1419,6 +1560,54 @@ export function App({
             <X size={16} />
           </button>
         </div>
+      )}
+      {detailOpen && displayedIssue && (
+        <RepositoryDetail
+          key={`${displayedIssue.id}:${displayedIssue.updatedAt}`}
+          issue={displayedIssue}
+          repository={
+            state?.repos.find((r) => r.id === displayedIssue.repoId)
+              ?.fullName ?? ""
+          }
+          hasGitHub={
+            !displayedIssue.origin &&
+            !!state?.repos.find(
+              (r) =>
+                r.id === displayedIssue.repoId &&
+                (r.mode === "github" || r.githubName),
+            )
+          }
+          close={() => setDetailOpen(false)}
+          renderAgentPanel={renderStage}
+          agentPanel={
+            <>
+              <WorkflowPanel
+                key={displayedIssue.id}
+                issue={
+                  issues.find((i) => i.id === displayedIssue.id) ??
+                  displayedIssue
+                }
+                job={job}
+                history={jobs.filter((j) => j.issueId === displayedIssue.id)}
+                busy={!!busy}
+                act={(path, data, message) =>
+                  action("workflow", path, data, message)
+                }
+              />
+              {job?.error && <div className="mw-callout red">{job.error}</div>}
+              {result && <Result result={result} />}
+              <button
+                className="mw-button"
+                onClick={() => {
+                  setDetailOpen(false);
+                  setDetailTab("evidence");
+                }}
+              >
+                查看 Agent 证据与审核
+              </button>
+            </>
+          }
+        />
       )}
       {publishAction && previewJob && (
         <Modal
@@ -1548,7 +1737,11 @@ export function App({
               <GitBranch size={24} />
             </span>
             <h2>连接 GitHub 仓库</h2>
-            <p>同步 Issue 与 PR，在一个工作台中组织维护任务。</p>
+            <p>
+              同步 Issue 与
+              PR，在一个工作台中组织维护任务。他人的公开仓库也可接入；发布回复、标签或推送代码需要相应权限，向他人仓库贡献代码通常需通过
+              Fork 和 PR。
+            </p>
             <label>
               GitHub 仓库（每行一个，最多 20 个）
               <textarea
@@ -1606,6 +1799,163 @@ export function App({
     </div>
   );
 
+  function renderReader() {
+    if (!displayedIssue) return null;
+    return (
+      <RepositoryDetail
+        key={`${page}:${displayedIssue.id}:${jobFocus ?? ""}:${displayedIssue.updatedAt}`}
+        embedded
+        initialTab={
+          page === "inbox"
+            ? "triage"
+            : page === "tasks"
+              ? job?.kind === "review"
+                ? "review"
+                : "execution"
+              : "review"
+        }
+        issue={displayedIssue}
+        repository={
+          state?.repos.find((r) => r.id === displayedIssue.repoId)?.fullName ??
+          ""
+        }
+        hasGitHub={
+          !displayedIssue.origin &&
+          !!state?.repos.find(
+            (r) =>
+              r.id === displayedIssue.repoId &&
+              (r.mode === "github" || r.githubName),
+          )
+        }
+        close={() => {
+          setFocused(undefined);
+          setJobFocus(undefined);
+        }}
+        renderAgentPanel={renderStage}
+        agentPanel={renderDetail()}
+      />
+    );
+  }
+
+  function renderStage(stage: "triage" | "execution" | "review") {
+    if (!displayedIssue) return null;
+    const history = jobs.filter((j) => j.issueId === displayedIssue.id);
+    const relevant = history.filter((j) =>
+      stage === "triage"
+        ? ["triage", "preflight"].includes(j.kind)
+        : stage === "execution"
+          ? ["investigate", "fix", "docs", "ci", "validate"].includes(j.kind)
+          : j.kind === "review",
+    );
+    const latest = relevant[0];
+    if (stage === "review")
+      return (
+        <>
+          {relevant.length > 0 && (
+            <div className="mw-stage-jobs">
+              {relevant.map((j) => (
+                <button
+                  key={j.id}
+                  className="mw-button"
+                  onClick={() => openEvidenceJob(j.id, "overview")}
+                >
+                  审查 · {taskStatus(j).label} · {date(j.createdAt)}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="mw-muted">
+            核对补丁、验证结果和审查发现，再接受或退回本地产物。
+          </p>
+          {renderDetail()}
+        </>
+      );
+    return (
+      <section className="mw-stage-panel">
+        <div className="mw-stage-flow">
+          <span className={stage === "triage" ? "active" : ""}>1 · Triage</span>
+          <ArrowRight size={14} />
+          <span className={stage === "execution" ? "active" : ""}>
+            2 · Execution
+          </span>
+          <ArrowRight size={14} />
+          <span>3 · Review</span>
+        </div>
+        <p className="mw-muted">
+          {stage === "triage"
+            ? "分类、优先级与下一步路由；PR 使用快速预检。结果按版本保存，未变化时直接复用。"
+            : "从调查到实施和验证，查看任务进度及执行记录。"}
+        </p>
+        <div className="mw-detail-actions">
+          {(stage === "triage"
+            ? [displayedIssue.type === "pr" ? "preflight" : "triage"]
+            : displayedIssue.type === "pr"
+              ? ["review", "ci"]
+              : ["investigate", "fix"]
+          ).map((kind) => (
+            <button
+              key={kind}
+              className="mw-button"
+              disabled={!!busy}
+              onClick={() => void enqueue(kind as JobKind, [displayedIssue.id])}
+            >
+              {kindNames[kind as JobKind]}
+            </button>
+          ))}
+        </div>
+        {relevant.length > 0 && (
+          <div className="mw-stage-jobs">
+            {relevant.map((j) => (
+              <button
+                className="mw-button"
+                key={j.id}
+                onClick={() => openEvidenceJob(j.id, "overview")}
+              >
+                {kindNames[j.kind]} · {taskStatus(j).label} ·{" "}
+                {date(j.createdAt)}
+              </button>
+            ))}
+          </div>
+        )}
+        {stage === "triage" && (
+          <WorkflowPanel
+            hideSummary
+            issue={displayedIssue}
+            job={latest}
+            history={history}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
+        )}
+        {latest?.error && <div className="mw-callout red">{latest.error}</div>}
+        {latest?.result ? (
+          <Result result={latest.result} classification={stage === "triage"} />
+        ) : (
+          <Empty
+            title={stage === "triage" ? "尚无分诊结果" : "尚无执行结果"}
+            text="选择上方操作启动对应阶段；切换页签不会调用模型。"
+          />
+        )}
+        {stage === "execution" && latest && (
+          <section>
+            {state?.audit
+              .filter((a) => a.jobId === latest.id)
+              .slice()
+              .reverse()
+              .map((a) => (
+                <div className="mw-job-log" key={a.id}>
+                  <time>{date(a.at)}</time>
+                  <p>{a.detail}</p>
+                </div>
+              ))}
+          </section>
+        )}
+      </section>
+    );
+  }
+
   function renderDetail() {
     if (!displayedIssue) return null;
     const acceptance = job ? acceptanceEligibility(job, jobs) : undefined;
@@ -1613,8 +1963,9 @@ export function App({
       <aside id="mw-detail" tabIndex={-1} className="mw-detail">
         <div className="mw-detail-header">
           <span>
-            {displayedIssue.type === "pr" ? "PULL REQUEST" : "ISSUE"} #
-            {displayedIssue.number}
+            {displayedIssue.origin === "repository"
+              ? "仓库整理"
+              : `${displayedIssue.type === "pr" ? "PULL REQUEST" : "ISSUE"} #${displayedIssue.number}`}{" "}
           </span>
           <div>
             {originRef.current && (
@@ -1632,6 +1983,12 @@ export function App({
                 <ExternalLink size={15} />
               </a>
             )}
+            <button
+              aria-label="打开完整详情"
+              onClick={() => setDetailOpen(true)}
+            >
+              <BookOpen size={17} />
+            </button>
             <button
               aria-label="关闭详情"
               onClick={() => {
@@ -1756,12 +2113,16 @@ export function App({
                     <BookOpen size={15} /> 问题描述
                   </div>
                   <p className="mw-description">
-                    {displayedIssue.body || "未提供描述"}
+                    {displayedIssue.origin === "repository"
+                      ? "按选定范围检查仓库或准备修改，结果与补丁将在这里显示。"
+                      : displayedIssue.body || "未提供描述"}
                   </p>
                   <div className="mw-callout">
                     <Sparkles size={17} />
                     <p>
-                      派发分诊后，可获得分类、优先级、重复问题建议与下一步操作。
+                      {displayedIssue.origin === "repository"
+                        ? "任务结束后可查看整理结果、证据与补丁。"
+                        : "派发分诊后，可获得分类、优先级、重复问题建议与下一步操作。"}
                     </p>
                   </div>
                 </>
@@ -1769,18 +2130,72 @@ export function App({
               {result && (
                 <details className="mw-original">
                   <summary>查看原始报告</summary>
-                  <p>{displayedIssue.body}</p>
+                  <p>
+                    {displayedIssue.origin === "repository"
+                      ? "仓库整理任务：按选定范围检查或准备修改，结果与补丁将在这里显示。"
+                      : displayedIssue.body}
+                  </p>
                 </details>
               )}
             </>
           )}
           {detailTab === "evidence" && (
             <>
-              {job?.toolDiagnostics && <div className="mw-evidence"><div><h4>工具可用性诊断</h4><p>{job.toolDiagnostics.provider}/{job.toolDiagnostics.model} · {job.toolDiagnostics.preset} · {job.toolDiagnostics.permission}</p><p>挂载：{job.toolDiagnostics.mountedTools.join(', ') || '无'}；模型请求：{job.toolDiagnostics.requests.length} 次；调用：{job.toolDiagnostics.calls}；结果：{job.toolDiagnostics.results}；宿主结果：{job.toolDiagnostics.canonicalResults}；错误：{job.toolDiagnostics.errors}</p><p>请求携带工具：{[...new Set(job.toolDiagnostics.requests.flatMap(r => r.tools))].join(', ') || '无'}</p></div></div>}
-              {job?.toolDiagnostics?.implementationRepair && <p className="mw-callout">已尝试补齐实施 {job.toolDiagnostics.implementationRepair.attempts} 次：{job.toolDiagnostics.implementationRepair.reason}</p>}
-              {job?.toolDiagnostics?.evidenceRepair && <p className="mw-callout">已尝试补齐证据 {job.toolDiagnostics.evidenceRepair.attempts} 次：{job.toolDiagnostics.evidenceRepair.reasons.join('；')}</p>}
-              {job?.evidenceGate && <p className={`mw-callout ${job.evidenceGate.allowed ? '' : 'red'}`}>证据验收：{job.evidenceGate.allowed ? '通过' : job.evidenceGate.reasons.join('；')}</p>}
-              {job?.executionRecords?.map(record => <ExecutionEvidence key={record.id} job={job} record={record} />)}
+              {job?.toolDiagnostics && (
+                <div className="mw-evidence">
+                  <div>
+                    <h4>工具可用性诊断</h4>
+                    <p>
+                      {job.toolDiagnostics.provider}/{job.toolDiagnostics.model}{" "}
+                      · {job.toolDiagnostics.preset} ·{" "}
+                      {job.toolDiagnostics.permission}
+                    </p>
+                    <p>
+                      挂载：
+                      {job.toolDiagnostics.mountedTools.join(", ") || "无"}
+                      ；模型请求：{job.toolDiagnostics.requests.length}{" "}
+                      次；调用：{job.toolDiagnostics.calls}；结果：
+                      {job.toolDiagnostics.results}；宿主结果：
+                      {job.toolDiagnostics.canonicalResults}；错误：
+                      {job.toolDiagnostics.errors}
+                    </p>
+                    <p>
+                      请求携带工具：
+                      {[
+                        ...new Set(
+                          job.toolDiagnostics.requests.flatMap((r) => r.tools),
+                        ),
+                      ].join(", ") || "无"}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {job?.toolDiagnostics?.implementationRepair && (
+                <p className="mw-callout">
+                  已尝试补齐实施{" "}
+                  {job.toolDiagnostics.implementationRepair.attempts} 次：
+                  {job.toolDiagnostics.implementationRepair.reason}
+                </p>
+              )}
+              {job?.toolDiagnostics?.evidenceRepair && (
+                <p className="mw-callout">
+                  已尝试补齐证据 {job.toolDiagnostics.evidenceRepair.attempts}{" "}
+                  次：{job.toolDiagnostics.evidenceRepair.reasons.join("；")}
+                </p>
+              )}
+              {job?.evidenceGate && (
+                <p
+                  className={`mw-callout ${job.evidenceGate.allowed ? "" : "red"}`}
+                >
+                  证据验收：
+                  {job.evidenceGate.allowed
+                    ? "通过"
+                    : job.evidenceGate.reasons.join("；")}
+                </p>
+              )}
+              {job?.executionRecords?.map((record) => (
+                <ExecutionEvidence key={record.id} job={job} record={record} />
+              ))}
               {result?.evidence.length ? (
                 result.evidence.map((e, index) => (
                   <div className="mw-evidence" key={index}>
@@ -1960,10 +2375,22 @@ export function App({
                 <CheckCheck size={14} /> {taskStatus(job).label}
               </Tag>
             )}
-            {!['queued', 'running'].includes(job.status) && (
-              <button className="mw-button" disabled={!!busy} title="创建新的执行任务，沿用本任务来源和说明，保留旧结果；不会自动接受或发布"
-                onClick={() => void action("rerun", "/rerun", { id: job.id }, "已派发重新运行任务，请查看本次任务追踪")}>
-                <RefreshCw size={14} />重新运行
+            {!["queued", "running"].includes(job.status) && (
+              <button
+                className="mw-button"
+                disabled={!!busy}
+                title="创建新的执行任务，沿用本任务来源和说明，保留旧结果；不会自动接受或发布"
+                onClick={() =>
+                  void action(
+                    "rerun",
+                    "/rerun",
+                    { id: job.id },
+                    "已派发重新运行任务，请查看本次任务追踪",
+                  )
+                }
+              >
+                <RefreshCw size={14} />
+                重新运行
               </button>
             )}
             {job.status === "approved" && job.artifactState !== "stale" && (
@@ -1971,14 +2398,18 @@ export function App({
                 <button
                   className="mw-button"
                   onClick={() => void openPublishPreview("comment")}
-                  disabled={!!busy}
+                  disabled={
+                    !!busy ||
+                    !!job.issueSnapshot.origin ||
+                    !job.result?.responseDraft.trim()
+                  }
                 >
                   发布回复
                 </button>
                 <button
                   className="mw-button"
                   onClick={() => void openPublishPreview("labels")}
-                  disabled={!!busy}
+                  disabled={!!busy || !!job.issueSnapshot.origin}
                 >
                   应用标签
                 </button>
@@ -2075,6 +2506,7 @@ function Stat({
   );
 }
 function SettingsView({
+  scope,
   state,
   repoId,
   busy,
@@ -2083,6 +2515,7 @@ function SettingsView({
   credentials,
   prepare,
 }: {
+  scope: "global" | "repository";
   state: Snapshot;
   repoId: string;
   busy: boolean;
@@ -2107,310 +2540,368 @@ function SettingsView({
   return (
     <div className="mw-settings-grid">
       <section className="mw-settings-card">
-        <div className="mw-section-title">
-          <GitBranch size={19} />
-          仓库连接
-        </div>
-        <h3>{repo?.fullName ?? "尚未选择"}</h3>
-        <p>{repo?.description}</p>
-        {state.capabilities.harness &&
-          repo?.mode === "github" &&
-          !repo.localPath && (
-            <button
-              className="mw-button primary"
-              disabled={busy}
-              onClick={prepare}
-            >
-              <GitBranch size={15} />
-              自动准备仓库
-            </button>
-          )}
-        <label>
-          已有本地克隆（可选）
-          <input
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            placeholder="/absolute/path/to/repository"
-          />
-        </label>
-        <p className="mw-muted">
-          调查、审查、修复与文档任务会自动克隆仓库并创建隔离工作区，无需手动填写路径。也可提前准备；大型仓库首次下载需要一些时间。
-        </p>
-        <button
-          className="mw-button"
-          disabled={busy || !path || !repo}
-          onClick={() => bind(path)}
-        >
-          绑定工作区
-        </button>
-        {repo?.profile && (
-          <div className="mw-repo-profile">
-            <h4>Agent 的仓库上下文</h4>
-            <p>
-              {repo.profile.languages.join(" / ") || "尚未识别语言"} · 提交{" "}
-              {repo.profile.revision.slice(0, 8)}
-            </p>
+        {scope === "repository" ? (
+          <>
+            <div className="mw-section-title">
+              <GitBranch size={19} />
+              仓库连接
+            </div>
+            <h3>{repo?.fullName ?? "尚未选择"}</h3>
+            <p>{repo?.description}</p>
+            {state.capabilities.harness &&
+              repo?.mode === "github" &&
+              !repo.localPath && (
+                <button
+                  className="mw-button primary"
+                  disabled={busy}
+                  onClick={prepare}
+                >
+                  <GitBranch size={15} />
+                  自动准备仓库
+                </button>
+              )}
+            <label>
+              已有本地克隆（可选）
+              <input
+                value={path}
+                onChange={(e) => setPath(e.target.value)}
+                placeholder="/absolute/path/to/repository"
+              />
+            </label>
             <p className="mw-muted">
-              {repo.profile.sources.length} 份约定与配置摘要 ·{" "}
-              {repo.profile.testPaths.length} 个测试入口 ·{" "}
-              {repo.profile.workflows.length} 个 CI 工作流
+              调查、审查、修复与文档任务会自动克隆仓库并创建隔离工作区，无需手动填写路径。也可提前准备；大型仓库首次下载需要一些时间。
             </p>
-            <details>
-              <summary>查看读取来源与覆盖范围</summary>
-              {repo.profile.sources.map((s) => (
-                <p key={s.path}>
-                  <code>{s.path}</code>
+            <button
+              className="mw-button"
+              disabled={busy || !path || !repo}
+              onClick={() => bind(path)}
+            >
+              绑定工作区
+            </button>
+            {repo?.profile && (
+              <div className="mw-repo-profile">
+                <h4>Agent 的仓库上下文</h4>
+                <p>
+                  {repo.profile.languages.join(" / ") || "尚未识别语言"} · 提交{" "}
+                  {repo.profile.revision.slice(0, 8)}
                 </p>
-              ))}
-              {repo.profile.warnings.map((w, i) => (
-                <p className="mw-muted" key={i}>
-                  {w}
+                <p className="mw-muted">
+                  {repo.profile.sources.length} 份约定与配置摘要 ·{" "}
+                  {repo.profile.testPaths.length} 个测试入口 ·{" "}
+                  {repo.profile.workflows.length} 个 CI 工作流
                 </p>
-              ))}
-            </details>
-          </div>
-        )}
-        <div className="mw-credential-fields">
-          {!native && (
-            <>
+                <details>
+                  <summary>查看读取来源与覆盖范围</summary>
+                  {repo.profile.sources.map((s) => (
+                    <p key={s.path}>
+                      <code>{s.path}</code>
+                    </p>
+                  ))}
+                  {repo.profile.warnings.map((w, i) => (
+                    <p className="mw-muted" key={i}>
+                      {w}
+                    </p>
+                  ))}
+                </details>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="mw-section-title">
+              <Settings2 size={19} />
+              模型与连接
+            </div>
+            <div className="mw-credential-fields">
+              {!native && (
+                <>
+                  <label>
+                    独立预览 API Key
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="留空则保持已保存密钥"
+                    />
+                  </label>
+                  <label>
+                    兼容 API 地址
+                    <input
+                      type="url"
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value)}
+                    />
+                  </label>
+                </>
+              )}
               <label>
-                独立预览 API Key
+                GitHub Token
                 <input
                   type="password"
                   autoComplete="new-password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="留空则保持已保存密钥"
+                  value={githubToken}
+                  onChange={(e) => setGithubToken(e.target.value)}
+                  placeholder="可选：自动复用本机 GitHub CLI 登录"
                 />
               </label>
-              <label>
-                兼容 API 地址
-                <input
-                  type="url"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                />
-              </label>
-            </>
-          )}
-          <label>
-            GitHub Token
-            <input
-              type="password"
-              autoComplete="new-password"
-              value={githubToken}
-              onChange={(e) => setGithubToken(e.target.value)}
-              placeholder="可选：自动复用本机 GitHub CLI 登录"
-            />
-          </label>
-          <button
-            className="mw-button"
-            disabled={busy}
-            onClick={() => {
-              credentials({
-                ...(native ? {} : { ...(apiKey ? { apiKey } : {}), baseUrl }),
-                ...(githubToken ? { githubToken } : {}),
-              });
-              setApiKey("");
-              setGithubToken("");
-            }}
-          >
-            保存连接配置
-          </button>
-          <p className="mw-muted">
-            GitHub 令牌仅保存在服务端权限为 0600 的文件中，不返回浏览器。
-          </p>
-        </div>
-        {native && (
-          <div className="mw-host-model">
-            <div className="mw-section-title">
-              <Sparkles size={19} />
-              跟随 Harness 默认模型
+              <button
+                className="mw-button"
+                disabled={busy}
+                onClick={() => {
+                  credentials({
+                    ...(native
+                      ? {}
+                      : { ...(apiKey ? { apiKey } : {}), baseUrl }),
+                    ...(githubToken ? { githubToken } : {}),
+                  });
+                  setApiKey("");
+                  setGithubToken("");
+                }}
+              >
+                保存连接配置
+              </button>
+              <p className="mw-muted">
+                GitHub 令牌仅保存在服务端权限为 0600 的文件中，不返回浏览器。
+              </p>
             </div>
-            <h3>{host?.model ?? "等待宿主模型配置"}</h3>
-            <p>
-              {host?.provider ?? "未选择提供方"}
-              {host?.reasoningEffort
-                ? ` · 推理：${host.reasoningEffort}`
-                : " · 推理使用宿主默认设置"}
-            </p>
-            <Tag tone={host?.adapterRegistered ? "green" : "amber"}>
-              {host?.adapterRegistered
-                ? "适配器已加载 · 凭据在调用时验证"
-                : "模型适配器未加载"}
-            </Tag>
-            <p>
-              模型、API 地址和密钥统一在{" "}
-              <strong>Harness 左下角「设置 → 模型」</strong>
-              管理。每次新任务读取宿主默认选择，无需在插件中重复填写；已运行任务保留启动时的模型。
-            </p>
-            <p className="mw-muted">
-              单个聊天的临时模型选择不会改变宿主默认模型。所有真实任务均通过
-              Harness Session 执行。
-            </p>
-          </div>
+            {native && (
+              <div className="mw-host-model">
+                <div className="mw-section-title">
+                  <Sparkles size={19} />
+                  跟随 Harness 默认模型
+                </div>
+                <h3>{host?.model ?? "等待宿主模型配置"}</h3>
+                <p>
+                  {host?.provider ?? "未选择提供方"}
+                  {host?.reasoningEffort
+                    ? ` · 推理：${host.reasoningEffort}`
+                    : " · 推理使用宿主默认设置"}
+                </p>
+                <Tag tone={host?.adapterRegistered ? "green" : "amber"}>
+                  {host?.adapterRegistered
+                    ? "适配器已加载 · 凭据在调用时验证"
+                    : "模型适配器未加载"}
+                </Tag>
+                <p>
+                  模型、API 地址和密钥统一在{" "}
+                  <strong>Harness 左下角「设置 → 模型」</strong>
+                  管理。每次新任务读取宿主默认选择，无需在插件中重复填写；已运行任务保留启动时的模型。
+                </p>
+                <p className="mw-muted">
+                  单个聊天的临时模型选择不会改变宿主默认模型。所有真实任务均通过
+                  Harness Session 执行。
+                </p>
+              </div>
+            )}
+            <div className="mw-connection-list">
+              <GitHubConnection refreshKey={busy} />
+              <div>
+                执行环境<Tag>{native ? "Harness 原生 Agent" : "独立预览"}</Tag>
+              </div>
+            </div>
+          </>
         )}
-        <div className="mw-connection-list">
-          <GitHubConnection refreshKey={busy} />
-          <div>
-            执行环境<Tag>{native ? "Harness 原生 Agent" : "独立预览"}</Tag>
-          </div>
-        </div>
       </section>
-      <form
-        className="mw-settings-card"
-        onSubmit={(e) => {
-          e.preventDefault();
-          save(settings);
-        }}
-      >
-        <div className="mw-section-title">
-          <Settings2 size={19} />
-          执行策略
-        </div>
-        <div className="mw-form-grid">
-          {!native && (
-            <>
-              <label>
-                模型提供方
-                <input
-                  value={settings.provider}
-                  onChange={(e) =>
-                    setSettings({ ...settings, provider: e.target.value })
-                  }
-                  required
-                />
-              </label>
-              <label>
-                模型名称
-                <input
-                  value={settings.model}
-                  onChange={(e) =>
-                    setSettings({ ...settings, model: e.target.value })
-                  }
-                  required
-                />
-              </label>
-            </>
-          )}
-          <label>
-            并发任务
-            <input
-              type="number"
-              min="1"
-              max="4"
-              value={settings.concurrency}
-              onChange={(e) =>
-                setSettings({ ...settings, concurrency: +e.target.value })
-              }
-            />
-          </label>
-          <label>
-            每批任务上限
-            <input
-              type="number"
-              min="1"
-              max="50"
-              value={settings.maxJobsPerBatch}
-              onChange={(e) =>
-                setSettings({ ...settings, maxJobsPerBatch: +e.target.value })
-              }
-            />
-          </label>
-          <label>
-            定时同步（分钟，0 表示关闭）
-            <input
-              type="number"
-              min="0"
-              max="1440"
-              value={settings.syncIntervalMinutes}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  syncIntervalMinutes: +e.target.value,
-                })
-              }
-            />
-          </label>
-          <label className="mw-check-label">
-            <input
-              type="checkbox"
-              checked={settings.autoTriage}
-              onChange={(e) =>
-                setSettings({ ...settings, autoTriage: e.target.checked })
-              }
-            />
-            同步后自动分诊新版本问题
-          </label>
-        </div>
-        <details className="mw-advanced">
-          <summary>高级执行选项（通常无需修改）</summary>
+      {scope === "global" && (
+        <form
+          className="mw-settings-card"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save(settings);
+          }}
+        >
+          <div className="mw-section-title">
+            <Settings2 size={19} />
+            全局默认执行策略
+          </div>
           <div className="mw-form-grid">
+            {!native && (
+              <>
+                <label>
+                  模型提供方
+                  <input
+                    value={settings.provider}
+                    onChange={(e) =>
+                      setSettings({ ...settings, provider: e.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  模型名称
+                  <input
+                    value={settings.model}
+                    onChange={(e) =>
+                      setSettings({ ...settings, model: e.target.value })
+                    }
+                    required
+                  />
+                </label>
+              </>
+            )}
             <label>
-              超时时间（秒）
+              并发任务
               <input
                 type="number"
                 min="1"
-                max="1800"
-                value={settings.timeoutMs / 1000}
+                max="4"
+                value={settings.concurrency}
+                onChange={(e) =>
+                  setSettings({ ...settings, concurrency: +e.target.value })
+                }
+              />
+            </label>
+            <label>
+              每批任务上限
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={settings.maxJobsPerBatch}
+                onChange={(e) =>
+                  setSettings({ ...settings, maxJobsPerBatch: +e.target.value })
+                }
+              />
+            </label>
+            <label>
+              同步记录上限（0 表示无上限）
+              <input
+                type="number"
+                min="0"
+                max="1000000"
+                value={settings.syncLimit ?? 1000}
+                onChange={(e) =>
+                  setSettings({ ...settings, syncLimit: +e.target.value })
+                }
+              />
+            </label>
+            <label>
+              定时同步（分钟，0 表示关闭）
+              <input
+                type="number"
+                min="0"
+                max="1440"
+                value={settings.syncIntervalMinutes}
                 onChange={(e) =>
                   setSettings({
                     ...settings,
-                    timeoutMs: +e.target.value * 1000,
+                    syncIntervalMinutes: +e.target.value,
                   })
                 }
               />
             </label>
-            <label>
-              每次请求输出 Token 上限
+            <label className="mw-check-label">
               <input
-                type="number"
-                min="500"
-                max="32000"
-                value={settings.maxTokens}
+                type="checkbox"
+                checked={settings.autoTriage}
                 onChange={(e) =>
-                  setSettings({ ...settings, maxTokens: +e.target.value })
+                  setSettings({ ...settings, autoTriage: e.target.checked })
                 }
               />
+              自动分诊新增或已更新的 Issue
             </label>
-            <label>
-              Harness Agent preset
+            <label className="mw-check-label">
               <input
-                value={settings.agentPreset}
+                type="checkbox"
+                checked={settings.autoPreflight ?? false}
                 onChange={(e) =>
-                  setSettings({ ...settings, agentPreset: e.target.value })
+                  setSettings({ ...settings, autoPreflight: e.target.checked })
                 }
               />
+              自动快速预检新增或已更新的 PR
             </label>
-            <label>
-              修复任务权限 preset
-              <input
-                value={settings.permissionPreset}
-                onChange={(e) =>
-                  setSettings({ ...settings, permissionPreset: e.target.value })
-                }
-              />
-            </label>
+            <p className="mw-muted">
+              手动或定时同步后自动派发，后台按批补齐。结果保存在本机，未变化的版本直接复用；失败后需手动重试。分诊使用模型并产生费用，不会自动修改代码或发布。
+            </p>
           </div>
-          <p className="mw-muted">
-            Agent preset 填 inherit 跟随宿主默认（当前：
-            {host?.agentPreset ?? "仅原生环境可用"}），自动复用该 preset
-            的工具与 Skills。调查、审查使用 read-only；修复、文档的权限填
-            inherit 时也跟随宿主默认。
-          </p>
-        </details>
-        <div className="mw-callout amber">
-          <ShieldCheck size={18} />
-          <p>
-            单次输出上限不等于总费用上限。执行遵循 Harness
-            的权限策略；工作台不自动发布评论、推送分支或合并 PR。
-          </p>
-        </div>
-        <button className="mw-button primary" disabled={busy}>
-          <Check size={15} />
-          保存设置
-        </button>
-      </form>
+          <details className="mw-advanced">
+            <summary>高级执行选项（通常无需修改）</summary>
+            <div className="mw-form-grid">
+              <label>
+                超时时间（秒）
+                <input
+                  type="number"
+                  min="1"
+                  max="1800"
+                  value={settings.timeoutMs / 1000}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      timeoutMs: +e.target.value * 1000,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                分诊 / PR 预检输出 Token 上限
+                <input
+                  type="number"
+                  min="500"
+                  max="8000"
+                  value={settings.triageMaxTokens ?? 1800}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      triageMaxTokens: +e.target.value,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                每次请求输出 Token 上限
+                <input
+                  type="number"
+                  min="500"
+                  max="32000"
+                  value={settings.maxTokens}
+                  onChange={(e) =>
+                    setSettings({ ...settings, maxTokens: +e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Harness Agent preset
+                <input
+                  value={settings.agentPreset}
+                  onChange={(e) =>
+                    setSettings({ ...settings, agentPreset: e.target.value })
+                  }
+                />
+              </label>
+              <label>
+                修复任务权限 preset
+                <input
+                  value={settings.permissionPreset}
+                  onChange={(e) =>
+                    setSettings({
+                      ...settings,
+                      permissionPreset: e.target.value,
+                    })
+                  }
+                />
+              </label>
+            </div>
+            <p className="mw-muted">
+              Agent preset 填 inherit 跟随宿主默认（当前：
+              {host?.agentPreset ?? "仅原生环境可用"}），自动复用该 preset
+              的工具与 Skills。调查、审查使用 read-only；修复、文档的权限填
+              inherit 时也跟随宿主默认。
+            </p>
+          </details>
+          <div className="mw-callout amber">
+            <ShieldCheck size={18} />
+            <p>
+              单次输出上限不等于总费用上限。执行遵循 Harness
+              的权限策略；工作台不自动发布评论、推送分支或合并 PR。
+            </p>
+          </div>
+          <button className="mw-button primary" disabled={busy}>
+            <Check size={15} />
+            保存设置
+          </button>
+        </form>
+      )}
     </div>
   );
 }

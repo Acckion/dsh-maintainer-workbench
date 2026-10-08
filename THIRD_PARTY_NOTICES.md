@@ -43,6 +43,7 @@ OpenAI Codex — Copyright 2025 OpenAI. Unmodified upstream license and NOTICE f
 Only workflow text is adapted; the referenced Python helper scripts are not bundled. CI log fetching, threaded review publication and live CI rerun are not implied by these prompts and remain separate capabilities. Actual model-quality improvement requires a controlled benchmark.
 
 
+
 ## Bundled runtime notices and evaluation boundary (2026-10-02)
 
 The unmodified React, React DOM, Scheduler, Lucide and Zod license texts are now retained in `third_party/runtime/`. The accompanying manifest records exact installed versions, upstream sources, use, retained-notice paths and SHA-256 hashes. The `third_party` directory is included in the distributed tarball. This supplements the minified bundle headers, which refer to their upstream LICENSE files. Dependency changes require updating and rechecking this inventory; transitive resolution remains in package-lock.json.
@@ -50,3 +51,7 @@ The unmodified React, React DOM, Scheduler, Lucide and Zod license texts are now
 The deterministic evaluation corpus is newly authored for this project with generative-AI assistance, not copied from third-party issue data. It has no real model inference or paid API usage. AI-assisted implementation and review should be disclosed in competition materials together with the team's own review, changes and validation. Team identity, eligibility, ownership approvals and final submission declarations are not supplied by these technical records.
 
 A configured real DeepSeek or other model API and GitHub are external services, not parts relicensed by this repository. Their actual provider/model/version, applicable terms and usage must be added to the final competition resource list once the team selects and authorizes the real demonstration setup.
+
+## Repository detail Markdown rendering
+
+`react-markdown` 10.1.0 and `remark-gfm` 4.0.1 are MIT-licensed packages by the unified/remark community. The renderer supports GFM tables, task lists and code blocks. Raw HTML is skipped and remote images are rendered as explicit links. Package licenses are retained by their npm distributions.

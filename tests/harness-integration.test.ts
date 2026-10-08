@@ -20,7 +20,7 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
     llm: { listProviders: () => [{ id: selection.provider }] },
     agentPresets: { defaultId: 'host-standard', resolve: async (id?: string) => ({ id: id ?? 'host-standard' }), mount: async (_: unknown, id: string) => { calls.at(-1).preset = id; } },
     permissionPresets: { resolve: (p: string) => permissions.push(p), set: () => {} },
-    workspaceRegistry: { create: async (path: string) => ({ path, attachSession: async () => {} }) },
+    workspaceRegistry: { archiveSession:async(id:string)=>{calls.at(-1).archived=id;}, create: async (path: string) => ({ path, attachSession: async () => {} }) },
     on: (_: string, fn: any) => { listener = fn; return () => {}; },
     agents: { create: async (options: any) => { calls.push(options); await options.setup({ tools: { schemas: () => [], restrict: (v: unknown) => { calls.at(-1).restriction = v; }, guard: () => {} } }); return { dispose: async () => {}, agent: { session: {}, cancel: () => {}, whenIdle: async () => {}, followup: (message: unknown) => { texts.push(JSON.stringify(message)); queueMicrotask(() => { listener({ id: options.sessionId }, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: JSON.stringify({ schemaVersion:1, stage:'triage', summary:'triage', coverage:'metadata', evidence:[], nextSteps:[], responseDraft:'draft', category:'bug', priority:'P2', labels:[], module:'unknown', impact:'unknown', missingInfo:[], duplicateOf:null, duplicateReason:'', route:'investigate', routeReason:'needs evidence' }).replace(',"category":', '],"category":') }] } } }); listener({ id: options.sessionId }, { type: 'turn/end', data: { reason: { kind: 'completed' } } }); }); } } }; } }
   } as unknown as Context;
@@ -32,16 +32,16 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   w.updateSettings({ ...store.settings(), provider: 'wrong-provider', model: 'wrong-model', agentPreset: 'inherit' });
   w.enqueue([issue.id], 'triage'); w.pump(); await w.drain();
   assert.equal(store.jobs()[0].status, 'completed');
-  assert.deepEqual(calls[0].agentOptions, { ...selection, maxTokens: 6000 });
-  assert.equal(calls[0].preset, undefined); assert.deepEqual(calls[0].restriction, {allow:[]}); assert.deepEqual(store.jobs()[0].result?.tests, []);
+  assert.deepEqual(calls[0].agentOptions, { ...selection, maxTokens: 1800 });
+  assert.equal(calls[0].archived,`maintainer-${store.jobs()[0].id}`); assert.equal(calls[0].preset, undefined); assert.deepEqual(calls[0].restriction, {allow:[]}); assert.deepEqual(store.jobs()[0].result?.tests, []);
   assert.ok(store.jobs()[0].rawOutput?.includes('],"category":'));
   assert.ok(store.audits().some(a => a.detail.includes('已修复模型结果')));
   assert.ok(store.jobs()[0].analysisPath); assert.equal(store.jobs()[0].worktree, undefined);
   selection = { provider: 'host-b', model: 'model-b', reasoningEffort: 'low' };
   assert.equal(w.snapshot().capabilities.host?.model, 'model-b');
   w.enqueue([store.issues()[1].id], 'triage'); w.pump(); await w.drain();
-  assert.deepEqual(calls[1].agentOptions, { ...selection, maxTokens: 6000 });
-  assert.ok(texts.every(t => t.includes('Metadata-only workspace')));
+  assert.deepEqual(calls[1].agentOptions, { ...selection, maxTokens: 1800 });
+  assert.ok(texts.every(t => t.includes('Metadata routing only') && t.includes('sourceCodeRead')));
   assert.deepEqual(permissions, ['read-only', 'read-only']);
   await w.close();
 });

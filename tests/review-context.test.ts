@@ -60,7 +60,7 @@ for (const [kind, denied, patched] of [['review', false, false], ['fix', false, 
   } as unknown as Context;
   try {
     const repo = store.repos()[0], issue = store.issues()[0];
-    const job = { id: 'default-review', kind, worktree: root, baseSha: sha, reviewRequiredSources: ['chunk.ts'], handoff: [{ id: 'old-job', kind: 'review', revision: 'sha', artifact }] } as Job;
+    const job = { id: 'default-review', issueSnapshot: issue, attempt: 1, kind, worktree: root, baseSha: sha, reviewRequiredSources: ['chunk.ts'], handoff: [{ id: 'old-job', kind: 'review', revision: 'sha', artifact }] } as Job;
     await harnessRunner(ctx, new GitHub('', async () => Response.json([])))({ repo, issue, related: [], job, settings: store.settings(), signal: new AbortController().signal, progress: () => {} });
     assert.equal(requestTexts.length, kind === 'review' ? 2 : denied || patched ? 2 : 3, 'at most one completion; permission rejection prevents implementation retry');
     if (!denied && !patched) assert.match(requestTexts[1], kind === 'review' ? /EVIDENCE REPAIR, one attempt only/ : kind === 'validate' ? /VALIDATION EXECUTION, one attempt only/ : /IMPLEMENTATION COMPLETION, one attempt only/);

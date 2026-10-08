@@ -53,5 +53,671 @@
     "sha256": "3f1189b28e3866e0d979968d466b78f813f76827cfdca1fbb124cc0a5c8841f8",
     "modifications": "Upstream library unchanged; bundled as applicable",
     "obligation": "Preserve upstream copyright and license/permission notice"
+  },
+  {
+    "name": "devlop",
+    "version": "1.1.0",
+    "notice": "third_party/runtime/devlop.LICENSE",
+    "sha256": "6f296a5eccc1dc96714bb94ebaa9cac25b0a1467d74cc5263ac4d0646ab01f62",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/devlop",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "comma-separated-tokens",
+    "version": "2.0.3",
+    "notice": "third_party/runtime/comma-separated-tokens.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/comma-separated-tokens",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "estree-util-is-identifier-name",
+    "version": "3.0.0",
+    "notice": "third_party/runtime/estree-util-is-identifier-name.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/estree-util-is-identifier-name",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "hast-util-whitespace",
+    "version": "3.0.0",
+    "notice": "third_party/runtime/hast-util-whitespace.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/hast-util-whitespace",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "property-information",
+    "version": "7.2.0",
+    "notice": "third_party/runtime/property-information.LICENSE",
+    "sha256": "5d0698266086f217bb11ea0499d33453e401fe479fb9126ad04e625e63d3557b",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/property-information",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "space-separated-tokens",
+    "version": "2.0.2",
+    "notice": "third_party/runtime/space-separated-tokens.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/space-separated-tokens",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "inline-style-parser",
+    "version": "0.2.7",
+    "notice": "third_party/runtime/inline-style-parser.LICENSE",
+    "sha256": "395c95f20598da653ff1eb1cb9d74947c7fac689697147f1d192fd0242a0e635",
+    "sourceLicense": "LICENSE",
+    "source": "git+https://github.com/remarkablemark/inline-style-parser.git",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "style-to-object",
+    "version": "1.0.14",
+    "notice": "third_party/runtime/style-to-object.LICENSE",
+    "sha256": "896c9fd6b5fc48ac31800b9d29a6e3ffcb0c2d534ed077ebfa5c2fa388cc38b7",
+    "sourceLicense": "LICENSE",
+    "source": "git+https://github.com/remarkablemark/style-to-object.git",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "style-to-js",
+    "version": "1.1.21",
+    "notice": "third_party/runtime/style-to-js.LICENSE",
+    "sha256": "bbb380e5c1a717079378d6ea4d33c8a5a81655d4612b749f882e34e46712aab5",
+    "sourceLicense": "LICENSE",
+    "source": "git+https://github.com/remarkablemark/style-to-js.git",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "unist-util-position",
+    "version": "5.0.0",
+    "notice": "third_party/runtime/unist-util-position.LICENSE",
+    "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/unist-util-position",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "unist-util-stringify-position",
+    "version": "4.0.0",
+    "notice": "third_party/runtime/unist-util-stringify-position.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/unist-util-stringify-position",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "vfile-message",
+    "version": "4.0.3",
+    "notice": "third_party/runtime/vfile-message.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "vfile/vfile-message",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "hast-util-to-jsx-runtime",
+    "version": "2.3.6",
+    "notice": "third_party/runtime/hast-util-to-jsx-runtime.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/hast-util-to-jsx-runtime",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "html-url-attributes",
+    "version": "3.0.1",
+    "notice": "third_party/runtime/html-url-attributes.LICENSE",
+    "sha256": "e18cf5173e928f808f0cd208097fee8fbec9d28fc0255213938e4c559e29ff58",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/rehypejs/rehype-minify/tree/main/packages/html-url-attributes",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-to-string",
+    "version": "4.0.0",
+    "notice": "third_party/runtime/mdast-util-to-string.LICENSE",
+    "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-to-string",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "decode-named-character-reference",
+    "version": "1.3.0",
+    "notice": "third_party/runtime/decode-named-character-reference.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/decode-named-character-reference",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-chunked",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-chunked.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-chunked",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-combine-extensions",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-combine-extensions.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-combine-extensions",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-decode-numeric-character-reference",
+    "version": "2.0.2",
+    "notice": "third_party/runtime/micromark-util-decode-numeric-character-reference.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-numeric-character-reference",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-encode",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-encode.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-encode",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-normalize-identifier",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-normalize-identifier.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-normalize-identifier",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-character",
+    "version": "2.1.1",
+    "notice": "third_party/runtime/micromark-util-character.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-character",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-sanitize-uri",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-sanitize-uri.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-sanitize-uri",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark",
+    "version": "4.0.3",
+    "notice": "third_party/runtime/micromark.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-factory-space",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/micromark-factory-space.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-edit-map",
+    "version": "1.0.0",
+    "notice": "third_party/runtime/micromark-util-edit-map.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-edit-map",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-classify-character",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-classify-character.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-classify-character",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-resolve-all",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-resolve-all.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-resolve-all",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-core-commonmark",
+    "version": "2.0.4",
+    "notice": "third_party/runtime/micromark-core-commonmark.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-subtokenize",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/micromark-util-subtokenize.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-subtokenize",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-factory-destination",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-factory-destination.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-factory-destination",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-factory-label",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-factory-label.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-factory-label",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-factory-title",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-factory-title.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-factory-title",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-factory-whitespace",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-factory-whitespace.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-factory-whitespace",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-html-tag-name",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-html-tag-name.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-html-tag-name",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-util-decode-string",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/micromark-util-decode-string.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-decode-string",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-from-markdown",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/mdast-util-from-markdown.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-from-markdown",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "remark-parse",
+    "version": "11.0.0",
+    "notice": "third_party/runtime/remark-parse.LICENSE",
+    "sha256": "413654b0a78b98661dce96d2aff2e4d075603d220b8483e28b1aa010ccc138b4",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/remarkjs/remark/tree/main/packages/remark-parse",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-to-hast",
+    "version": "13.2.1",
+    "notice": "third_party/runtime/mdast-util-to-hast.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-to-hast",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "trim-lines",
+    "version": "3.0.1",
+    "notice": "third_party/runtime/trim-lines.LICENSE",
+    "sha256": "9f084fac69d8cf1e6ce983ba5a3499c7695ed74a26ec625c38f0fd19fddd5e10",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/trim-lines",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "@ungap/structured-clone",
+    "version": "1.4.0",
+    "notice": "third_party/runtime/@ungap-structured-clone.LICENSE",
+    "sha256": "dc6d4961d8b6ee747231582ae9c53ce1d66bf76bc9f5a28f554c0e97210953bf",
+    "sourceLicense": "LICENSE",
+    "source": "git+https://github.com/ungap/structured-clone.git",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "unist-util-is",
+    "version": "6.0.1",
+    "notice": "third_party/runtime/unist-util-is.LICENSE",
+    "sha256": "82974dbf2639d13edab95c32ed9cb6c0867ede272cd2e07ce47ce8548fe55c05",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/unist-util-is",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "unist-util-visit-parents",
+    "version": "6.0.2",
+    "notice": "third_party/runtime/unist-util-visit-parents.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/unist-util-visit-parents",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "unist-util-visit",
+    "version": "5.1.0",
+    "notice": "third_party/runtime/unist-util-visit.LICENSE",
+    "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/unist-util-visit",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "remark-rehype",
+    "version": "11.1.2",
+    "notice": "third_party/runtime/remark-rehype.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "remarkjs/remark-rehype",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "bail",
+    "version": "2.0.2",
+    "notice": "third_party/runtime/bail.LICENSE",
+    "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/bail",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "extend",
+    "version": "3.0.2",
+    "notice": "third_party/runtime/extend.LICENSE",
+    "sha256": "97af7428f93afbab9bf79cd09254da1357161794f4255eb1b4599f04dd2d2e7c",
+    "sourceLicense": "LICENSE",
+    "source": "https://github.com/justmoon/node-extend.git",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "is-plain-obj",
+    "version": "4.1.0",
+    "notice": "third_party/runtime/is-plain-obj.LICENSE",
+    "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+    "sourceLicense": "LICENSE",
+    "source": "sindresorhus/is-plain-obj",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "trough",
+    "version": "2.2.0",
+    "notice": "third_party/runtime/trough.LICENSE",
+    "sha256": "6c03fd41cfd7c92d8aa8a2fa521b94b2683f059123281dcf921ddea9216b6254",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/trough",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "vfile",
+    "version": "6.0.3",
+    "notice": "third_party/runtime/vfile.LICENSE",
+    "sha256": "05811400116ed61f1a7693b78fe8ca6598c155a12f3978e609db4df648a4cb3d",
+    "sourceLicense": "LICENSE",
+    "source": "vfile/vfile",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "unified",
+    "version": "11.0.5",
+    "notice": "third_party/runtime/unified.LICENSE",
+    "sha256": "05811400116ed61f1a7693b78fe8ca6598c155a12f3978e609db4df648a4cb3d",
+    "sourceLicense": "LICENSE",
+    "source": "unifiedjs/unified",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "react-markdown",
+    "version": "10.1.0",
+    "notice": "third_party/runtime/react-markdown.LICENSE",
+    "sha256": "f6196c64e144f9a6fa9154c3a80bc8b89615a9567934b83a8951879f06ba2aef",
+    "sourceLicense": "LICENSE",
+    "source": "remarkjs/react-markdown",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "ccount",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/ccount.LICENSE",
+    "sha256": "63cb98b3f6abfb3c3592c16f88253c1bdc834087bf52671e8ce5609e4eb693cf",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/ccount",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "escape-string-regexp",
+    "version": "5.0.0",
+    "notice": "third_party/runtime/escape-string-regexp.LICENSE",
+    "sha256": "5c932d88256b4ab958f64a856fa48e8bd1f55bc1d96b8149c65689e0c61789d3",
+    "sourceLicense": "LICENSE",
+    "source": "sindresorhus/escape-string-regexp",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-find-and-replace",
+    "version": "3.0.3",
+    "notice": "third_party/runtime/mdast-util-find-and-replace.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-find-and-replace",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-gfm-autolink-literal",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/mdast-util-gfm-autolink-literal.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-gfm-autolink-literal",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-gfm-footnote",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/mdast-util-gfm-footnote.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-gfm-footnote",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-gfm-strikethrough",
+    "version": "2.0.1",
+    "notice": "third_party/runtime/mdast-util-gfm-strikethrough.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-gfm-strikethrough",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "markdown-table",
+    "version": "3.0.4",
+    "notice": "third_party/runtime/markdown-table.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/markdown-table",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-phrasing",
+    "version": "4.1.0",
+    "notice": "third_party/runtime/mdast-util-phrasing.LICENSE",
+    "sha256": "b6d1a4e1831b177acc96f22a817d4f0f4c18419355badc3125754445fc69e3a7",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-phrasing",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "zwitch",
+    "version": "2.0.4",
+    "notice": "third_party/runtime/zwitch.LICENSE",
+    "sha256": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/zwitch",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-to-markdown",
+    "version": "2.2.0",
+    "notice": "third_party/runtime/mdast-util-to-markdown.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-to-markdown",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "longest-streak",
+    "version": "3.1.0",
+    "notice": "third_party/runtime/longest-streak.LICENSE",
+    "sha256": "9f084fac69d8cf1e6ce983ba5a3499c7695ed74a26ec625c38f0fd19fddd5e10",
+    "sourceLicense": "LICENSE",
+    "source": "wooorm/longest-streak",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-gfm-table",
+    "version": "2.0.0",
+    "notice": "third_party/runtime/mdast-util-gfm-table.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-gfm-table",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-gfm-task-list-item",
+    "version": "2.0.0",
+    "notice": "third_party/runtime/mdast-util-gfm-task-list-item.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-gfm-task-list-item",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "mdast-util-gfm",
+    "version": "3.1.0",
+    "notice": "third_party/runtime/mdast-util-gfm.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "syntax-tree/mdast-util-gfm",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm-autolink-literal",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/micromark-extension-gfm-autolink-literal.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm-autolink-literal",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm-footnote",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/micromark-extension-gfm-footnote.LICENSE",
+    "sha256": "807a88522a850092aece49486207c17c313c4d5708ac276524840fe1caa0b0fa",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm-footnote",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm-strikethrough",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/micromark-extension-gfm-strikethrough.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm-strikethrough",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm-table",
+    "version": "2.1.2",
+    "notice": "third_party/runtime/micromark-extension-gfm-table.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm-table",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm-tagfilter",
+    "version": "2.0.0",
+    "notice": "third_party/runtime/micromark-extension-gfm-tagfilter.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm-tagfilter",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm-task-list-item",
+    "version": "2.1.0",
+    "notice": "third_party/runtime/micromark-extension-gfm-task-list-item.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm-task-list-item",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "micromark-extension-gfm",
+    "version": "3.0.0",
+    "notice": "third_party/runtime/micromark-extension-gfm.LICENSE",
+    "sha256": "536804b3adbff17dbbb9ed0d2bf9655b78f07640278581e37e3d7475282d5e61",
+    "sourceLicense": "LICENSE",
+    "source": "micromark/micromark-extension-gfm",
+    "use": "Bundled repository detail Markdown renderer"
+  },
+  {
+    "name": "remark-gfm",
+    "version": "4.0.1",
+    "notice": "third_party/runtime/remark-gfm.LICENSE",
+    "sha256": "dd1081884a92952802f4803110a6bb543acea9a814c786d58605b4c1219b5ebb",
+    "sourceLicense": "LICENSE",
+    "source": "remarkjs/remark-gfm",
+    "use": "Bundled repository detail Markdown renderer"
   }
 ]

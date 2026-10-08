@@ -96,6 +96,7 @@ test('same SHA on a renamed PR branch cannot reuse a review bound to the previou
 
 test('review revoked during a later freshness await cannot produce a comment POST',async t=>{
   const f=await setup(t);const review=await f.run('review',f.check.id);await f.w.review(review.id,'approve','accepted');await f.w.review(f.fix.id,'approve','accepted');
+  const impl=f.store.get<Job>('jobs',f.fix.id)!;f.store.put('jobs',{...impl,result:{...impl.result!,responseDraft:'Reviewed delivery update'}});
   const original=f.gh.request.bind(f.gh);let posts=0;
   f.gh.request=async(path,init)=>{if(init?.method==='POST'){posts++;return{html_url:'https://github.com/fixture/queue/issues/128#comment'};}if(path.endsWith('/issues/128')){f.store.put('jobs',{...f.store.get<Job>('jobs',review.id)!,status:'rejected'});return{updated_at:f.issue.updatedAt};}if(path.includes('/comments?'))return[];return original(path,init);};
   const token=process.env.GITHUB_TOKEN;process.env.GITHUB_TOKEN='fixture';try{await assert.rejects(publish(f.store,f.store.get<Job>('jobs',f.fix.id)!,f.repo,'comment',f.gh),/发布前已变化/);}finally{if(token===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=token;}
