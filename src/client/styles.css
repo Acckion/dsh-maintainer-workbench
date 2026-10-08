@@ -387,3 +387,14 @@
 .mw-stage-panel{padding:8px 0;gap:12px}
 .mw-stage-flow{padding-bottom:10px}
 .mw-reader-content details.mw-compact-notice>summary{margin:0;font-size:12px}
+
+.mw-review-summary > section { padding: 14px 0; border-top: 1px solid #e1e8e5; }
+.mw-review-summary > section > h4 { margin-top: 0; }
+.mw-review-summary .mw-review-bar { border: 1px solid #e3ece6; border-radius: 8px; padding: 14px; }
+.mw-review-summary .mw-review-bar > div, .mw-review-summary .mw-publish-actions { flex-wrap: wrap; }
+.mw-revision-history { padding-left: 20px; }
+.mw-revision-history li { padding: 8px 0; }
+.mw-review-summary .mw-finding code { display: block; margin-top: 6px; }
+
+.mw-final-review-nav { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 14px; }
+.mw-final-review-nav .mw-text-button { font-size: 12px !important; }

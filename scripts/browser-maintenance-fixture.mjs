@@ -101,6 +101,21 @@ try {
       await page.getByLabel('讨论串操作确认', { exact: true }).waitFor(); assert.equal(writes, 0);
       await page.getByRole('button', { name: '确认修改远端讨论串', exact: true }).click();
       await page.getByText(/GitHub 已解决/).waitFor(); assert.equal(writes, 1);
+      // Final review keeps all five decision sections and existing guarded actions together.
+      const summary = page.getByRole('region', { name: '审阅摘要', exact: true });
+      await summary.getByRole('heading', { name: '最终审核', exact: true }).waitFor();
+      for (const name of ['目标完成情况', '验证证据', '未解决发现', '修订记录', '交付操作']) {
+        await summary.getByRole('heading', { name, exact: true }).waitFor();
+      }
+      assert.equal(await summary.getByRole('button', { name: '接受此报告', exact: true }).count(), 1);
+      assert.equal(await page.getByRole('button', { name: '接受此报告', exact: true }).count(), 1);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      for (const [index, name] of ['目标完成情况', '验证证据', '未解决发现', '修订记录', '交付操作'].entries()) {
+        await summary.getByRole('button', { name, exact: true }).click();
+        await page.screenshot({ path: join(dir, `final-review-section-${index}-${width}.png`), fullPage: true });
+      }
+      await summary.getByRole('heading', { name: '最终审核', exact: true }).scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(dir, `final-review-${width}.png`), fullPage: true });
       await page.getByRole('button', { name: '证据', exact: true }).click();
       await page.getByRole('button', { name: '读取保存的原始工具日志', exact: true }).click();
       await page.getByText(/Fixture assertion failed/, { exact: false }).last().waitFor();

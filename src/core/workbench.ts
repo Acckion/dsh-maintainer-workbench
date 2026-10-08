@@ -26,6 +26,7 @@ import { Store } from "./store.ts";
 import { GitHub } from "./github.ts";
 import {
   collectPatch,
+  applicationPatch,
   prepareWorktree,
   validateCheckout,
   prepareManagedCheckout,
@@ -248,7 +249,9 @@ export class Workbench {
           !i.origin &&
           !i.linkedPullRequests?.length &&
           !["answered", "deferred"].includes(i.workflow?.stage ?? "") &&
-          !i.informationRequests?.some(r => ["asked", "reply_received"].includes(r.state)) &&
+          !i.informationRequests?.some((r) =>
+            ["asked", "reply_received"].includes(r.state),
+          ) &&
           !jobs.some(
             (j) =>
               j.issueId === i.id &&
@@ -1843,17 +1846,17 @@ export class Workbench {
           ["fix", "docs", "validate", "review"].includes(job.kind) &&
           ["fix", "docs", "review", "validate"].includes(source.kind)
         ) {
-          if (
-            source.baseSha !== job.baseSha ||
-            !source.worktree ||
-            (await collectPatch(source.worktree, source.baseSha)) !==
-              source.patch
-          )
+          if (source.baseSha !== job.baseSha || !source.worktree)
             throw new Error("交接补丁或基础版本已变化");
+          const patch = await applicationPatch(
+            source.worktree,
+            source.baseSha,
+            source.patch,
+          );
           const { writeFile } = await import("node:fs/promises");
           const patchFile = join(this.dataDir, "analysis", `${job.id}.patch`);
           await mkdir(join(this.dataDir, "analysis"), { recursive: true });
-          await writeFile(patchFile, source.patch + "\n");
+          await writeFile(patchFile, patch);
           await git(job.worktree, ["apply", "--index", patchFile]);
           progress("已将来源补丁应用到新的隔离工作区");
         }

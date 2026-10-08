@@ -28,13 +28,21 @@ export async function prepareWorktree(repo: Repo, job: Job, dataDir: string): Pr
   await git(repo.localPath, ['worktree', 'add', '-b', branch, path, job.baseSha]);
   return { path, branch };
 }
-export async function collectPatch(path: string, base = 'HEAD'): Promise<string> {
+export async function collectPatch(path: string, base = 'HEAD', preserveWhitespace = false): Promise<string> {
   // Only the plugin-owned worktree index is changed. Untracked new files are included.
   await git(path, ['add', '--all']);
   const patch = await git(path, ['diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', base, '--'], false, undefined, 30000, true);
   // Binary blocks need their closing blank line; trimming can silently drop the last file.
   // Retain the existing text-only representation so historical approvals stay comparable.
-  return patch.includes('GIT binary patch\n') ? patch : patch.trimEnd();
+  return preserveWhitespace || patch.includes('GIT binary patch\n') ? patch : patch.trimEnd();
+}
+
+/** Rebuild apply input without changing historical text-patch identities. */
+export async function applicationPatch(path: string, base: string, expected: string): Promise<string> {
+  const patch = await collectPatch(path, base, true);
+  const identity = patch.includes('GIT binary patch\n') ? patch : patch.trimEnd();
+  if (identity !== expected) throw new Error('交接补丁或基础版本已变化');
+  return patch;
 }
 
 /** Plugin-owned clone, used only when no user checkout is bound. Clone never executes repository scripts. */

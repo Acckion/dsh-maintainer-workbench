@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { Audit, Issue, Job } from '../src/core/types.ts';
 import { artifactSchemas, asAnalysis } from '../src/core/artifacts.ts';
 import { AcceptArtifactButton, ReviewSummary, type DetailTab } from '../src/client/ReviewSummary.tsx';
-import { acceptanceEligibility, executionExplanation, patchScope, reviewEvidence, reviewQueue, selectedAnalysis, taskStatus } from '../src/client/review-evidence.ts';
+import { acceptanceEligibility, executionExplanation, patchScope, reviewEvidence, reviewQueue, selectedAnalysis, taskStatus, revisionHistory } from '../src/client/review-evidence.ts';
 import { WorkflowPanel } from '../src/client/WorkflowPanel.tsx';
 
 const saved = JSON.parse(readFileSync(new URL('../docs/evidence/product-trial-2026-10-02/after.json', import.meta.url), 'utf8'));
@@ -283,4 +283,46 @@ test('patch scope counts text hunks rather than file headers or binary payload',
   assert.equal(patchScope(), '没有保存的代码补丁');
   const patch = 'diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1 @@\n-old\n+++literal\ndiff --git a/b b/b\nGIT binary patch\n+encoded\n-encoded\n';
   assert.match(patchScope(patch),/2 个文件差异 · \+1 \/ -1 文本行 · 含二进制/);
+});
+
+
+test('final review groups goals, current evidence, unresolved findings, history and delivery without claiming criterion completion', () => {
+  const f = finalChain();
+  const plan = { category: 'bug' as const, goal: 'Avoid duplicate delivery', reproduction: 'Click twice', expected: 'One delivery', actual: 'Two deliveries', scope: 'Delivery only', acceptanceCriteria: ['One delivery per patch'], decision: 'accepted' as const };
+  f.implementation.issueSnapshot.plan = plan;
+  if (f.review.artifact?.stage !== 'review') throw Error('fixture');
+  f.review.artifact.findings = [
+    { id: 'open', title: 'Unresolved duplicate delivery', severity: 'P1', path: 'delivery.ts', line: 3, trigger: 'double click', evidence: 'Two calls', recommendation: 'Deduplicate' },
+    { id: 'closed', title: 'Resolved obsolete issue', severity: 'P2', path: 'delivery.ts', line: 5, trigger: 'old', evidence: 'old', recommendation: 'old' },
+  ];
+  f.review.findingDecisions = { open: 'needs_evidence', closed: 'resolved' };
+  f.review.findingFollowups = [{ sourceJobId: 'historical-review', findingId: 'old-gap', status: 'unverified', evidence: 'Cannot verify historical fix' }];
+  const markup = renderToStaticMarkup(React.createElement(ReviewSummary, { ...props(f.implementation, f.jobs), issue: f.implementation.issueSnapshot, deliveryActions: React.createElement('button', null, 'Preview delivery') }));
+  for (const section of ['目标完成情况', '验证证据', '未解决发现', '修订记录', '交付操作']) assert.match(markup, new RegExp(`aria-label="${section}"`));
+  assert.match(markup, /Avoid duplicate delivery/); assert.match(markup, /待核对/);
+  assert.match(markup, /Unresolved duplicate delivery/); assert.doesNotMatch(markup, /Resolved obsolete issue/);
+  assert.match(markup, /无法确认已解决/); assert.match(markup, /Preview delivery/);
+  assert.doesNotMatch(markup, /目标全部完成<|验收全部通过/);
+  const changed = renderToStaticMarkup(React.createElement(ReviewSummary, { ...props(f.implementation, f.jobs), issue: { ...f.implementation.issueSnapshot, plan: { ...plan, goal: 'New goal' } } }));
+  assert.match(changed, /当前事项计划已变化/); assert.match(changed, /Avoid duplicate delivery/); assert.doesNotMatch(changed, /New goal/);
+});
+
+test('revision history follows explicit links, preserves failures and rejects unrelated records', () => {
+  const f = finalChain(), previous = structuredClone(f.implementation);
+  previous.id = 'prior-revision'; previous.status = 'rejected'; previous.patch = 'old patch'; previous.artifactState = 'stale'; previous.sourceJobId = undefined; previous.deliveryReviewId = undefined; previous.reviewNote = 'Repair the duplicate'; previous.createdAt = '2000-01-01T00:00:00Z';
+  f.implementation.sourceJobId = previous.id; f.jobs.push(previous);
+  const unrelated = { ...previous, id: 'unrelated-pass', issueId: 'other-issue', status: 'approved' as const }; f.jobs.push(unrelated);
+  const history = revisionHistory(f.implementation, f.jobs);
+  assert.equal(history.records[0].id, previous.id);
+  assert.ok(history.records.some(record => record.id === f.review.id));
+  assert.ok(!history.records.some(record => record.id === unrelated.id));
+  assert.ok(!reviewEvidence(f.implementation, f.jobs).validations.some(record => record.id === previous.id));
+  const markup = html(f.implementation, f.jobs);
+  assert.match(markup, /Repair the duplicate/); assert.match(markup, /历史来源，非当前补丁证据/);
+  previous.sourceJobId = unrelated.id;
+  assert.match(revisionHistory(f.implementation, f.jobs).warnings.join(' '), /属于其他事项/);
+  previous.sourceJobId = f.implementation.id;
+  assert.equal(new Set(revisionHistory(f.implementation, f.jobs).records.map(record => record.id)).size, revisionHistory(f.implementation, f.jobs).records.length);
+  previous.sourceJobId = 'missing-record';
+  assert.match(revisionHistory(f.implementation, f.jobs).warnings.join(' '), /缺失/);
 });

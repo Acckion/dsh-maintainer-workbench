@@ -125,6 +125,26 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
   return evidence;
 }
 
+/** Historical lineage only: different patches and failed attempts are never current evidence. */
+export function revisionHistory(selected: Job, jobs: Job[]): { records: Job[]; warnings: string[] } {
+  const byId = new Map(jobs.map(job => [job.id, job]));
+  const records: Job[] = [], warnings: string[] = [], seen = new Set<string>();
+  const visit = (id: string) => {
+    if (seen.has(id)) return;
+    if (seen.size >= 30) { warnings.push('修订来源超过显示上限，部分记录未展示'); return; }
+    seen.add(id);
+    const job = id === selected.id ? selected : byId.get(id);
+    if (!job || job.repoId !== selected.repoId || job.issueId !== selected.issueId || job.issueSnapshot.number !== selected.issueSnapshot.number) {
+      warnings.push('部分修订来源缺失或属于其他事项，未展示'); return;
+    }
+    records.push(job);
+    if (job.sourceJobId) visit(job.sourceJobId);
+    if (job.deliveryReviewId) visit(job.deliveryReviewId);
+  };
+  visit(selected.id);
+  return { records: records.sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)), warnings: [...new Set(warnings)] };
+}
+
 export function patchScope(patch?: string): string {
   if (!patch) return '没有保存的代码补丁';
   const lines = patch.split('\n');
