@@ -122,7 +122,7 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 
 ### Fresh profile compatibility
 
-The plugin accepts host Cordis `>=4.0.3 <4.1.0`; the source lockfile still tests `4.0.3`. Freshly resolved DSH `0.1.7` utility packages can require `~4.0.4`, so a fresh npm-style host should supply `4.0.4`. An isolated `0.1.7-alpha.1` host with `4.0.4` passed installed-package native workflows.
+The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers for Cordis `^4.0.5-alpha.1`, dsh-home-paths `^0.2.1-alpha.1`, and dsh-llm `^0.2.1-alpha.1`. The source lockfile resolves Cordis `4.0.5-alpha.1`. Git dependency installs build the package through `prepare`. The earlier isolated DSH `0.1.7-alpha.1` / Cordis `4.0.4` installed-package workflow evidence below describes the previous dependency contract; it does not verify the current host runtime.
 
 Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. This command requires pnpm 11 or later: before running it, verify `pnpm --version`; use an isolated pnpm 11+ tool directory if the user's PATH provides an older version. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).
 
