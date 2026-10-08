@@ -51,7 +51,8 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
         for (const id of new Set(p.issueIds)) { try { const issue = workbench.store.get<import('../core/types.ts').Issue>('issues',id); if (!issue) throw new Error('事项不存在'); const r = workbench.enqueue([id],issue.type === 'pr' ? 'preflight' : 'triage'); created.push(...r.created);reused.push(...r.reused); } catch(e) { errors.push({id,error:e instanceof Error ? e.message : '派发失败'}); } }
         send(res,200,{created,reused,errors});return;
       }
-      else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds), sourceJobId: z.string().optional(), instructions: z.string().max(8000).optional() }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind, { sourceJobId: p.sourceJobId, instructions: p.instructions })); return; }
+      else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds), sourceJobId: z.string().optional(), instructions: z.string().max(8000).optional(), forceNew: z.boolean().optional() }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind, { sourceJobId: p.sourceJobId, instructions: p.instructions, forceNew: p.forceNew })); return; }
+      else if (path === '/rerun') { send(res, 200, workbench.rerun(z.object({ id: z.string() }).parse(input).id)); return; }
       else if (path === '/remote/sync') { await workbench.syncRemote(z.object({issueId:z.string()}).parse(input).issueId); }
       else if (path === '/actions/sync') { const p=z.object({issueId:z.string(),number:z.number().int().positive().optional()}).parse(input); await workbench.syncActions(p.issueId,p.number); }
       else if (path === '/finding') { const p = z.object({ id: z.string(), findingId: z.string(), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.finding(p.id, p.findingId, p.decision); }

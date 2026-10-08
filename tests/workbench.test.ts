@@ -261,3 +261,31 @@ test('a second worker cannot take the same data directory', async () => {
   const release = lockDirectory(directory); assert.throws(() => lockDirectory(directory), /正在被进程/); release();
   const next = lockDirectory(directory); next();
 });
+
+
+test('explicit rerun preserves completed records and reuses an already queued rerun', async () => {
+  const { workbench, store, issue } = fixture(false);
+  const first = workbench.enqueue([issue.id], 'triage').created[0];
+  assert.throws(() => workbench.rerun(first), /仍在执行/);
+  workbench.pump(); await workbench.drain();
+  const original = structuredClone(store.jobs().find(j => j.id === first));
+  assert.deepEqual(workbench.enqueue([issue.id], 'triage'), { created: [], reused: [first] });
+  const rerun = workbench.rerun(first);
+  assert.equal(rerun.created.length, 1);
+  assert.notEqual(rerun.created[0], first);
+  assert.deepEqual(store.jobs().find(j => j.id === first), original);
+  assert.deepEqual(workbench.rerun(first), { created: [], reused: rerun.created });
+  assert.equal(store.jobs().length, 2);
+  await workbench.close();
+});
+
+test('primary handoff survives more than eight newer historical reports', async () => {
+ const {workbench,store,issue}=fixture(false);
+ const first=workbench.enqueue([issue.id],'triage').created[0];workbench.pump();await workbench.drain();
+ const source=store.jobs().find(j=>j.id===first)!;
+ for(let i=0;i<10;i++)store.put('jobs',{...source,id:`later-${i}`});
+ const dispatched=workbench.enqueue([issue.id],'investigate',{sourceJobId:first}).created[0];
+ const next=store.jobs().find(j=>j.id===dispatched)!;
+ assert.ok(next.handoff?.some(h=>h.id===first));assert.ok(next.handoff!.length<=8);
+ await workbench.close();
+});

@@ -13,7 +13,8 @@ export function executionRecord(job: Job, sessionId: string, seq: number, call: 
   const output = typeof meta.output === 'string' ? meta.output : typeof stdout.text === 'string' ? `${stdout.text}${typeof stderr.text === 'string' ? '\n' + stderr.text : ''}` : content;
   // Only structured host metadata supplies an exit code. Text in stdout may be repository-controlled.
   const exitCode = Number.isInteger(meta.exitCode) ? meta.exitCode as number : null;
-  return { id: `${sessionId}:${seq}`, sessionId, callId: String(message.toolCallId ?? ''), tool: call?.name ?? 'unknown', command: typeof args.command === 'string' ? args.command : undefined,
+  const sourcePath = args.file_path ?? args.path ?? args.filePath;
+  return { id: `${sessionId}:${seq}`, sessionId, callId: String(message.toolCallId ?? ''), tool: call?.name ?? 'unknown', sourcePath: typeof sourcePath === 'string' ? sourcePath : undefined, command: typeof args.command === 'string' ? args.command : undefined,
     cwd: typeof args.workdir === 'string' ? args.workdir : job.worktree, checkoutSha: job.baseSha, patchHash,
     exitCode, signal: typeof meta.signal === 'string' ? meta.signal : undefined, isError: message.isError === true,
     recordedAt: new Date().toISOString(), output: output.slice(0, 6000), truncated: output.length > 6000 || stdout.truncated === true || stderr.truncated === true };

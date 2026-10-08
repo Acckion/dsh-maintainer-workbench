@@ -6,7 +6,9 @@ import { GitHub } from '../src/core/github.ts';
 import { git } from '../src/core/git.ts';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-export const inject = ['agents', 'agentPresets', 'permissionPresets', 'workspaceRegistry', 'agentDefaultModel', 'llm'];
+import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner';
+import type {} from '@deepseek-ai/dsh-compaction';
+export const inject = ['agents', 'agentPresets', 'permissionPresets', 'workspaceRegistry', 'agentDefaultModel', 'llm', 'toolResultPruner', 'compaction'];
 export async function apply(ctx: Context) {
   const dir = process.env.FIXTURE_DIR!;
   const path = join(dir, 'repo');
@@ -27,7 +29,7 @@ export async function apply(ctx: Context) {
       workbench.enqueue(['fixture/native#1'], 'validate', { sourceJobId: implementation.id });
       await workbench.drain();
     }
-    await writeFile(join(dir, 'result.json'), JSON.stringify(workbench.snapshot(), null, 2)); console.log('NATIVE_FIXTURE_RESULT', store.jobs()[0].status, store.jobs()[0].error ?? '');
+    await writeFile(join(dir, 'result.json'), JSON.stringify({ ...workbench.snapshot(), contextProbe: { pruned: ctx.toolResultPruner.pruneContent([{ type: 'text', text: 'HEAD' + 'x'.repeat(12000) + 'TAIL' }]) } }, null, 2)); console.log('NATIVE_FIXTURE_RESULT', store.jobs()[0].status, store.jobs()[0].error ?? '');
   });
   ctx.effect(() => () => workbench.close());
 }

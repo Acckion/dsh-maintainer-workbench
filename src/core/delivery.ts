@@ -1,3 +1,5 @@
+import { documentAcceptance } from './document-acceptance.ts';
+import { assertReviewEvidence } from './review-evidence.ts';
 import { createHash } from 'node:crypto';
 import { realpath } from 'node:fs/promises';
 import { collectPatch, git } from './git.ts';
@@ -38,6 +40,7 @@ export async function resolveDelivery(store: Store, repo: Repo, reviewId: string
   const review = read(reviewId);
   if (review.kind !== 'review' || review.status !== 'approved' || review.artifact?.stage !== 'review') throw new Error('独立审查尚未批准，不能交接发布');
   if (review.artifact.verdict === 'incomplete' || review.artifact.blockers.length || review.artifact.findings.some(f => !['dismissed', 'resolved'].includes(review.findingDecisions?.[f.id] ?? ''))) throw new Error('审查仍有未处理的发现或阻塞');
+  await assertReviewEvidence(review);
   const chain: Job[] = [review], seen = new Set([review.id]);
   let cursor = review, validation: Job | undefined;
   while (!['fix', 'docs'].includes(cursor.kind)) {
@@ -47,7 +50,7 @@ export async function resolveDelivery(store: Store, repo: Repo, reviewId: string
     if (!['review', 'validate', 'fix', 'docs'].includes(cursor.kind)) throw new Error('审查未直接关联已验证的实施产物');
   }
   const implementation = cursor;
-  if (!validation || !['completed', 'approved'].includes(validation.status) || validationState(validation.artifact)?.state !== 'passed') throw new Error('完整验证尚未通过，请先修订或补齐验证');
+  if (!validation || !['completed', 'approved'].includes(validation.status) || validationState(validation.artifact ? documentAcceptance(validation.artifact, validation) : undefined)?.state !== 'passed') throw new Error('完整验证尚未通过，请先修订或补齐验证');
   if (!['awaiting_review', 'approved'].includes(implementation.status) || !implementation.patch) throw new Error('实施产物尚不可交接发布');
   const issue = store.get<Issue>('issues', review.issueId);
   if (!issue || issue.state !== 'open' || repo.id !== review.repoId) throw new Error('事项状态或仓库已变化');

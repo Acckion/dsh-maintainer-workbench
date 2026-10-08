@@ -1,3 +1,4 @@
+import { assertReviewEvidence } from './review-evidence.ts';
 import { resolveGitHubAuth } from './github-auth.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -35,6 +36,7 @@ function assertInputCurrent(store: Store, job: Job, repo: Repo): void {
 /** Re-read the actual code and issue inputs for preview and every new external write. */
 async function remoteInputs(store: Store, job: Job, repo: Repo, action: PublishAction, github: GitHub): Promise<string> {
   assertInputCurrent(store, job, repo);
+  await assertReviewEvidence(job);
   if (job.prContext) {
     const current = await github.pullRequest(repo, job.issueSnapshot.number);
     if ((current.headSha !== job.prContext.headSha && !(action === 'update_pr' && current.headSha === job.publishedCommit)) || current.baseSha !== job.prContext.baseSha) throw new Error('PR head/base 已变化，旧产物不可发布');

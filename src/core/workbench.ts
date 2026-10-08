@@ -1,5 +1,9 @@
+import { documentAcceptance } from './document-acceptance.ts';
+import { validationInstructions } from './validation-context.ts';
+import { reviewRequiredSources } from './review-context.ts';
+import { assertReviewEvidence, reviewEvidenceGate, verifiedReviewCoverage } from './review-evidence.ts';
 import { prNumber } from './remote-progress.ts';
-import { lightweight, type FindingDecision } from './artifacts.ts';
+import { lightweight, asAnalysis, type FindingDecision } from './artifacts.ts';
 import { localRepositoryProfile } from './repository-context.ts';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -179,7 +183,7 @@ export class Workbench {
   }
   private repo(id: string): Repo { const repo = this.store.get<Repo>('repos', id); if (!repo) throw new Error('仓库不存在'); return repo; }
   private job(id: string): Job { const job = this.store.get<Job>('jobs', id); if (!job) throw new Error('任务不存在'); return job; }
-  enqueue(issueIds: string[], kind: JobKind, options: { sourceJobId?: string; instructions?: string } = {}): { created: string[]; reused: string[] } {
+  enqueue(issueIds: string[], kind: JobKind, options: { sourceJobId?: string; instructions?: string; forceNew?: boolean } = {}): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
     const ids = [...new Set(z.array(z.string()).min(1).max(this.store.settings().maxJobsPerBatch).parse(issueIds))];
     const candidates = ids.map(id => {
@@ -198,14 +202,16 @@ export class Workbench {
       if (ids.length !== 1 || source.issueId !== ids[0] || !source.result || !['completed','awaiting_review','approved'].includes(source.status)) throw new Error('交接来源必须是同一事项的已完成产物');
       if (source.revision !== revision(candidates[0].issue, candidates[0].repo, source.kind) && !(source.kind === 'review' && ['review','fix','investigate','ci'].includes(kind))) throw new Error('来源产物已过期，请先重新分析');
     }
+    if (kind === 'validate') options = { ...options, instructions: validationInstructions(options.instructions, options.sourceJobId ? this.job(options.sourceJobId).kind : undefined) };
     const created: string[] = [], reused: string[] = [];
     this.store.transaction(() => {
       for (const { issue, repo } of candidates) {
         const rev = revision(issue, repo, kind);
-        const prior = this.store.jobs().find(j => j.issueId === issue.id && j.kind === kind && j.revision === rev && j.sourceJobId === options.sourceJobId && (j.instructions ?? '') === (options.instructions ?? '') && !['failed', 'cancelled', 'rejected'].includes(j.status));
-        if (prior) { reused.push(prior.id); this.store.audit('job.deduplicated', `重复派发复用已有任务 #${issue.number}`, prior.id); continue; }
+        const prior = [...this.store.jobs()].sort((a, b) => Number(['queued','running'].includes(b.status)) - Number(['queued','running'].includes(a.status))).find(j => j.issueId === issue.id && j.kind === kind && j.revision === rev && j.sourceJobId === options.sourceJobId && (j.instructions ?? '') === (options.instructions ?? '') && !['failed', 'cancelled', 'rejected'].includes(j.status));
+        if (prior && (!options.forceNew || ['queued', 'running'].includes(prior.status))) { reused.push(prior.id); this.store.audit('job.deduplicated', `重复派发复用已有任务 #${issue.number}`, prior.id); continue; }
         const now = new Date().toISOString();
         const handoff = this.store.jobs().filter(j => j.issueId === issue.id && j.result && (j.revision === revision(issue, repo, j.kind) || j.kind === 'review' || j.id === options.sourceJobId)).slice(-8).map(j => ({ stale: j.revision !== revision(issue, repo, j.kind), id: j.id, kind: j.kind, revision: j.revision, artifact: j.artifact, result: j.artifact ? undefined : j.result, feedback: j.reviewNote, followups: j.findingFollowups, findings: j.findingDecisions }));
+        if (options.sourceJobId && !handoff.some(item => item.id === options.sourceJobId)) { const source = this.job(options.sourceJobId); if (handoff.length >= 8) handoff.shift(); handoff.unshift({ stale: source.revision !== revision(issue, repo, source.kind), id: source.id, kind: source.kind, revision: source.revision, artifact: source.artifact, result: source.artifact ? undefined : source.result, feedback: source.reviewNote, followups: source.findingFollowups, findings: source.findingDecisions }); }
         const job: Job = { handoff, sourceJobId: options.sourceJobId, instructions: options.instructions?.slice(0, 8000), id: randomUUID(), repoId: repo.id, issueId: issue.id, kind, status: 'queued', revision: rev, baseSha: repo.headSha, issueSnapshot: structuredClone(issue), attempt: 1 + Math.max(0, ...this.store.jobs().filter(j => j.issueId === issue.id && j.kind === kind && j.revision === rev).map(j => j.attempt)), createdAt: now, updatedAt: now };
         this.store.put('jobs', job); this.store.audit('job.queued', `${kind} · ${repo.fullName}#${issue.number}`, job.id); created.push(job.id);
       }
@@ -220,6 +226,13 @@ export class Workbench {
     this.saveJob({ ...job, status: 'cancelled', waitingReason: undefined, finishedAt: new Date().toISOString() });
     this.active.get(id)?.abort(new Error('维护者取消了任务'));
     this.store.audit('job.cancelled', '由维护者取消；已生成的 worktree 保留供检查', id);
+  }
+  rerun(id: string): { created: string[]; reused: string[] } {
+    const job = this.job(id);
+    if (['queued', 'running'].includes(job.status) || this.active.has(id)) throw new Error('任务仍在执行，请结束后重新运行');
+    const result = this.enqueue([job.issueId], job.kind, { sourceJobId: job.sourceJobId, instructions: job.instructions, forceNew: true });
+    for (const created of result.created) this.store.audit('job.rerun', `重新运行 ${job.id}，保留原始记录`, created);
+    return result;
   }
   retry(id: string): { created: string[]; reused: string[] } {
     const job = this.job(id); if (!['failed', 'cancelled', 'rejected'].includes(job.status)) throw new Error('当前状态不能重试');
@@ -238,6 +251,8 @@ export class Workbench {
     const job = this.job(id); if (!['awaiting_review', 'completed'].includes(job.status)) throw new Error('任务不在待审核状态');
     const original = JSON.stringify(job);
     if (decision === 'approve') {
+      if (job.artifact?.stage === 'validate') { const checked = documentAcceptance(job.artifact, job); if (checked.stage === 'validate' && checked.blockers.length && job.handoff?.some(h => h.id === job.sourceJobId && h.kind === 'docs')) throw new Error(checked.blockers.join('；')); }
+      await assertReviewEvidence(job);
       const validation = validationAcceptance(job, this.store.jobs(), candidate => {
         const issue = this.store.get<Issue>('issues', candidate.issueId);
         const repo = this.store.get<Repo>('repos', candidate.repoId);
@@ -274,6 +289,7 @@ export class Workbench {
     if (job.publications?.review?.status === 'published') throw new Error('此审查已发布，新的处置请创建后续审查任务');
     const ids = [...new Set(z.array(z.string()).min(1).max(40).parse(findingIds))];
     if (job.artifact?.stage !== 'review' || ids.some(id => !job.artifact || job.artifact.stage !== 'review' || !job.artifact.findings.some(f => f.id === id))) throw new Error('审查发现不存在');
+    if (['accepted', 'resolved'].includes(decision) && (job.evidenceGate?.allowed === false || !!job.worktree && !!(job.sessionId || job.toolDiagnostics) && job.evidenceGate?.allowed !== true)) throw new Error('审查证据不足，请重新派发补齐；当前仅可标记需证据或驳回');
     if (!['completed','awaiting_review','approved'].includes(job.status)) throw new Error('当前审查尚不可处置');
     if (job.revision !== revision(this.store.get<Issue>('issues', job.issueId)!, this.repo(job.repoId), job.kind)) throw new Error('审查版本已过期');
     this.saveJob({ ...job, status: 'awaiting_review', findingDecisions: { ...job.findingDecisions, ...Object.fromEntries(ids.map(id => [id, decision])) } });
@@ -483,8 +499,15 @@ export class Workbench {
           job={...job,ciEvidence:{snapshot,logs}};this.saveJob(job);
         } catch(e) {if(controller.signal.aborted) throw e;job={...job,ciEvidence:{snapshot:{headSha:job.prContext!.headSha,syncedAt:new Date().toISOString(),jobs:[],warnings:[e instanceof Error ? e.message:'Actions 读取失败']},logs:[]}};this.saveJob(job);}
       }
+      if (this.nativeRunner && job.kind === 'review' && job.worktree && !job.formatOnly) {
+        job = { ...job, reviewRequiredSources: await reviewRequiredSources(job) };
+        this.saveJob(job);
+      }
       const runner = this.nativeRunner ?? modelRunner;
-      output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordExecution: (record, raw) => {
+      output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordDiagnostics: diagnostics => {
+        job = { ...job, toolDiagnostics: diagnostics };
+        this.saveJob({ ...this.job(job.id), toolDiagnostics: diagnostics });
+      }, recordExecution: (record, raw) => {
         saveExecutionLog(this.dataDir, job.id, record.id, raw);
         const records = [...(this.job(job.id).executionRecords ?? []).filter(item => item.id !== record.id), record];
         job = { ...job, executionRecords: records };
@@ -503,7 +526,18 @@ export class Workbench {
       if ((job.kind === 'fix' || job.kind === 'docs') && !patch) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
       if (output.artifact) {
         output.artifact = reconcileTestExecutions(output.artifact, { ...job, patchSha256: patchHash(patch) });
+        output.artifact = documentAcceptance(output.artifact, { ...job, patchSha256: patchHash(patch) });
+        if (output.artifact.stage === 'validate') output.result = asAnalysis(output.artifact);
         if ('tests' in output.artifact) output.result = { ...output.result, tests: output.artifact.tests };
+      }
+      if (output.artifact?.stage === 'review') {
+        job.evidenceGate = await reviewEvidenceGate({ ...job, patchSha256: patchHash(patch) }, output.artifact);
+        output.artifact = verifiedReviewCoverage(job, output.artifact, job.evidenceGate.allowed);
+        output.result = asAnalysis(output.artifact);
+        if (!job.evidenceGate.allowed && output.artifact.stage === 'review') {
+          output.artifact = { ...output.artifact, verdict: 'incomplete', blockers: [...new Set([...output.artifact.blockers, ...job.evidenceGate.reasons])].slice(0, 30) };
+          output.result = asAnalysis(output.artifact);
+        }
       }
       if (output.artifact?.stage === 'review') job.findingFollowups = reviewFollowups(job, output.artifact.followups ?? []);
       this.store.transaction(() => {

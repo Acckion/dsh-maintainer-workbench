@@ -531,7 +531,7 @@ export function App({
     try {
       const result = await request(path, data);
       await refresh();
-      if (["/jobs", "/classify", "/retry"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
+      if (["/jobs", "/classify", "/retry", "/rerun"].includes(path) && (Array.isArray(result.created) || Array.isArray(result.reused) || Array.isArray(result.errors))) {
         const record = operationRecordFromResponse(result);
         setOperationRecords(records => ({ ...records, [actionRepoId]: record }));
       }
@@ -554,8 +554,8 @@ export function App({
       else setToast({ text: success });
       return result;
     } catch (e) {
-      if (["/jobs", "/classify", "/retry"].includes(path)) {
-        const ids = path === "/retry" ? [String((data as { id?: string }).id ?? "retry")] : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
+      if (["/jobs", "/classify", "/retry", "/rerun"].includes(path)) {
+        const ids = ["/retry", "/rerun"].includes(path) ? [String((data as { id?: string }).id ?? "retry")] : ((data as { issueIds?: string[] }).issueIds ?? ["dispatch"]);
         setOperationRecords(records => ({ ...records, [actionRepoId]: operationFailureRecord(ids, e) }));
       }
       setToast({ text: (e as Error).message, error: true });
@@ -627,12 +627,12 @@ export function App({
       setPublishAction(publishKind);
     }
   }
-  async function enqueue(kind: JobKind, ids = selected) {
+  async function enqueue(kind: JobKind, ids = selected, forceNew = false) {
     const requestContext = { ...currentContext.current, navigation: navigationGeneration.current, ids };
     const response = await action(
       "dispatch",
       kind === "triage" ? "/classify" : "/jobs",
-      { issueIds: ids, kind },
+      { issueIds: ids, kind, forceNew },
       "任务已进入队列",
     );
     if (response) {
@@ -1021,13 +1021,14 @@ export function App({
                           disabled={!selected.length || !!busy}
                           onChange={(e) =>
                             e.target.value &&
-                            void enqueue(e.target.value as JobKind)
+                            void enqueue(e.target.value.replace("rerun:", "") as JobKind, selected, e.target.value.startsWith("rerun:"))
                           }
                         >
                           <option value="">更多操作</option>
                           <option value="fix">修复与验证</option>
                           <option value="preflight">PR 预检</option>
                           <option value="review">PR 审查</option>
+                          <option value="rerun:review">重新运行 PR 审查（原始 PR）</option>
                           <option value="validate">验证变更</option>
                           <option value="ci">诊断 CI</option>
                           <option value="docs">文档维护</option>
@@ -1775,6 +1776,10 @@ export function App({
           )}
           {detailTab === "evidence" && (
             <>
+              {job?.toolDiagnostics && <div className="mw-evidence"><div><h4>工具可用性诊断</h4><p>{job.toolDiagnostics.provider}/{job.toolDiagnostics.model} · {job.toolDiagnostics.preset} · {job.toolDiagnostics.permission}</p><p>挂载：{job.toolDiagnostics.mountedTools.join(', ') || '无'}；模型请求：{job.toolDiagnostics.requests.length} 次；调用：{job.toolDiagnostics.calls}；结果：{job.toolDiagnostics.results}；宿主结果：{job.toolDiagnostics.canonicalResults}；错误：{job.toolDiagnostics.errors}</p><p>请求携带工具：{[...new Set(job.toolDiagnostics.requests.flatMap(r => r.tools))].join(', ') || '无'}</p></div></div>}
+              {job?.toolDiagnostics?.implementationRepair && <p className="mw-callout">已尝试补齐实施 {job.toolDiagnostics.implementationRepair.attempts} 次：{job.toolDiagnostics.implementationRepair.reason}</p>}
+              {job?.toolDiagnostics?.evidenceRepair && <p className="mw-callout">已尝试补齐证据 {job.toolDiagnostics.evidenceRepair.attempts} 次：{job.toolDiagnostics.evidenceRepair.reasons.join('；')}</p>}
+              {job?.evidenceGate && <p className={`mw-callout ${job.evidenceGate.allowed ? '' : 'red'}`}>证据验收：{job.evidenceGate.allowed ? '通过' : job.evidenceGate.reasons.join('；')}</p>}
               {job?.executionRecords?.map(record => <ExecutionEvidence key={record.id} job={job} record={record} />)}
               {result?.evidence.length ? (
                 result.evidence.map((e, index) => (
@@ -1954,6 +1959,12 @@ export function App({
               <Tag tone={taskStatus(job).tone}>
                 <CheckCheck size={14} /> {taskStatus(job).label}
               </Tag>
+            )}
+            {!['queued', 'running'].includes(job.status) && (
+              <button className="mw-button" disabled={!!busy} title="创建新的执行任务，沿用本任务来源和说明，保留旧结果；不会自动接受或发布"
+                onClick={() => void action("rerun", "/rerun", { id: job.id }, "已派发重新运行任务，请查看本次任务追踪")}>
+                <RefreshCw size={14} />重新运行
+              </button>
             )}
             {job.status === "approved" && job.artifactState !== "stale" && (
               <div className="mw-publish-actions">

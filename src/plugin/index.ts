@@ -8,6 +8,8 @@ import { Store } from '../core/store.ts';
 import { Workbench } from '../core/workbench.ts';
 import { API, handler } from '../server/http.ts';
 import { harnessRunner, hostStatus } from './native-runner.ts';
+import type {} from '@deepseek-ai/dsh-compaction';
+import type {} from '@deepseek-ai/dsh-compaction-tool-result-pruner';
 export const name = 'maintainer-workbench';
 export const inject = ['webServer', 'connection', 'agents', 'agentPresets', 'permissionPresets', 'workspaceRegistry', 'agentDefaultModel', 'llm', 'tools'];
 interface Connection { requestRejection(request: { headers: import('node:http').IncomingMessage['headers'] }): 401 | 403 | undefined }
