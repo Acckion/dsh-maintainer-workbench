@@ -41,7 +41,7 @@ export class Store {
   repos(): Repo[] { return this.all('repos'); }
   issues(): Issue[] { return this.all('issues'); }
   jobs(): Job[] { return this.all('jobs'); }
-  settings(): Settings { return { triageMaxTokens: 1800, concurrency: 2, maxJobsPerBatch: 20, timeoutMs: 600000, provider: 'deepseek-official', model: 'deepseek-flash', maxTokens: 6000, agentPreset: 'inherit', permissionPreset: 'inherit', syncIntervalMinutes: 0, autoTriage: false, ...this.get<Settings>('settings', 'main') }; }
+  settings(): Settings { return { autoPreflight: false, triageMaxTokens: 1800, concurrency: 2, maxJobsPerBatch: 20, timeoutMs: 600000, provider: 'deepseek-official', model: 'deepseek-flash', maxTokens: 6000, agentPreset: 'inherit', permissionPreset: 'inherit', syncIntervalMinutes: 0, autoTriage: false, ...this.get<Settings>('settings', 'main') }; }
   triage(issueId: string, revision: string): { jobId: string; analysis: Analysis } | undefined {
     const row = this.db.prepare('SELECT jobId,data FROM triage_cache WHERE issueId=? AND revision=?').get(issueId,revision);
     return row ? {jobId:String(row.jobId),analysis:JSON.parse(String(row.data))} : undefined;

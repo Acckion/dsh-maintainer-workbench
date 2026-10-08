@@ -545,6 +545,7 @@ function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }:
 </label>
         <label className="mw-check-label">
 <input type="checkbox" checked={settings.autoTriage} onChange={e => setSettings({ ...settings, autoTriage: e.target.checked })} />自动分诊新增或已更新的 Issue</label>
+        <label className="mw-check-label"><input type="checkbox" checked={settings.autoPreflight ?? false} onChange={e => setSettings({ ...settings, autoPreflight: e.target.checked })} />自动快速预检新增或已更新的 PR</label>
         <p className="mw-muted">手动或定时同步后自动派发，后台按批补齐。结果保存在本机，未变化的版本直接复用；失败后需手动重试。分诊使用模型并产生费用，不会自动修改代码或发布。</p>
       </div>
       <details className="mw-advanced">
@@ -552,7 +553,7 @@ function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }:
 <div className="mw-form-grid">
         <label>超时时间（秒）<input type="number" min="1" max="1800" value={settings.timeoutMs / 1000} onChange={e => setSettings({ ...settings, timeoutMs: +e.target.value * 1000 })} />
 </label>
-        <label>分诊输出 Token 上限<input type="number" min="500" max="8000" value={settings.triageMaxTokens ?? 1800} onChange={e => setSettings({ ...settings, triageMaxTokens: +e.target.value })} /></label>
+        <label>分诊 / PR 预检输出 Token 上限<input type="number" min="500" max="8000" value={settings.triageMaxTokens ?? 1800} onChange={e => setSettings({ ...settings, triageMaxTokens: +e.target.value })} /></label>
         <label>每次请求输出 Token 上限<input type="number" min="500" max="32000" value={settings.maxTokens} onChange={e => setSettings({ ...settings, maxTokens: +e.target.value })} />
 </label>
         <label>Harness Agent preset<input value={settings.agentPreset} onChange={e => setSettings({ ...settings, agentPreset: e.target.value })} />

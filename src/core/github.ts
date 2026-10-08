@@ -62,11 +62,11 @@ export class GitHub {
       return repositoryProfile(repo.headSha, files, sources, warnings);
     } catch (e) { if (signal?.aborted) throw e; return repositoryProfile(repo.headSha, [], [], ['Repository map unavailable; do not assume source was inspected.']); }
   }
-  async pullRequest(repo: Repo, number: number, signal?: AbortSignal): Promise<import('./types.ts').PRContext> {
-    const pr = z.object({ head: z.object({ sha: z.string().regex(/^[a-f0-9]{40,64}$/), ref: z.string(), repo: z.object({ full_name: z.string() }).nullable() }), base: z.object({ sha: z.string().regex(/^[a-f0-9]{40,64}$/), ref: z.string() }), draft: z.boolean(), merged: z.boolean(), mergeable: z.boolean().nullable() }).parse(await this.request(`/repos/${repo.fullName}/pulls/${number}`, { signal }));
+  async pullRequest(repo: Repo, number: number, signal?: AbortSignal, metadataOnly = false): Promise<import('./types.ts').PRContext> {
+    const pr = z.object({ head: z.object({ sha: z.string().regex(/^[a-f0-9]{40,64}$/), ref: z.string(), repo: z.object({ full_name: z.string() }).nullable() }), base: z.object({ sha: z.string().regex(/^[a-f0-9]{40,64}$/), ref: z.string() }), draft: z.boolean(), merged: z.boolean(), mergeable: z.boolean().nullable() }).parse(await this.request(`/repos/${repo.githubName ?? repo.fullName}/pulls/${number}`, { signal }));
     const warnings: string[] = [];
     const optional = async (path: string) => { try { return await this.request(path, { signal }); } catch (e) { if (signal?.aborted) throw e; warnings.push(`无法读取 ${path}: ${e instanceof Error ? e.message : '未知错误'}`); return null; } };
-    const [checks, reviews, reviewComments, commitStatus] = await Promise.all([optional(`/repos/${repo.fullName}/commits/${pr.head.sha}/check-runs?per_page=100`), optional(`/repos/${repo.fullName}/pulls/${number}/reviews?per_page=100`), optional(`/repos/${repo.fullName}/pulls/${number}/comments?per_page=100`), optional(`/repos/${repo.fullName}/commits/${pr.head.sha}/status`)]);
+    const [checks, reviews, reviewComments, commitStatus] = await Promise.all([optional(`/repos/${repo.githubName ?? repo.fullName}/commits/${pr.head.sha}/check-runs?per_page=100`), optional(`/repos/${repo.githubName ?? repo.fullName}/pulls/${number}/reviews?per_page=100`), metadataOnly ? Promise.resolve(null) : optional(`/repos/${repo.githubName ?? repo.fullName}/pulls/${number}/comments?per_page=100`), optional(`/repos/${repo.githubName ?? repo.fullName}/commits/${pr.head.sha}/status`)]);
     return { headSha: pr.head.sha, baseSha: pr.base.sha, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? null, baseRef: pr.base.ref, draft: pr.draft, merged: pr.merged, mergeable: pr.mergeable, checks, reviews, reviewComments, commitStatus, warnings: [...warnings, '检查和审查最多各 100 条；分支保护规则和未解决讨论未完整覆盖，不构成合并许可。'] };
   }
   async context(repo: Repo, issue: Issue, signal: AbortSignal, metadataOnly = false, expected?: import('./types.ts').PRContext): Promise<string> {

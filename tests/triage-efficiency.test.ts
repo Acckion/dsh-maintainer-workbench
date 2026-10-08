@@ -41,3 +41,18 @@ test('triage payload strips stored results, bounds bodies and candidates, preser
  assert.equal(input.related.length,6);assert.equal(input.comments.length,5);assert.equal(input.coverage.bodyTruncated,true);
  const size=JSON.stringify(input).length;assert.ok(size<15000);assert.ok(!JSON.stringify(input).includes('secret'));store.close();
 });
+
+test('PR automation is independently controlled, persistent and refreshes changed heads only',async()=>{
+ const path=join(await mkdtemp(join(tmpdir(),'pr-auto-')),'store.sqlite');
+ let store=new Store(path);seedFixture(store);let repo=store.repos()[0];
+ const pr={...store.issues()[0],type:'pr' as const,headSha:'a'.repeat(40),prBaseSha:'b'.repeat(40)};store.put('issues',pr);
+ const github=new GitHub();github.pullRequest=async()=>({headSha:store.get<import('../src/core/types.ts').Issue>('issues',pr.id)!.headSha!,baseSha:pr.prBaseSha,headRef:'topic',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:null,checks:null,reviews:[],warnings:[]});
+ let calls=0;const runner:import('../src/core/types.ts').Runner=async args=>{calls++;assert.equal(args.settings.maxTokens,1800);return fixtureRunner(args);};
+ let wb=new Workbench(store,'/tmp/pr-auto',runner,github,false);
+ await wb.poll();assert.equal(store.jobs().length,0);
+ wb.updateSettings({...store.settings(),autoPreflight:true,autoTriage:false});await wb.poll();assert.equal(store.jobs().length,1);assert.equal(store.jobs()[0].kind,'preflight');
+ wb.pump();await wb.drain();assert.equal(calls,1);await wb.poll();assert.equal(store.jobs().length,1);await wb.close();
+ store=new Store(path);repo=store.repos()[0];wb=new Workbench(store,'/tmp/pr-auto',runner,github,false);await wb.poll();assert.equal(store.jobs().length,1);
+ store.put('issues',{...pr,headSha:'c'.repeat(40)});await wb.poll();assert.equal(store.jobs().length,2);wb.pump();await wb.drain();assert.equal(calls,2);
+ wb.updatePolicy(repo.id,{autoTriage:false,autoPreflight:false,syncIntervalMinutes:0,timeoutMs:600000,maxTokens:6000});store.put('issues',{...pr,headSha:'d'.repeat(40)});await wb.poll();assert.equal(store.jobs().length,2);await wb.close();
+});

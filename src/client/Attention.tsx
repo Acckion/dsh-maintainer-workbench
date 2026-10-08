@@ -18,13 +18,14 @@ export function Attention({ state, open }: { state:Snapshot; open:(repoId:string
 export function RepositoryPolicy({ state, repoId, busy, save }: {state:Snapshot;repoId:string;busy:boolean;save:(value:unknown)=>void}) {
   const repo = state.repos.find(r=>r.id===repoId);
   const defaults = repo?.policy ?? state.settings;
-  const [value,setValue] = React.useState({autoTriage:defaults.autoTriage,syncIntervalMinutes:defaults.syncIntervalMinutes,timeoutMs:defaults.timeoutMs,maxTokens:defaults.maxTokens});
+  const [value,setValue] = React.useState({autoPreflight:defaults.autoPreflight ?? state.settings.autoPreflight ?? false,autoTriage:defaults.autoTriage,syncIntervalMinutes:defaults.syncIntervalMinutes,timeoutMs:defaults.timeoutMs,maxTokens:defaults.maxTokens});
   if (!repo) return null;
   return <section className="mw-settings-card">
 <h3>当前仓库策略</h3>
 <p>模型继承 Harness；这里仅调整该仓库的同步与执行预算。远端发布仍使用具体内容预览。</p>
 <label>
 <input type="checkbox" checked={value.autoTriage} onChange={e=>setValue({...value,autoTriage:e.target.checked})}/> 自动分诊新增或更新的 Issue</label>
+<label><input type="checkbox" checked={value.autoPreflight} onChange={e=>setValue({...value,autoPreflight:e.target.checked})}/> 自动快速预检新增或更新的 PR</label>
 <label>同步间隔（分钟，0 关闭）<input type="number" min={0} max={1440} value={value.syncIntervalMinutes} onChange={e=>setValue({...value,syncIntervalMinutes:Number(e.target.value)})}/>
 </label>
 <label>单次任务时间上限（秒）<input type="number" min={1} max={1800} value={value.timeoutMs/1000} onChange={e=>setValue({...value,timeoutMs:Number(e.target.value)*1000})}/>

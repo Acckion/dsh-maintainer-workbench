@@ -21,7 +21,7 @@ import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type
 export { revision } from './revision.ts';
 const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
 const readOnlyCode = (kind: JobKind): boolean => ['review', 'validate', 'ci'].includes(kind);
-const settingsSchema = z.object({ triageMaxTokens:z.number().int().min(500).max(8000).default(1800), concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
+const settingsSchema = z.object({ autoPreflight:z.boolean().default(false), triageMaxTokens:z.number().int().min(500).max(8000).default(1800), concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
 
 export class Workbench {
   private active = new Map<string, AbortController>();
@@ -70,13 +70,19 @@ export class Workbench {
   }
   private autoTriage(repoId: string): void {
     const settings=this.store.settings(), repo=this.repo(repoId);
-    if(this.closed || !(repo.policy?.autoTriage ?? settings.autoTriage)) return;
-    // Bounded queue: replenish on poll/sync, never retry a failed revision automatically.
+    if(this.closed) return;
     const jobs=this.store.jobs();
-    const pending=jobs.filter(j=>j.kind==='triage' && ['queued','running'].includes(j.status)).length;
+    const pending=jobs.filter(j=>['triage','preflight'].includes(j.kind) && ['queued','running'].includes(j.status)).length;
     const remaining=Math.max(0,settings.maxJobsPerBatch-pending);
-    const ids=this.store.issues().filter(i=>i.repoId===repoId && i.type==='issue' && i.state==='open' && !i.origin && (!i.analysis || i.analysisRevision!==revision(i,repo)) && !jobs.some(j=>j.issueId===i.id && j.kind==='triage' && j.revision===revision(i,repo))).slice(0,remaining).map(i=>i.id);
-    if(ids.length) this.enqueue(ids,'triage');
+    const candidates=this.store.issues().filter(i=>{
+      const kind=i.type==='pr' ? 'preflight' : 'triage';
+      const enabled=i.type==='pr' ? repo.policy?.autoPreflight ?? settings.autoPreflight : repo.policy?.autoTriage ?? settings.autoTriage;
+      return i.repoId===repoId && enabled && i.state==='open' && !i.origin && !jobs.some(j=>j.issueId===i.id && j.kind===kind && j.revision===revision(i,repo,kind));
+    }).slice(0,remaining);
+    for(const kind of ['triage','preflight'] as const) {
+      const ids=candidates.filter(i=>(i.type==='pr' ? 'preflight':'triage')===kind).map(i=>i.id);
+      if(ids.length) this.enqueue(ids,kind);
+    }
   }
   async itemDetail(id: string, section: DetailSection, page = 1) {
     const issue = this.store.get<Issue>('issues', id);
@@ -86,7 +92,7 @@ export class Workbench {
   githubConnection() { return this.github.connection(); }
   snapshot(): Snapshot {
     const host = this.hostStatus?.();
-    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.3' };
+    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.4' };
   }
   saveJob(job: Job): void { this.store.put('jobs', { ...job, updatedAt: new Date().toISOString() }); }
   async syncMany(names: string[]) {
@@ -274,7 +280,7 @@ export class Workbench {
     finally { this.publishing.delete(id); this.publishing.delete(target); }
   }
   updatePolicy(repoId: string, input: unknown): void {
-    const policy = z.object({ autoTriage:z.boolean(), syncIntervalMinutes:z.number().int().min(0).max(1440), timeoutMs:z.number().int().min(1000).max(1800000), maxTokens:z.number().int().min(500).max(32000) }).parse(input);
+    const policy = z.object({ autoPreflight:z.boolean().optional(), autoTriage:z.boolean(), syncIntervalMinutes:z.number().int().min(0).max(1440), timeoutMs:z.number().int().min(1000).max(1800000), maxTokens:z.number().int().min(500).max(32000) }).parse(input);
     this.store.put('repos', { ...this.repo(repoId), policy }); this.store.audit('repo.policy', `${repoId}: 更新仓库策略`);
   }
   updateSettings(input: unknown): void { const settings = settingsSchema.parse(input); this.store.put('settings', { ...settings, id: 'main' }); this.store.audit('settings.updated', '更新并发、批量上限和模型配置'); if (this.autoStart) this.pump(); }
@@ -298,7 +304,7 @@ export class Workbench {
     this.saveJob(job);
     const defaults = this.store.settings();
     const policy = this.repo(job.repoId).policy;
-    const settings = { ...defaults, timeoutMs: policy?.timeoutMs ?? defaults.timeoutMs, maxTokens: job.kind==='triage' ? Math.min(policy?.maxTokens ?? defaults.maxTokens,defaults.triageMaxTokens ?? 1800) : policy?.maxTokens ?? defaults.maxTokens };
+    const settings = { ...defaults, timeoutMs: policy?.timeoutMs ?? defaults.timeoutMs, maxTokens: lightweight(job.kind) ? Math.min(policy?.maxTokens ?? defaults.maxTokens,defaults.triageMaxTokens ?? 1800) : policy?.maxTokens ?? defaults.maxTokens };
     const timer = setTimeout(() => controller.abort(new Error('任务超出配置的执行时间')), lightweight(job.kind) ? Math.min(settings.timeoutMs, 120000) : settings.timeoutMs);
     const progress = (message: string, sessionId?: string, waitingReason?: string) => {
       if (controller.signal.aborted) return;
@@ -320,7 +326,7 @@ export class Workbench {
       }
       if (job.issueSnapshot.type === 'pr') {
         progress('固定 PR head/base，并读取可见 CI 与审查状态');
-        const livePR = await this.github.pullRequest(repo, job.issueSnapshot.number, controller.signal);
+        const livePR = await this.github.pullRequest(repo, job.issueSnapshot.number, controller.signal, lightweight(job.kind));
         if (job.formatOnly && (!job.prContext || livePR.headSha !== job.prContext.headSha || livePR.baseSha !== job.prContext.baseSha)) throw new Error('PR head/base 已变化，不能整理旧版本产物；请重新同步并派发');
         job.prContext = livePR;
         if (job.prContext.merged) throw new Error('PR 已合并，请重新同步');
