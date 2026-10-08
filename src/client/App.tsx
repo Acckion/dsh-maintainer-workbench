@@ -11,7 +11,7 @@ import type { Analysis, Issue, Job, JobKind, Settings, Snapshot } from '../core/
 import { kindNames } from '../core/types.ts';
 const API = '/maintainer/api';
 const categoryNames: Record<string, string> = { bug: '缺陷', feature: '功能', docs: '文档', question: '提问', maintenance: '维护' };
-type Page = 'organize' | 'attention' | 'inbox' | 'tasks' | 'reviews' | 'activity' | 'settings';
+type Page = 'organize' | 'attention' | 'inbox' | 'tasks' | 'reviews' | 'activity' | 'settings' | 'repository-settings';
 function date(value: string) { return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); }
 function elapsed(job: Job) { if (!job.startedAt) return '—'; return `${Math.max(1, Math.round((new Date(job.finishedAt ?? Date.now()).getTime() - new Date(job.startedAt).getTime()) / 1000))}s`; }
 async function request(path: string, data?: unknown) {
@@ -163,7 +163,7 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
     const response = await action('dispatch', kind === 'triage' ? '/classify' : '/jobs', { issueIds: ids, kind }, '任务已进入队列');
     if (response) { setToast({ text: `新建 ${response.created.length} 个任务${response.reused.length ? `，复用 ${response.reused.length} 个已有任务` : ''}${response.errors?.length ? `；失败：${response.errors.map((e: {id:string;error:string}) => e.id + ' ' + e.error).join('；')}` : ''}` }); setSelected([]); }
   }
-  const nav = [{id:'organize',label:'仓库整理',icon:FileCheck2,count:0},{ id: 'attention', label: '需要我处理', icon: CheckCheck, count: 0 }, { id: 'inbox', label: '维护收件箱', icon: Inbox, count: open.length }, { id: 'tasks', label: '执行任务', icon: Layers3, count: running.length }, { id: 'reviews', label: '待我审核', icon: FileCheck2, count: pending.length }, { id: 'activity', label: '活动记录', icon: Activity, count: 0 }] as const;
+  const nav = [{id:'organize',label:'仓库整理',icon:FileCheck2,count:0},{ id: 'attention', label: '需要我处理', icon: CheckCheck, count: 0 }, { id: 'inbox', label: '维护收件箱', icon: Inbox, count: open.length }, { id: 'tasks', label: '执行任务', icon: Layers3, count: running.length }, { id: 'reviews', label: '待我审核', icon: FileCheck2, count: pending.length }, { id: 'activity', label: '活动记录', icon: Activity, count: 0 }, {id:'repository-settings',label:'仓库设置',icon:Settings2,count:0}] as const;
   return <div className="mw mw-layout-tabs">
 <div className="mw-shell">
 <header className="mw-header">
@@ -182,17 +182,17 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
 </button>
 <div className="mw-header-status">
 <span className="mw-dot" />{state?.capabilities.model ? state.capabilities.modelName : '模型未配置'}</div>
-<button className={`mw-button ${page === 'settings' ? 'active' : ''}`} aria-label="设置与连接" onClick={() => setPage('settings')}>
+<button className={`mw-button ${page === 'settings' ? 'active' : ''}`} aria-label="全局设置" onClick={() => setPage('settings')}>
 <Settings2 size={16} />
 </button>
 </div>
-<nav className="mw-global-tabs" aria-label="工作台页面">{nav.map(n => <button key={n.id} aria-current={page === n.id ? 'page' : undefined} className={page === n.id ? 'active' : ''} onClick={() => { setPage(n.id); setJobFocus(undefined); setSearch(''); setDetailOpen(false); }}>
+<nav className="mw-global-tabs" aria-label="工作台页面">{nav.map(n => <button key={n.id} aria-current={page === n.id ? 'page' : undefined} className={`${page === n.id ? 'active' : ''} ${n.id === 'repository-settings' ? 'mw-repo-settings-tab' : ''}`} onClick={() => { setPage(n.id); setJobFocus(undefined); setSearch(''); setDetailOpen(false); }}>
 <n.icon size={16} />{n.label}{n.count > 0 && <span>{n.count}</span>}</button>)}</nav>
 </header>
 <main className={`mw-main ${['inbox', 'tasks', 'reviews'].includes(page) ? 'mw-queue-page' : ''}`} data-page={page}>
 <div className="mw-page-heading">
 <div>
-<h1>{{ organize: '仓库整理', attention: '需要我处理', inbox: '维护收件箱', tasks: '执行任务', reviews: '待我审核', activity: '活动记录', settings: '设置与连接' }[page]}</h1>
+<h1>{{ organize: '仓库整理', attention: '需要我处理', inbox: '维护收件箱', tasks: '执行任务', reviews: '待我审核', activity: '活动记录', settings: '全局设置', 'repository-settings':'仓库设置' }[page]}</h1>
 </div>
 <button className="mw-button" disabled={!!busy || !repo || repo.mode === 'local' && !repo.githubName} onClick={() => void action('sync', '/sync', { fullName: repo?.githubName ?? repo?.fullName }, '仓库同步完成')}>
 <RefreshCw size={15} className={busy === 'sync' ? 'mw-spin' : ''} />同步仓库</button>
@@ -324,14 +324,14 @@ export function App({ openSession }: { openSession?: (id: string) => void } = {}
 <GitBranch size={19} />已连接仓库 · {state.repos.length}</div>
 <p>点击仓库切换工作区。Issue、任务、审核和本地克隆分别归属各自仓库；模型和 GitHub 登录由工作台共享。</p>
 <button className="mw-button" disabled={!!busy || !state.repos.length} onClick={async () => { const r = await action('sync-all', '/sync-all', {}, '全部仓库同步检查完成'); if (r) { setConnectionResults(r.results); setRepoInput(state.repos.map(r => r.fullName).join('\n')); setConnect(true); } }}>同步全部仓库</button>
-<div className="mw-repository-list">{state.repos.map(r => <button className={`mw-button ${r.id === repoId ? 'is-current' : ''}`} aria-pressed={r.id === repoId} disabled={!!busy} key={r.id} onClick={() => setRepoId(r.id)}>
+<div className="mw-repository-list">{state.repos.map(r => <button className={`mw-button ${r.id === repoId ? 'is-current' : ''}`} aria-pressed={r.id === repoId} disabled={!!busy} key={r.id} onClick={() => {setRepoId(r.id);setPage('repository-settings');}}>
 <GitBranch size={16} />
 <span className="mw-repository-name">
 <strong>{r.fullName}</strong>
 <small>{r.private ? '私有仓库' : '公开仓库'} · {state.issues.filter(i => i.repoId === r.id && i.state === 'open').length} 条开放记录</small>
 </span>{r.id === repoId ? <Tag tone="green">
 <Check size={12} />当前仓库</Tag> : <ChevronRight size={16} />}</button>)}</div>
-</section>}{page === 'settings' && <RepositoryPolicy key={repoId} state={state} repoId={repoId} busy={!!busy} save={value=>void action('policy','/policy',value,'仓库策略已保存')} />}{page === 'settings' && <SettingsView state={state} repoId={repoId} busy={!!busy} prepare={() => void action('prepare', '/prepare', { repoId }, '独立仓库已准备完成')} save={s => void action('settings', '/settings', s, '设置已保存')} credentials={c => void action('credentials', '/credentials', c, '连接配置已保存')} bind={path => void action('bind', '/bind', { repoId, localPath: path }, '工作区绑定成功')} />}</>}</main>
+</section>}{page === 'repository-settings' && <RepositoryPolicy key={repoId} state={state} repoId={repoId} busy={!!busy} save={value=>void action('policy','/policy',value,'仓库策略已保存')} />}{(page === 'settings' || page === 'repository-settings') && <SettingsView key={page} scope={page === 'repository-settings' ? 'repository' : 'global'} state={state} repoId={repoId} busy={!!busy} prepare={() => void action('prepare', '/prepare', { repoId }, '独立仓库已准备完成')} save={s => void action('settings', '/settings', s, '设置已保存')} credentials={c => void action('credentials', '/credentials', c, '连接配置已保存')} bind={path => void action('bind', '/bind', { repoId, localPath: path }, '工作区绑定成功')} />}</>}</main>
 </div>{toast && <div role="status" className={`mw-toast ${toast.error ? 'error' : ''}`}>{toast.error ? <TriangleAlert size={19} /> : <Check size={19} />}<span>{toast.text}</span>
 <button aria-label="关闭提示" onClick={() => setToast(undefined)}>
 <X size={16} />
@@ -469,7 +469,7 @@ function Stat({ label, value, sub, icon }: { label: string; value: number; sub: 
 </strong>
 <p>{sub}</p>
 </div>; }
-function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }: { state: Snapshot; repoId: string; busy: boolean; prepare: () => void; save: (s: Settings) => void; bind: (path: string) => void; credentials: (c: { apiKey?: string; githubToken?: string; baseUrl?: string }) => void }) {
+function SettingsView({ scope, state, repoId, busy, save, bind, credentials, prepare }: { scope:'global'|'repository'; state: Snapshot; repoId: string; busy: boolean; prepare: () => void; save: (s: Settings) => void; bind: (path: string) => void; credentials: (c: { apiKey?: string; githubToken?: string; baseUrl?: string }) => void }) {
   const [settings, setSettings] = useState(state.settings);
   const [apiKey, setApiKey] = useState('');
   const [githubToken, setGithubToken] = useState('');
@@ -481,6 +481,7 @@ function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }:
   const host = state.capabilities.host;
   return <div className="mw-settings-grid">
     <section className="mw-settings-card">
+      {scope === 'repository' ? <>
       <div className="mw-section-title">
 <GitBranch size={19} />仓库连接</div>
       <h3>{repo?.fullName ?? '尚未选择'}</h3>
@@ -500,6 +501,8 @@ function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }:
 <code>{s.path}</code>
 </p>)}{repo.profile.warnings.map((w,i) => <p className="mw-muted" key={i}>{w}</p>)}</details>
 </div>}
+      </> : <>
+      <div className="mw-section-title"><Settings2 size={19} />模型与连接</div>
       <div className="mw-credential-fields">
         {!native && <>
 <label>独立预览 API Key<input type="password" autoComplete="new-password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="留空则保持已保存密钥" />
@@ -526,10 +529,11 @@ function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }:
 <div>执行环境<Tag>{native ? 'Harness 原生 Agent' : '独立预览'}</Tag>
 </div>
 </div>
+      </>}
     </section>
-    <form className="mw-settings-card" onSubmit={e => { e.preventDefault(); save(settings); }}>
+    {scope === 'global' && <form className="mw-settings-card" onSubmit={e => { e.preventDefault(); save(settings); }}>
       <div className="mw-section-title">
-<Settings2 size={19} />执行策略</div>
+<Settings2 size={19} />全局默认执行策略</div>
       <div className="mw-form-grid">
         {!native && <>
 <label>模型提供方<input value={settings.provider} onChange={e => setSettings({ ...settings, provider: e.target.value })} required />
@@ -569,6 +573,6 @@ function SettingsView({ state, repoId, busy, save, bind, credentials, prepare }:
 </div>
       <button className="mw-button primary" disabled={busy}>
 <Check size={15} />保存设置</button>
-    </form>
+    </form>}
   </div>;
 }

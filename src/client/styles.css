@@ -332,3 +332,5 @@
 .mw-layout-tabs{color-scheme:light}
 .mw-header-brand small{font-size:10px;color:#72877b;font-weight:400}
 .mw-organize-sidebar select{background:#fff;color:#36584a}
+
+.mw-global-tabs .mw-repo-settings-tab{margin-left:auto;border-left:1px solid #e4eae7}
