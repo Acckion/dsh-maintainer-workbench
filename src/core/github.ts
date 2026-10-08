@@ -1,3 +1,4 @@
+import { githubRequest } from './github-request.ts';
 import { resolveGitHubAuth } from './github-auth.ts';
 import { contextPaths, repositoryProfile } from './repository-context.ts';
 import { z } from 'zod';
@@ -8,8 +9,7 @@ export class GitHub {
   constructor(private token?: string, private fetcher: typeof fetch = fetch) {}
   async request(path: string, init: RequestInit = {}): Promise<unknown> {
     const auth = await resolveGitHubAuth(this.token);
-    const response = await this.fetcher(`https://api.github.com${path}`, { ...init, signal: init.signal ?? AbortSignal.timeout(30000), headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'maintainer-workbench/0.1', ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}), ...init.headers } });
-    if (!response.ok) throw new Error(`GitHub ${response.status}${response.status === 403 || response.status === 429 ? '：权限不足或 API 限流，请检查账号的仓库权限、组织 SSO 授权或 API 限额' : response.status === 404 ? '：仓库不存在，或令牌无读取权限' : response.status === 401 ? '：GitHub 登录已失效，请重新登录或更新令牌' : '：请求失败'}`);
+    const response = await githubRequest(this.fetcher, `https://api.github.com${path}`, { ...init, signal: init.signal, headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'maintainer-workbench/0.1', ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}), ...init.headers } });
     return response.json();
   }
   async connection() {
@@ -18,7 +18,7 @@ export class GitHub {
     try {
       const user = z.object({ login: z.string() }).parse(await new GitHub(auth.token, this.fetcher).request('/user'));
       return { source: auth.source, authenticated: true, login: user.login };
-    } catch (error) { return { source: auth.source, authenticated: false, error: error instanceof Error ? error.message : '连接验证失败' }; }
+    } catch (error) { return { source: auth.source, authenticated: false, error: error instanceof Error ? error.message : '连接验证失败', errorKind: error && typeof error === 'object' && 'kind' in error ? String(error.kind) : 'unknown' }; }
   }
   async sync(fullName: string): Promise<{ repo: Repo; issues: Issue[] }> {
     nameSchema.parse(fullName);

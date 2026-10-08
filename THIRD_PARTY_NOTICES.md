@@ -37,3 +37,7 @@ The workflow text in `skills/maintainer-*/SKILL.md` is adapted and expanded for 
 OpenAI Codex — Copyright 2025 OpenAI. Unmodified upstream license and NOTICE files are included in `third_party/openai/`. Separate licenses accompanying each referenced skill are retained there as well. The original upstream review JSON schema is replaced with this application's schema; upstream commands that request elevated tool access are not copied into the execution policy. Agent access remains governed by Harness.
 
 Only workflow text is adapted; the referenced Python helper scripts are not bundled. CI log fetching, threaded review publication and live CI rerun are not implied by these prompts and remain separate capabilities. Actual model-quality improvement requires a controlled benchmark.
+
+## Repository detail Markdown rendering
+
+`react-markdown` 10.1.0 and `remark-gfm` 4.0.1 are MIT-licensed packages by the unified/remark community. The renderer supports GFM tables, task lists and code blocks. Raw HTML is skipped and remote images are rendered as explicit links. Package licenses are retained by their npm distributions.

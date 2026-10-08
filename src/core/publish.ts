@@ -9,7 +9,11 @@ export type PublishAction = 'comment' | 'labels' | 'pr' | 'update_pr' | 'review'
 
 /** Called only by an explicit publish action after local result approval. */
 export async function publish(store: Store, job: Job, repo: Repo, action: PublishAction, github = new GitHub(), executeGit: typeof git = git): Promise<string[]> {
+  if (repo.mode === 'local' && !repo.githubName) throw new Error('当前工作区未关联唯一 GitHub 远端，可以导出本地补丁');
+  if (repo.mode === 'local' && repo.githubName) repo={...repo,fullName:repo.githubName};
   if (job.status !== 'approved' || !job.result) throw new Error('请先审核并接受结果');
+  if (action === 'comment' && !job.result.responseDraft.trim()) throw new Error('暂无需要发布的回复内容');
+  if (job.issueSnapshot.origin === 'repository' && action !== 'pr') throw new Error('仓库整理任务仅可发布补丁 PR，不对应 GitHub Issue 评论或标签');
   if (!(await resolveGitHubAuth()).token) throw new Error('发布需要有效的 GitHub 登录或令牌（仓库写权限）');
   const prior = job.publications?.[action];
   if (prior?.status === 'published') return prior.urls;
@@ -20,7 +24,9 @@ export async function publish(store: Store, job: Job, repo: Repo, action: Publis
     if ((current.headSha !== job.prContext.headSha && !(action === 'update_pr' && current.headSha === job.publishedCommit)) || current.baseSha !== job.prContext.baseSha) throw new Error('PR head/base 已变化，旧产物不可发布');
     if (current.merged) throw new Error('PR 已合并');
   }
-  const live = z.object({ updated_at: z.string() }).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+  const repositoryTask = job.issueSnapshot.origin === 'repository';
+  const live = repositoryTask ? {updated_at:job.issueSnapshot.updatedAt} : z.object({ updated_at: z.string() }).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+  if (repositoryTask) { const branch = z.object({commit:z.object({sha:z.string()})}).parse(await github.request(`/repos/${repo.fullName}/branches/${encodeURIComponent(repo.defaultBranch)}`)); if (branch.commit.sha !== job.baseSha) throw new Error('默认分支已更新，请同步后重新整理'); }
   const lastReceipt = Object.values(job.publications ?? {}).filter(r => r.status === 'published').sort((a,b) => b.at.localeCompare(a.at))[0];
   const assertFresh = () => { if (live.updated_at !== (lastReceipt?.remoteUpdatedAt ?? job.issueSnapshot.updatedAt)) throw new Error('GitHub Issue/PR 已更新，请重新同步并分析后发布'); };
   if (!prior) assertFresh();
@@ -85,16 +91,16 @@ export async function publish(store: Store, job: Job, repo: Repo, action: Publis
         const saved = store.get<Job>('jobs', job.id)!;
         if (remote.headSha !== saved.publishedCommit) throw new Error('推送后 head 未确认，请核查后重试');
         urls = [job.issueSnapshot.url];
-        const confirmed = z.object({updated_at:z.string()}).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+        const confirmed = repositoryTask ? {updated_at:job.issueSnapshot.updatedAt} : z.object({updated_at:z.string()}).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
     set('published', urls, undefined, confirmed.updated_at);
         return urls;
       }
       const [owner] = repo.fullName.split('/');
       const existing = z.array(urlSchema).parse(await github.request(`/repos/${repo.fullName}/pulls?state=all&head=${encodeURIComponent(`${owner}:${job.branch}`)}`));
-      const pr = existing[0] ?? urlSchema.parse(await github.request(`/repos/${repo.fullName}/pulls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `${job.kind === 'docs' ? 'docs' : 'fix'}: ${job.issueSnapshot.title.slice(0, 180)}`, head: job.branch, base: repo.defaultBranch, draft: true, body: `Refs #${job.issueSnapshot.number}\n\n${job.result.summary}\n\n### Validation\n${job.result.tests.map(t => `- ${t.status}: \`${t.command}\`\n  ${t.output}`).join('\n')}\n\nReviewed task: ${job.id}\nBase: ${job.baseSha}\n\n${marker}` }) }));
+      const pr = existing[0] ?? urlSchema.parse(await github.request(`/repos/${repo.fullName}/pulls`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: `${job.kind === 'docs' ? 'docs' : 'fix'}: ${job.issueSnapshot.title.slice(0, 180)}`, head: job.branch, base: repo.defaultBranch, draft: true, body: `${repositoryTask ? 'Repository maintenance' : `Refs #${job.issueSnapshot.number}`}\n\n${job.result.summary}\n\n### Validation\n${job.result.tests.map(t => `- ${t.status}: \`${t.command}\`\n  ${t.output}`).join('\n')}\n\nReviewed task: ${job.id}\nBase: ${job.baseSha}\n\n${marker}` }) }));
       urls = [pr.html_url];
     }
-    const confirmed = z.object({updated_at:z.string()}).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
+    const confirmed = repositoryTask ? {updated_at:job.issueSnapshot.updatedAt} : z.object({updated_at:z.string()}).parse(await github.request(`/repos/${repo.fullName}/issues/${job.issueSnapshot.number}`));
     set('published', urls, undefined, confirmed.updated_at);
     if (action === 'pr') { const issue = store.get<import('./types.ts').Issue>('issues', job.issueId); if (issue) store.put('issues', { ...issue, linkedPullRequests: [...new Set([...(issue.linkedPullRequests ?? []), ...urls])], workflow: {stage:'track',reason:'草稿 PR 已创建，等待审查及远端合并；事项尚未解决',updatedAt:new Date().toISOString()} }); }
     return urls;

@@ -1,3 +1,5 @@
+import { detailSections } from '../core/github-details.ts';
+import { organizeModes } from '../core/organize.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { z } from 'zod';
 import type { Credentials } from '../core/credentials.ts';
@@ -23,6 +25,7 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
     const path = url.pathname.slice(API.length);
     try {
       if (req.method === 'GET' && path === '/github/connection') { send(res, 200, await workbench.githubConnection()); return; }
+      if (req.method === 'GET' && path === '/item-detail') { const p = z.object({ id: z.string().min(1).max(400), section: z.enum(detailSections), page: z.coerce.number().int().min(1).max(30) }).parse({ id: url.searchParams.get('id'), section: url.searchParams.get('section') ?? 'summary', page: url.searchParams.get('page') ?? 1 }); send(res, 200, await workbench.itemDetail(p.id, p.section, p.page)); return; }
       if (req.method === 'GET' && path === '/state') { send(res, 200, workbench.snapshot()); return; }
       if (req.method === 'GET' && path.startsWith('/export/')) {
         const job = workbench.store.get<Job>('jobs', decodeURIComponent(path.slice('/export/'.length)));
@@ -34,7 +37,7 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
       if (req.method !== 'POST') { send(res, 404, { error: '接口不存在' }); return; }
       const input = await body(req);
       if (path === '/sync-all') {
-        const names = workbench.store.repos().map(r => r.fullName);
+        const names = [...new Set(workbench.store.repos().flatMap(r => r.mode === 'github' ? [r.fullName] : r.githubName ? [r.githubName] : []))];
         const results = [];
         for (let i = 0; i < names.length; i += 20) results.push(...(await workbench.syncMany(names.slice(i, i + 20))).results);
         send(res, 200, { results }); return;
@@ -49,6 +52,7 @@ export function handler(workbench: Workbench, reject: (req: IncomingMessage) => 
         for (const id of new Set(p.issueIds)) { try { const issue = workbench.store.get<import('../core/types.ts').Issue>('issues',id); if (!issue) throw new Error('事项不存在'); const r = workbench.enqueue([id],issue.type === 'pr' ? 'preflight' : 'triage'); created.push(...r.created);reused.push(...r.reused); } catch(e) { errors.push({id,error:e instanceof Error ? e.message : '派发失败'}); } }
         send(res,200,{created,reused,errors});return;
       }
+      else if (path === '/organize') { const p = z.object({repoId:z.string(),mode:z.enum(organizeModes),issueId:z.string().optional(),instructions:z.string().max(4000).optional()}).parse(input); send(res,200,workbench.organize(p.repoId,p.mode,p.issueId,p.instructions));return; }
       else if (path === '/jobs') { const p = z.object({ issueIds: z.array(z.string()), kind: z.enum(kinds), sourceJobId: z.string().optional(), instructions: z.string().max(8000).optional() }).parse(input); send(res, 200, workbench.enqueue(p.issueIds, p.kind, { sourceJobId: p.sourceJobId, instructions: p.instructions })); return; }
       else if (path === '/finding') { const p = z.object({ id: z.string(), findingId: z.string(), decision: z.enum(['accepted','needs_evidence','dismissed','resolved']) }).parse(input); workbench.finding(p.id, p.findingId, p.decision); }
       else if (path === '/decision') { const p = z.object({ issueId: z.string(), stage: z.string(), reason: z.string().max(4000) }).parse(input); workbench.decide(p.issueId, p.stage, p.reason); }

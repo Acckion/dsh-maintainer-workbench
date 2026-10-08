@@ -80,7 +80,7 @@ test('review publication uses accepted findings and fixed head, recovers lost re
   const job:Job={id:'review-publish',repoId:repo.id,issueId:issue.id,issueSnapshot:issue,kind:'review',status:'approved',revision:'r',baseSha:repo.headSha,attempt:1,createdAt:'now',updatedAt:'now',artifact,result:asAnalysis(artifact),findingDecisions:{accepted:'accepted',dismissed:'dismissed'},prContext:{headSha:repo.headSha,baseSha:'b'.repeat(40),headRef:'topic',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:null,checks:null,reviews:[],warnings:[]}};
   store.put('jobs',job);let posts=0;const rows:any[]=[];
   const gh=new GitHub('',async(input,init)=>{const url=String(input);if(url.endsWith('/pulls/128'))return Response.json({head:{sha:repo.headSha,ref:'topic',repo:{full_name:repo.fullName}},base:{sha:'b'.repeat(40),ref:'main'},draft:false,merged:false,mergeable:null});if(url.endsWith('/issues/128'))return Response.json({updated_at:issue.updatedAt});if(init?.method==='POST'){posts++;const body=JSON.parse(String(init.body));assert.equal(body.commit_id,repo.headSha);assert.equal(body.event,'COMMENT');assert.match(body.body,/include this/);assert.doesNotMatch(body.body,/exclude this/);rows.push({body:body.body,html_url:issue.url+'#review-1'});throw Error('lost response');}return Response.json(rows);});
-  try{await assert.rejects(publish(store,job,repo,'review',gh),/lost response/);const urls=await publish(store,store.get<Job>('jobs',job.id)!,repo,'review',gh);assert.equal(posts,1);assert.deepEqual(urls,[issue.url+'#review-1']);}finally{store.close();if(savedToken===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=savedToken;}
+  try{await assert.rejects(publish(store,job,repo,'review',gh),/写入结果尚未确认/);const urls=await publish(store,store.get<Job>('jobs',job.id)!,repo,'review',gh);assert.equal(posts,1);assert.deepEqual(urls,[issue.url+'#review-1']);}finally{store.close();if(savedToken===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=savedToken;}
 });
 
 test('PR update pushes an approved patch to the existing branch without creating another PR',async()=>{
@@ -103,4 +103,15 @@ test('a new PR head can inherit historical review findings but not apply an old 
   const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0];const issue={...store.issues()[0],type:'pr' as const,headSha:'a'.repeat(40),prBaseSha:'b'.repeat(40)};store.put('issues',issue);
   const w=new Workbench(store,'/tmp/mw-stale-review',undefined,undefined,false);const id=w.enqueue([issue.id],'review').created[0];const old=store.get<Job>('jobs',id)!;store.put('jobs',{...old,status:'awaiting_review',result:fixtureAnalysis(issue,'review'),patch:'historical-patch',findingDecisions:{f1:'accepted'}});store.put('issues',{...issue,headSha:'c'.repeat(40)});
   const next=w.enqueue([issue.id],'review',{sourceJobId:id}).created[0];const handoff=store.get<Job>('jobs',next)?.handoff;assert.equal(handoff?.[0].stale,true);assert.equal(handoff?.[0].findings?.f1,'accepted');assert.notEqual(store.get<Job>('jobs',next)?.revision,old.revision);await w.close();
+});
+
+test('preflight can proceed with an evidence gap and no external reply; empty comments never access GitHub', async () => {
+  const artifact=artifactSchemas.preflight.parse({schemaVersion:1,stage:'preflight',summary:'可以开始代码审查',coverage:'CI 查询权限不足，状态未知',evidence:[],nextSteps:['审查多仓库任务是否保持数据隔离'],responseDraft:'',intent:'支持多仓库',risks:['核对仓库 A 是否能读取仓库 B 的结果'],readiness:'review',blockers:[]});
+  const result=asAnalysis(artifact);assert.equal(result.responseDraft,'');assert.deepEqual(result.missingInfo,[]);assert.deepEqual(result.tests,[]);
+  const {publish}=await import('../src/core/publish.ts');
+  const store=new Store(':memory:');seedFixture(store);
+  const job={id:'empty-comment',status:'approved',result:{...result,responseDraft:'  \n'}} as Job;
+  let requests=0;const github={request:async()=>{requests++;throw new Error('must not access network');}} as unknown as GitHub;
+  await assert.rejects(publish(store,job,store.repos()[0],'comment',github),/暂无需要发布/);
+  assert.equal(requests,0);store.close();
 });

@@ -39,7 +39,7 @@ export const modelRunner: Runner = async ({ repo, issue, related, job, settings,
   const key = process.env.MAINTAINER_API_KEY ?? process.env.DEEPSEEK_API_KEY;
   if (!key) throw new Error('未配置模型。请在启动进程中设置 DEEPSEEK_API_KEY 或 MAINTAINER_API_KEY，再重启。');
   progress('获取讨论与 PR 变更作为分析证据');
-  const context = await new GitHub().context(repo, issue, signal, lightweight(job.kind));
+  const context = issue.origin === 'repository' ? '' : await new GitHub().context(repo, issue, signal, lightweight(job.kind));
   const base = process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com';
   progress(`调用 ${settings.model}；输入按不可信仓库资料处理`);
   const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {

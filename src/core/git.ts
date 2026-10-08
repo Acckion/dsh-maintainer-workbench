@@ -11,6 +11,7 @@ export async function validateCheckout(path: string, repo: Repo): Promise<string
   const canonical = await realpath(path);
   const root = await git(canonical, ['rev-parse', '--show-toplevel']);
   if (await realpath(root) !== canonical) throw new Error('请选择 Git 仓库根目录');
+  if (repo.mode === 'local') return canonical;
   const origin = await git(canonical, ['remote', 'get-url', 'origin']);
   const normalized = origin.replace(/\.git$/, '').replace(/\/$/, '');
   if (![ `https://github.com/${repo.fullName}`, `git@github.com:${repo.fullName}`, `ssh://git@github.com/${repo.fullName}` ].some(s => s.toLowerCase() === normalized.toLowerCase())) throw new Error('本地 origin 与所选 GitHub 仓库不匹配');

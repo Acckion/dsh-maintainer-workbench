@@ -185,7 +185,7 @@ test('comment publication recovers an ambiguous POST without posting a duplicate
   };
   const old = process.env.GITHUB_TOKEN; process.env.GITHUB_TOKEN = 'fixture-only';
   try {
-    await assert.rejects(publish(store, store.get<Job>('jobs', id)!, repo, 'comment', new GitHub('', fake)), /lost response/);
+    await assert.rejects(publish(store, store.get<Job>('jobs', id)!, repo, 'comment', new GitHub('', fake)), /写入结果尚未确认/);
     const urls = await publish(store, store.get<Job>('jobs', id)!, repo, 'comment', new GitHub('', fake));
     assert.equal(writes, 1); assert.equal(urls.length, 1); assert.equal(store.get<Job>('jobs', id)!.publications?.comment?.status, 'published');
   } finally { if (old === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = old; await workbench.close(); }

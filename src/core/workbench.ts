@@ -1,3 +1,6 @@
+import { githubDetail, type DetailSection } from './github-details.ts';
+import { discoverWorkspace } from './workspace-discovery.ts';
+import { organizeActions, organizeModes, type OrganizeMode } from './organize.ts';
 import { lightweight, type FindingDecision } from './artifacts.ts';
 import { localRepositoryProfile } from './repository-context.ts';
 import { mkdir } from 'node:fs/promises';
@@ -31,6 +34,16 @@ export class Workbench {
     for (const job of store.jobs()) if (job.publications) { let changed = false; for (const receipt of Object.values(job.publications)) if (receipt.status === 'publishing') { receipt.status = 'failed'; receipt.error = '上次发布过程被中断；重试时将先按任务标识核对远端结果'; changed = true; } if (changed) { this.saveJob(job); store.audit('publish.interrupted', '恢复中断的发布记录', job.id); } }
     if (autoStart) { queueMicrotask(() => this.pump()); this.pollTimer = setInterval(() => void this.poll(), 60000); this.pollTimer.unref(); }
   }
+  async discover(paths: string[]): Promise<void> {
+    for (const path of paths) {
+      if(this.closed)return;
+      try {
+        const found = await discoverWorkspace(path,this.dataDir); if (!found || this.closed) continue;
+        const old = this.store.repos().find(r=>r.localPath===found.localPath || !r.discovered && found.githubName && r.fullName.toLowerCase()===found.githubName.toLowerCase()) ?? this.store.get<Repo>('repos',found.id);
+        this.store.put('repos',{description:'Harness 自动发现的工作区',syncedAt:null,syncWarning:null,defaultBranch:'',...old,...found,id:old?.id ?? found.id,workspacePaths:[...new Set([...(old?.workspacePaths ?? []),...(found.workspacePaths ?? [])])]});
+      } catch { /* Removed or inaccessible host workspaces do not block other directories. */ }
+    }
+  }
   async poll(): Promise<void> {
     const settings = this.store.settings();
     if (this.closed || this.polling || (settings.syncIntervalMinutes === 0 && !this.store.repos().some(r => r.policy?.syncIntervalMinutes))) return;
@@ -44,16 +57,21 @@ export class Workbench {
           await this.sync(repo.fullName);
           if (this.closed || !(repo.policy?.autoTriage ?? settings.autoTriage)) continue;
           const current = this.repo(repo.id);
-          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
+          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && !i.origin && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
           if (ids.length) this.enqueue(ids, 'triage');
         } catch (error) { if (!this.closed) this.store.audit('automation.failed', `${repo.fullName}: ${error instanceof Error ? error.message : String(error)}`); }
       }
     } finally { this.polling = false; }
   }
+  async itemDetail(id: string, section: DetailSection, page = 1) {
+    const issue = this.store.get<Issue>('issues', id);
+    if (!issue) throw new Error('事项不存在，请同步仓库后重试');
+    return githubDetail(this.github, this.repo(issue.repoId), issue, section, page);
+  }
   githubConnection() { return this.github.connection(); }
   snapshot(): Snapshot {
     const host = this.hostStatus?.();
-    return { repos: this.store.repos(), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.0' };
+    return { repos: this.store.repos(), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.1' };
   }
   saveJob(job: Job): void { this.store.put('jobs', { ...job, updatedAt: new Date().toISOString() }); }
   async syncMany(names: string[]) {
@@ -73,7 +91,8 @@ export class Workbench {
   }
   private async performSync(fullName: string): Promise<void> {
     const { repo, issues } = await this.github.sync(fullName);
-    const prev = this.store.get<Repo>('repos', repo.id);
+    const prev = this.store.repos().find(r=>r.discovered && r.githubName?.toLowerCase()===repo.fullName.toLowerCase()) ?? this.store.get<Repo>('repos', repo.id);
+    if(prev?.discovered) { const remoteId=repo.id; Object.assign(repo,{id:prev.id,mode:'local',discovered:true,localKind:prev.localKind,workspacePaths:prev.workspacePaths,githubName:prev.githubName,remoteCandidates:prev.remoteCandidates,dirty:prev.dirty,headSha:prev.headSha});for(const issue of issues){issue.repoId=repo.id;issue.id=issue.id.replace(remoteId,repo.id);} }
     repo.localPath = prev?.localPath ?? ''; repo.policy = prev?.policy;
     if (prev?.profile?.revision === repo.headSha) repo.profile = prev.profile;
     this.store.transaction(() => {
@@ -115,12 +134,30 @@ export class Workbench {
   }
   private repo(id: string): Repo { const repo = this.store.get<Repo>('repos', id); if (!repo) throw new Error('仓库不存在'); return repo; }
   private job(id: string): Job { const job = this.store.get<Job>('jobs', id); if (!job) throw new Error('任务不存在'); return job; }
+  organize(repoId: string, mode: OrganizeMode, issueId?: string, instructions = '') {
+    z.enum(organizeModes).parse(mode);
+    const repo = this.repo(repoId), action = organizeActions[mode];
+    if ((repo.localKind === 'folder' || repo.mode === 'local' && !repo.headSha) && mode !== 'audit') throw new Error('已发现此目录，但当前整理执行需要至少一个 Git 提交；不会自动初始化或提交你的文件');
+    if (repo.mode === 'local' && repo.dirty && mode !== 'audit') throw new Error('当前目录有未提交修改。本版隔离任务读取 HEAD，请先提交；不会悄悄忽略或覆盖这些修改');
+    if (!this.nativeRunner) throw new Error('仓库整理需要 Harness 原生执行器');
+    let id = issueId;
+    if (id) {
+      const issue = this.store.get<Issue>('issues', id);
+      if (!issue || issue.repoId !== repoId || issue.type !== 'pr' || mode !== 'docs') throw new Error('PR 整理仅支持同一仓库的文档同步');
+    } else {
+      id = `${repo.id}:organize:${mode}`;
+      if (!this.store.get<Issue>('issues', id)) this.store.put('issues', {id,repoId,origin:'repository',organizeMode:mode,number:0,type:'issue',title:action.title,body:action.description,author:'维护者',labels:[],state:'open',comments:0,updatedAt:new Date().toISOString(),url:repo.githubName ? `https://github.com/${repo.githubName}` : repo.mode === 'github' ? `https://github.com/${repo.fullName}` : ''});
+    }
+    return this.enqueue([id], action.kind, {instructions:action.instructions + '\nMaintainer scope: ' + instructions});
+  }
   enqueue(issueIds: string[], kind: JobKind, options: { sourceJobId?: string; instructions?: string } = {}): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
     const ids = [...new Set(z.array(z.string()).min(1).max(this.store.settings().maxJobsPerBatch).parse(issueIds))];
     const candidates = ids.map(id => {
       const issue = this.store.get<Issue>('issues', id); if (!issue) throw new Error(`Issue 不存在：${id}`);
       const repo = this.repo(issue.repoId);
+      if (repo.mode === 'local' && !repo.headSha && !(issue.organizeMode === 'audit' && kind === 'investigate')) throw new Error('无 Git 提交的目录当前仅支持只读仓库检查');
+      if (repo.mode === 'local' && repo.dirty && !(issue.organizeMode === 'audit' && kind === 'investigate')) throw new Error('当前工作区有未提交修改；隔离修改任务需先提交，只读检查仍可使用');
       if ((['preflight', 'ci'].includes(kind) || kind === 'review' && !options.sourceJobId) && issue.type !== 'pr') throw new Error('PR 审查只能选择 Pull Request');
       if (kind === 'triage' && issue.type === 'pr') throw new Error('PR 请使用变更预检，不执行 Issue 分诊');
       if (issue.state === 'closed') throw new Error('已关闭记录不可派发任务');
@@ -237,6 +274,8 @@ export class Workbench {
       if (job.revision !== revision(this.store.get<Issue>('issues',job.issueId)!, repo, job.kind)) throw new Error('排队期间输入版本已变化，请重新派发');
       const related = retrieveRelated(job.issueSnapshot, this.store.issues().filter(i => i.repoId === repo.id && i.id !== job.issueId && i.state === 'open'));
       let output: Awaited<ReturnType<Runner>>;
+      const directAudit = repo.mode === 'local' && job.issueSnapshot.organizeMode === 'audit' && job.kind === 'investigate';
+      if(directAudit) { job={...job,analysisPath:repo.localPath};this.saveJob(job); }
       if (this.nativeRunner && !job.formatOnly && !repo.localPath && !lightweight(job.kind)) {
         progress('自动准备仓库克隆；首次运行可能需要一些时间');
         await waitFor(this.prepareRepository(repo.id), controller.signal); controller.signal.throwIfAborted(); repo = this.repo(repo.id);
@@ -252,18 +291,23 @@ export class Workbench {
         }
         this.saveJob(job);
       }
+      if (this.nativeRunner && !job.formatOnly && !lightweight(job.kind) && repo.localPath && !directAudit && job.issueSnapshot.type !== 'pr') {
+        await validateCheckout(repo.localPath, repo);
+        try { await git(repo.localPath, ['cat-file','-e',`${job.baseSha}^{commit}`],false,controller.signal); }
+        catch { if(repo.mode === 'local') throw new Error('本地提交已不可用，请重新检测工作区'); await git(repo.localPath, ['fetch','origin',job.baseSha],true,controller.signal,120000); }
+      }
       progress(lightweight(job.kind) ? '使用缓存仓库摘要；轻量任务不创建代码工作区' : '读取仓库结构、开发约定、构建配置与测试入口');
       repo = { ...repo, headSha: job.baseSha };
       if (lightweight(job.kind) && repo.profile) repo.profile = { ...repo.profile, sources: [], warnings: [...repo.profile.warnings, '轻量分诊仅使用缓存结构摘要，未读取源代码'] };
-      if (!job.formatOnly && !lightweight(job.kind)) repo.profile = await this.understand(repo, controller.signal);
-      if (this.nativeRunner && !job.formatOnly && repo.localPath && !lightweight(job.kind)) {
+      if (!job.formatOnly && !lightweight(job.kind) && !directAudit) repo.profile = await this.understand(repo, controller.signal);
+      if (this.nativeRunner && !job.formatOnly && repo.localPath && !lightweight(job.kind) && !directAudit) {
         const worktree = await prepareWorktree(repo, job, this.dataDir);
         job = { ...job, worktree: worktree.path, branch: worktree.branch };
         controller.signal.throwIfAborted();
         this.saveJob(job); progress(`已创建独立分支 ${worktree.branch}`);
       }
       controller.signal.throwIfAborted();
-      if (this.nativeRunner && !job.worktree) {
+      if (this.nativeRunner && !job.worktree && !job.analysisPath) {
         const analysisPath = join(this.dataDir, 'analysis', job.id);
         await mkdir(analysisPath, { recursive: true }); controller.signal.throwIfAborted();
         job = { ...job, analysisPath }; this.saveJob(job);
@@ -279,7 +323,8 @@ export class Workbench {
           progress('已将来源补丁应用到新的隔离工作区');
         }
       }
-      const inputPatch = job.worktree && ['review','validate','ci'].includes(job.kind) ? await collectPatch(job.worktree, job.baseSha) : '';
+      const readOnlyStage = ['review','validate','ci'].includes(job.kind) || job.issueSnapshot.organizeMode === 'audit' && job.kind === 'investigate';
+      const inputPatch = job.worktree && readOnlyStage ? await collectPatch(job.worktree, job.baseSha) : '';
       const runner = this.nativeRunner ?? modelRunner;
       output = await runner({ repo, issue: job.issueSnapshot, related, job, settings, signal: controller.signal, progress, recordOutput: text => {
         if (controller.signal.aborted) return;
@@ -289,12 +334,12 @@ export class Workbench {
       controller.signal.throwIfAborted();
       const patch = job.worktree ? await collectPatch(job.worktree, job.baseSha) : '';
       controller.signal.throwIfAborted();
-      if (['review','validate','ci'].includes(job.kind) && patch !== inputPatch) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
-      if ((job.kind === 'fix' || job.kind === 'docs') && !patch) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
+      if (readOnlyStage && patch !== inputPatch) throw new Error('分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付');
+      if ((job.kind === 'fix' || job.kind === 'docs') && !patch && !job.issueSnapshot.origin && !job.instructions?.startsWith('Repository documentation maintenance.')) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
       this.store.transaction(() => {
         const currentIssue = this.store.get<Issue>('issues', job.issueId)!;
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });
-        this.saveJob({ ...job, ...output, patch, waitingReason: undefined, status: lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
+        this.saveJob({ ...job, ...output, patch, waitingReason: undefined, status: ((job.issueSnapshot.origin || job.instructions?.startsWith('Repository documentation maintenance.')) && !patch) || lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
         const artifact = output.artifact;
         const stage = artifact?.stage === 'triage' ? artifact.route : artifact?.stage === 'preflight' ? artifact.readiness : job.kind === 'fix' || job.kind === 'docs' ? 'review' : job.kind;
         if (revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...this.store.get<Issue>('issues', job.issueId)!, workflow: { stage, reason: artifact?.summary ?? output.result.summary, updatedAt: new Date().toISOString() } });

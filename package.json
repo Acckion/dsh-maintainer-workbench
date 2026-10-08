@@ -1,6 +1,6 @@
 {
   "name": "dsh-maintainer-workbench",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Repository maintenance workbench for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
@@ -58,35 +58,37 @@
     "@deepseek-ai/cordis": "4.0.3"
   },
   "dependencies": {
+    "@deepseek-ai/dsh-home-paths": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-llm": "0.1.7-alpha.1",
+    "lucide-react": "^0.468.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "lucide-react": "^0.468.0",
-    "zod": "^3.24.0",
-    "@deepseek-ai/dsh-llm": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-home-paths": "0.1.7-alpha.1"
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@deepseek-ai/dsh": "0.1.7-alpha.1",
     "@deepseek-ai/cordis": "4.0.3",
+    "@deepseek-ai/dsh": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-agent": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-session": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-host-webserver": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-agent-default-model": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-layout": "0.1.7-alpha.1",
     "@deepseek-ai/dsh-client-ui-sidebar": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-client-ui-workspace": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-host-webserver": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-permission-presets": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-session": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-session-title": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-user-approval": "0.1.7-alpha.1",
+    "@deepseek-ai/dsh-workspace": "0.1.7-alpha.1",
+    "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "esbuild": "^0.25.0",
     "tsx": "^4.20.0",
-    "typescript": "^5.9.0",
-    "@playwright/test": "^1.55.0",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-permission-presets": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-agent-default-model": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-workspace": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-session-title": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-client-ui-workspace": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-tools": "0.1.7-alpha.1",
-    "@deepseek-ai/dsh-user-approval": "0.1.7-alpha.1"
+    "typescript": "^5.9.0"
   }
 }
