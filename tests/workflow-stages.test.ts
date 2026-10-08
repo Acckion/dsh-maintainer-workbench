@@ -19,7 +19,7 @@ test('100 lightweight jobs never inspect or clone an existing local path and kee
   const base = store.issues()[0]; const ids:string[]=[];
   for(let n=1;n<=100;n++) {const id=repo.id+'#'+n;ids.push(id);store.put('issues',{...base,id,number:n});}
   let count=0;
-  const runner:Runner=async({job,settings,repo})=>{assert.equal(job.worktree,undefined);assert.ok(job.analysisPath);assert.equal(settings.maxTokens,6000);assert.deepEqual(repo.profile?.sources,[]);count++;const artifact=triage();return{artifact,result:asAnalysis(artifact),engine:'test'};};
+  const runner:Runner=async({job,settings,repo})=>{assert.equal(job.worktree,undefined);assert.ok(job.analysisPath);assert.equal(settings.maxTokens,1800);assert.deepEqual(repo.profile?.sources,[]);count++;const artifact=triage();return{artifact,result:asAnalysis(artifact),engine:'test'};};
   const w = new Workbench(store,await mkdtemp(join(tmpdir(),'mw-light-')),runner,undefined,false);
   w.updateSettings({...store.settings(),maxJobsPerBatch:50});w.enqueue(ids.slice(0,50),'triage');w.enqueue(ids.slice(50),'triage');w.pump();await w.drain();
   assert.equal(count,100);assert.ok(store.jobs().every(j=>j.status==='completed'));assert.equal(store.get<Issue>('issues',ids[0])?.workflow?.stage,'needs_info');

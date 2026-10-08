@@ -1,3 +1,4 @@
+import { triageInput, triageBudgetPrompt } from './triage-input.ts';
 import { artifactSchemas, artifactPrompt, asAnalysis, lightweight, withoutExecutedTests } from './artifacts.ts';
 import { z } from 'zod';
 import { analysisSchema, type Runner } from './types.ts';
@@ -39,12 +40,12 @@ export const modelRunner: Runner = async ({ repo, issue, related, job, settings,
   const key = process.env.MAINTAINER_API_KEY ?? process.env.DEEPSEEK_API_KEY;
   if (!key) throw new Error('未配置模型。请在启动进程中设置 DEEPSEEK_API_KEY 或 MAINTAINER_API_KEY，再重启。');
   progress('获取讨论与 PR 变更作为分析证据');
-  const context = issue.origin === 'repository' ? '' : await new GitHub().context(repo, issue, signal, lightweight(job.kind));
+  const context = issue.origin === 'repository' || job.kind==='triage' && issue.comments===0 ? '' : await new GitHub().context(repo, issue, signal, lightweight(job.kind));
   const base = process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com';
   progress(`调用 ${settings.model}；输入按不可信仓库资料处理`);
   const response = await fetch(`${base.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST', signal, headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: settings.model, max_tokens: settings.maxTokens, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `${artifactPrompt(job.kind)}\n\n${taskPrompt(job.kind, false)}` }, { role: 'user', content: JSON.stringify({ repository: repo.profile, handoff: job.handoff, instructions: job.instructions, pr: job.prContext, task: job.kind, revision: job.revision, checkoutSha: job.baseSha, comparisonBaseSha: job.prContext?.baseSha, issue, related: related.map(i => ({ number: i.number, title: i.title, body: i.body.slice(0, 1200) })).slice(0, 35), context, constraint: 'Remote metadata analysis only. No local code was read and no tests can be run. Explicitly state this limitation.' }) }] }),
+    body: JSON.stringify({ model: settings.model, max_tokens: settings.maxTokens, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: `${artifactPrompt(job.kind)}\n\n${job.kind==='triage' ? triageBudgetPrompt : taskPrompt(job.kind, false)}` }, { role: 'user', content: JSON.stringify(job.kind==='triage' ? triageInput(repo,issue,related,context) : { repository: repo.profile, handoff: job.handoff, instructions: job.instructions, pr: job.prContext, task: job.kind, revision: job.revision, checkoutSha: job.baseSha, comparisonBaseSha: job.prContext?.baseSha, issue, related: related.map(i => ({ number: i.number, title: i.title, body: i.body.slice(0, 1200) })).slice(0, 35), context, constraint: 'Remote metadata analysis only. No local code was read and no tests can be run. Explicitly state this limitation.' }) }] }),
   });
   if (!response.ok) throw new Error(`模型服务返回 HTTP ${response.status}，请检查模型、端点和密钥配置`);
   const payload = z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1), usage: z.object({ total_tokens: z.number() }).optional() }).parse(await response.json());

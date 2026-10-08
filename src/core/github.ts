@@ -70,7 +70,7 @@ export class GitHub {
     return { headSha: pr.head.sha, baseSha: pr.base.sha, headRef: pr.head.ref, headRepo: pr.head.repo?.full_name ?? null, baseRef: pr.base.ref, draft: pr.draft, merged: pr.merged, mergeable: pr.mergeable, checks, reviews, reviewComments, commitStatus, warnings: [...warnings, '检查和审查最多各 100 条；分支保护规则和未解决讨论未完整覆盖，不构成合并许可。'] };
   }
   async context(repo: Repo, issue: Issue, signal: AbortSignal, metadataOnly = false, expected?: import('./types.ts').PRContext): Promise<string> {
-    const comments = await this.request(`/repos/${repo.fullName}/issues/${issue.number}/comments?per_page=30`, { signal });
+    const comments = await this.request(`/repos/${repo.githubName ?? repo.fullName}/issues/${issue.number}/comments?per_page=30`, { signal });
     let extra: unknown = null;
     if (issue.type === 'pr' && !metadataOnly) {
       const pr = z.object({ head: z.object({ sha: z.string() }), base: z.object({ sha: z.string() }), changed_files: z.number() }).parse(await this.request(`/repos/${repo.fullName}/pulls/${issue.number}`, { signal }));
@@ -80,6 +80,7 @@ export class GitHub {
       if (after.head.sha !== pr.head.sha || after.base.sha !== pr.base.sha) throw new Error('读取 diff 时 PR 已更新，请同步后重试');
       extra = { ...pr, files, coverage: pr.changed_files > 100 ? 'Only first 100 files; partial review' : 'Up to 100 files; patches may be truncated by GitHub' };
     }
-    return JSON.stringify({ comments, pullRequest: extra }).slice(0, metadataOnly ? 12000 : 65000);
+    const data = JSON.stringify({ comments:metadataOnly && Array.isArray(comments) ? comments.map(c=>({user:{login:c.user?.login},body:String(c.body ?? '').slice(0,1200)})) : comments, pullRequest: extra });
+    return metadataOnly ? data : data.slice(0,65000);
   }
 }

@@ -21,7 +21,7 @@ import { kinds, type Issue, type Job, type JobKind, type Repo, type Runner, type
 export { revision } from './revision.ts';
 const patchHash = (patch: string): string => createHash('sha256').update(patch).digest('hex');
 const readOnlyCode = (kind: JobKind): boolean => ['review', 'validate', 'ci'].includes(kind);
-const settingsSchema = z.object({ concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
+const settingsSchema = z.object({ triageMaxTokens:z.number().int().min(500).max(8000).default(1800), concurrency: z.number().int().min(1).max(4), maxJobsPerBatch: z.number().int().min(1).max(50), timeoutMs: z.number().int().min(1000).max(1800000), provider: z.string().min(1).max(100), model: z.string().min(1).max(100), maxTokens: z.number().int().min(500).max(32000), agentPreset: z.string().min(1).max(100), permissionPreset: z.string().min(1).max(100), syncIntervalMinutes: z.number().int().min(0).max(1440), autoTriage: z.boolean() });
 
 export class Workbench {
   private active = new Map<string, AbortController>();
@@ -55,22 +55,28 @@ export class Workbench {
   }
   async poll(): Promise<void> {
     const settings = this.store.settings();
-    if (this.closed || this.polling || (settings.syncIntervalMinutes === 0 && !this.store.repos().some(r => r.policy?.syncIntervalMinutes))) return;
+    if (this.closed || this.polling) return;
     this.polling = true;
     try {
-      for (const repo of this.store.repos().filter(r => r.mode === 'github')) {
+      for (const repo of this.store.repos()) {
         if (this.closed) break;
         const interval = repo.policy?.syncIntervalMinutes ?? settings.syncIntervalMinutes;
-        if (!interval || Date.now() - new Date(repo.syncedAt ?? 0).getTime() < interval * 60000) continue;
         try {
-          await this.sync(repo.fullName);
-          if (this.closed || !(repo.policy?.autoTriage ?? settings.autoTriage)) continue;
-          const current = this.repo(repo.id);
-          const ids = this.store.issues().filter(i => i.repoId === repo.id && i.state === 'open' && i.type === 'issue' && !i.origin && (!i.analysis || i.analysisRevision !== revision(i, current)) && !this.store.jobs().some(j => j.issueId === i.id && j.kind === 'triage' && j.revision === revision(i, current))).slice(0, settings.maxJobsPerBatch).map(i => i.id);
-          if (ids.length) this.enqueue(ids, 'triage');
+          if ((repo.mode === 'github' || repo.githubName) && interval && Date.now() - new Date(repo.syncedAt ?? 0).getTime() >= interval * 60000) await this.sync(repo.githubName ?? repo.fullName);
+          this.autoTriage(repo.id);
         } catch (error) { if (!this.closed) this.store.audit('automation.failed', `${repo.fullName}: ${error instanceof Error ? error.message : String(error)}`); }
       }
     } finally { this.polling = false; }
+  }
+  private autoTriage(repoId: string): void {
+    const settings=this.store.settings(), repo=this.repo(repoId);
+    if(this.closed || !(repo.policy?.autoTriage ?? settings.autoTriage)) return;
+    // Bounded queue: replenish on poll/sync, never retry a failed revision automatically.
+    const jobs=this.store.jobs();
+    const pending=jobs.filter(j=>j.kind==='triage' && ['queued','running'].includes(j.status)).length;
+    const remaining=Math.max(0,settings.maxJobsPerBatch-pending);
+    const ids=this.store.issues().filter(i=>i.repoId===repoId && i.type==='issue' && i.state==='open' && !i.origin && (!i.analysis || i.analysisRevision!==revision(i,repo)) && !jobs.some(j=>j.issueId===i.id && j.kind==='triage' && j.revision===revision(i,repo))).slice(0,remaining).map(i=>i.id);
+    if(ids.length) this.enqueue(ids,'triage');
   }
   async itemDetail(id: string, section: DetailSection, page = 1) {
     const issue = this.store.get<Issue>('issues', id);
@@ -80,7 +86,7 @@ export class Workbench {
   githubConnection() { return this.github.connection(); }
   snapshot(): Snapshot {
     const host = this.hostStatus?.();
-    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.2' };
+    return { repos: this.store.repos().filter(r=>r.discoveryActive !== false || this.store.issues().some(i=>i.repoId===r.id) || this.store.jobs().some(j=>j.repoId===r.id)), issues: this.store.issues(), jobs: this.store.jobs().reverse().map(j => ({ ...j, artifactState: this.store.get<Issue>('issues', j.issueId) && j.revision === revision(this.store.get<Issue>('issues', j.issueId)!, this.repo(j.repoId), j.kind) ? 'current' : 'stale' })), audit: this.store.audits(), settings: this.store.settings(), capabilities: { harness: !!this.nativeRunner, model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY), github: !!process.env.GITHUB_TOKEN, modelName: host?.model ?? this.store.settings().model, baseUrl: process.env.MAINTAINER_BASE_URL ?? 'https://api.deepseek.com', running: this.active.size, ...(host ? { host } : {}) }, version: '0.1.3' };
   }
   saveJob(job: Job): void { this.store.put('jobs', { ...job, updatedAt: new Date().toISOString() }); }
   async syncMany(names: string[]) {
@@ -108,11 +114,14 @@ export class Workbench {
       this.store.put('repos', repo);
       for (const issue of issues) {
         const old = this.store.get<Issue>('issues', issue.id);
+        const cached=this.store.triage(issue.id,revision(issue,repo));
+        if(cached) { issue.analysis=cached.analysis; issue.analysisRevision=revision(issue,repo); }
         if (old?.analysis && old.analysisRevision === revision(issue, repo)) { issue.analysis = old.analysis; issue.analysisRevision = old.analysisRevision; }
         this.store.put('issues', { ...issue, linkedPullRequests: old?.linkedPullRequests, workflow: old?.workflow && revision(old, prev ?? repo) === revision(issue, repo) ? old.workflow : undefined });
       }
       this.store.audit('repo.sync', `${repo.fullName}：同步 ${issues.length} 条记录${repo.syncWarning ? '（部分覆盖）' : ''}`);
     });
+    this.autoTriage(repo.id);
   }
   async bindPath(repoId: string, localPath: string): Promise<void> {
     const repo = this.repo(repoId);
@@ -165,8 +174,8 @@ export class Workbench {
     const candidates = ids.map(id => {
       const issue = this.store.get<Issue>('issues', id); if (!issue) throw new Error(`Issue 不存在：${id}`);
       const repo = this.repo(issue.repoId);
-      if (repo.mode === 'local' && !repo.headSha && !(issue.organizeMode === 'audit' && kind === 'investigate')) throw new Error('无 Git 提交的目录当前仅支持只读仓库检查');
-      if (repo.mode === 'local' && repo.dirty && !(issue.organizeMode === 'audit' && kind === 'investigate')) throw new Error('当前工作区有未提交修改；隔离修改任务需先提交，只读检查仍可使用');
+      if (!lightweight(kind) && repo.mode === 'local' && !repo.headSha && !(issue.organizeMode === 'audit' && kind === 'investigate')) throw new Error('无 Git 提交的目录当前仅支持只读仓库检查');
+      if (!lightweight(kind) && repo.mode === 'local' && repo.dirty && !(issue.organizeMode === 'audit' && kind === 'investigate')) throw new Error('当前工作区有未提交修改；隔离修改任务需先提交，只读检查仍可使用');
       if ((['preflight', 'ci'].includes(kind) || kind === 'review' && !options.sourceJobId) && issue.type !== 'pr') throw new Error('PR 审查只能选择 Pull Request');
       if (kind === 'triage' && issue.type === 'pr') throw new Error('PR 请使用变更预检，不执行 Issue 分诊');
       if (issue.state === 'closed') throw new Error('已关闭记录不可派发任务');
@@ -182,7 +191,7 @@ export class Workbench {
     this.store.transaction(() => {
       for (const { issue, repo } of candidates) {
         const rev = revision(issue, repo, kind);
-        const prior = this.store.jobs().find(j => j.issueId === issue.id && j.kind === kind && j.revision === rev && j.sourceJobId === options.sourceJobId && (j.instructions ?? '') === (options.instructions ?? '') && !['failed', 'cancelled', 'rejected'].includes(j.status));
+        const prior = this.store.issueJobs(issue.id,kind,rev).find(j => j.sourceJobId === options.sourceJobId && (j.instructions ?? '') === (options.instructions ?? '') && !['failed', 'cancelled', 'rejected'].includes(j.status));
         if (prior) { reused.push(prior.id); this.store.audit('job.deduplicated', `重复派发复用已有任务 #${issue.number}`, prior.id); continue; }
         const now = new Date().toISOString();
         const handoff = this.store.jobs().filter(j => j.issueId === issue.id && j.result && (j.revision === revision(issue, repo, j.kind) || j.kind === 'review' || j.id === options.sourceJobId)).slice(-8).map(j => ({ stale: j.revision !== revision(issue, repo, j.kind), id: j.id, kind: j.kind, revision: j.revision, artifact: j.artifact, result: j.artifact ? undefined : j.result, feedback: j.reviewNote, findings: j.findingDecisions }));
@@ -289,7 +298,7 @@ export class Workbench {
     this.saveJob(job);
     const defaults = this.store.settings();
     const policy = this.repo(job.repoId).policy;
-    const settings = { ...defaults, timeoutMs: policy?.timeoutMs ?? defaults.timeoutMs, maxTokens: policy?.maxTokens ?? defaults.maxTokens };
+    const settings = { ...defaults, timeoutMs: policy?.timeoutMs ?? defaults.timeoutMs, maxTokens: job.kind==='triage' ? Math.min(policy?.maxTokens ?? defaults.maxTokens,defaults.triageMaxTokens ?? 1800) : policy?.maxTokens ?? defaults.maxTokens };
     const timer = setTimeout(() => controller.abort(new Error('任务超出配置的执行时间')), lightweight(job.kind) ? Math.min(settings.timeoutMs, 120000) : settings.timeoutMs);
     const progress = (message: string, sessionId?: string, waitingReason?: string) => {
       if (controller.signal.aborted) return;
@@ -377,6 +386,7 @@ export class Workbench {
       if ((job.kind === 'fix' || job.kind === 'docs') && !patch && !job.issueSnapshot.origin && !job.instructions?.startsWith('Repository documentation maintenance.')) throw new Error('Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。');
       this.store.transaction(() => {
         const currentIssue = this.store.get<Issue>('issues', job.issueId)!;
+        if(job.kind==='triage') this.store.saveTriage(job.issueId,job.revision,job.id,output.result);
         if (job.kind === 'triage' && revision(currentIssue, this.repo(job.repoId), job.kind) === job.revision) this.store.put('issues', { ...currentIssue, analysis: output.result, analysisRevision: job.revision });
         this.saveJob({ ...job, ...output, patch, formatRecovery: undefined, waitingReason: undefined, status: ((job.issueSnapshot.origin || job.instructions?.startsWith('Repository documentation maintenance.')) && !patch) || lightweight(job.kind) || ['investigate','validate','ci'].includes(job.kind) ? 'completed' : 'awaiting_review', finishedAt: new Date().toISOString() });
         const artifact = output.artifact;
