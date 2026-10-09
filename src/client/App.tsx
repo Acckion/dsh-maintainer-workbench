@@ -642,26 +642,6 @@ export function App({
               </span>
             </div>
           )}
-          {repo?.discovered && (
-            <details className="mw-workspace-notice">
-              <summary>工作区 · {repo.localPath}</summary>
-              <div>
-                <strong>自动发现 · {repo.localPath}</strong>
-                <p>
-                  {repo.localKind === "folder"
-                    ? "普通文件夹：可执行只读仓库检查。"
-                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：任务基于已提交版本在独立 worktree 执行，本地修改保留" : "工作区干净，可执行隔离任务"}`}
-                </p>
-                <p>
-                  {repo.githubName
-                    ? `GitHub：${repo.githubName}，同步时复用已有登录`
-                    : repo.remoteCandidates?.length
-                      ? "存在多个 GitHub 远端，暂不自动选择协作目标。"
-                      : "本地模式，无需 GitHub 登录。"}
-                </p>
-              </div>
-            </details>
-          )}
           {repo?.syncWarning && (
             <details className="mw-compact-notice">
               <summary>同步详情</summary>
