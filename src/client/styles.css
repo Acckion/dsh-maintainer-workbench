@@ -878,3 +878,21 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw.mw-layout-tabs .mw-task-row:is(.selected,.focused),.mw.mw-layout-tabs .mw-task-row:is(.selected,.focused):hover{background:transparent;box-shadow:inset 2px 0 var(--mw-tab-accent);border-left:0}
 .mw.mw-layout-tabs .mw-task-row:is(.selected,.focused) strong{color:var(--mw-tab-accent)}
 .mw.mw-layout-tabs .mw-task-icon{background:transparent;color:var(--muted)}
+
+/* Keep repository synchronization and its timestamp at the trailing edge. */
+.mw .mw-global-tabs .mw-tab-sync{margin-left:auto;flex-shrink:0}
+.mw .mw-global-tabs .mw-sync-time{flex-shrink:0}
+
+/* Native window dragging is limited to unused header and navigation space. */
+.mw[data-mw-host] :is(.mw-header-controls,.mw-global-tabs,.mw-reader-tabbar){-webkit-app-region:drag;app-region:drag}
+.mw[data-mw-host] :is(.mw-header-controls,.mw-global-tabs,.mw-reader-tabbar) :is(button,a,input,select,textarea,label,summary,[role=button]){-webkit-app-region:no-drag;app-region:no-drag}
+
+/* Detail refresh belongs to the upper-right corner, outside the metadata strip. */
+.mw .mw-reader-header>.mw-reader-refresh{position:absolute;top:14px;right:20px}
+.mw .mw-reader-header:has(>.mw-reader-refresh) h2{padding-right:32px}
+.mw .mw-reader-dialog .mw-reader-header>.mw-reader-refresh{right:60px}
+
+.mw .mw-reader-header>.mw-reader-refresh{right:12px}
+.mw .mw-reader-dialog .mw-reader-header>.mw-reader-refresh{right:52px}
+.mw .mw-workflow-toolbar[hidden]{display:none}
+.mw .mw-workflow-current-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}

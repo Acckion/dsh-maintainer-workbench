@@ -245,7 +245,7 @@ try {
       assert.equal(w.workspaces.list().find(item=>item.id===cleanupId).status,'removed');assert.equal(await git(cleanupPath,['rev-parse',store.get('jobs',cleanupId).branch]),cleanupSha);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       await page.screenshot({path:join(dir,`workspace-cleanup-${width}.png`),fullPage:true});
-      await page.getByRole('button',{name:'仓库设置',exact:true}).click();
+      await page.getByRole('button',{name:'Settings',exact:true}).click();
       await page.getByRole('heading',{name:'仓库设置',exact:true}).waitFor();
       const selectedBefore=await page.getByRole('combobox',{name:'选择仓库'}).inputValue();
       const globalBefore=store.settings().syncLimit;

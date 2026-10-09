@@ -534,7 +534,7 @@ export function App({
       icon: Layers3,
       count: groups.filter((g) => g.state === "attention").length,
     },
-    { id: "repository-settings", label: "仓库设置", icon: Settings2, count: 0 },
+    { id: "repository-settings", label: "Settings", icon: Settings2, count: 0 },
   ] as const;
   return (
     <div className="mw mw-layout-tabs" data-mw-host={host ? "" : undefined}>
@@ -601,7 +601,7 @@ export function App({
                     ? "page"
                     : undefined
                 }
-                className={`${(page === n.id && (n.id !== "inbox" || type === (n.label === "Issues" ? "issue" : "pr"))) || (n.id === "tasks" && page === "reviews") ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
+                className={`${(page === n.id && (n.id !== "inbox" || type === (n.label === "Issues" ? "issue" : "pr"))) || (n.id === "tasks" && page === "reviews") ? "active" : ""} `}
                 onClick={() => {
                   navigationGeneration.current += 1;
                   navigate(n.id);
