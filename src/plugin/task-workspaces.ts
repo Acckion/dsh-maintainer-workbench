@@ -9,7 +9,14 @@ import {statSync} from 'node:fs';
 
 /** Optional historical metadata must not hydrate cloud placeholders on the host thread. */
 export function taskDatabaseAvailable(path:string):boolean {
- try {const file=statSync(path);return file.isFile() && file.size>0 && file.blocks>0;} catch {return false;}
+ try {
+  const file=statSync(path);if(!file.isFile() || file.size===0 || file.blocks===0)return false;
+  for(const suffix of ['-wal','-shm']) {
+   try {const companion=statSync(path+suffix);if(!companion.isFile() || companion.size>0 && companion.blocks===0)return false;}
+   catch(error) {if((error as NodeJS.ErrnoException).code!=='ENOENT')return false;}
+  }
+  return true;
+ } catch {return false;}
 }
 
 export function taskWorkspaceTitle(repo:Pick<Repo,'fullName'|'githubName'>,job:Job):string {
