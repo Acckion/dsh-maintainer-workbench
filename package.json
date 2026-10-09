@@ -1,6 +1,6 @@
 {
   "name": "dsh-maintainer-workbench",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "description": "Repository maintenance workbench for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
@@ -66,7 +66,8 @@
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
     "@deepseek-ai/dsh-home-paths": "0.2.0-rc.2 || ^0.2.1-alpha.1",
     "@deepseek-ai/dsh-llm": "0.2.0-rc.2 || ^0.2.1-alpha.1",
-    "@deepseek-ai/dsh-tools": "0.2.0-rc.2 || ^0.2.1-alpha.1"
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2 || ^0.2.1-alpha.1",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.0-rc.2 || ^0.2.1-alpha.1"
   },
   "dependencies": {
     "react": "18.3.1",
@@ -101,6 +102,7 @@
     "@deepseek-ai/dsh-user-approval": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-home-paths": "0.2.1-alpha.1",
     "@deepseek-ai/dsh-llm": "0.2.1-alpha.1",
-    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-alpha.1"
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-api-session-controller": "0.2.1-alpha.1"
   }
 }

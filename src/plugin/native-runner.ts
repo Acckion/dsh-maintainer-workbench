@@ -78,11 +78,13 @@ import type { InputRequest } from "../domain/input.ts";
 import { stagePolicies } from "../workflow/stages.ts";
 import { inputTool } from "./input-tool.ts";
 import { taskWorkspaceTitle } from "./task-workspaces.ts";
+import { taskModel } from "./model-routing.ts";
 
 export function hostStatus(ctx: Context): HostStatus {
   const selection = ctx.agentDefaultModel.currentSelection();
   return {
     ...selection,
+    providers: ctx.llm.listProviders(),
     contextServices: {
       tokenMeter: !!ctx.get?.("tokenMeter"),
       pruner: !!ctx.get?.("toolResultPruner"),
@@ -129,9 +131,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
       documentValidation && job.worktree
         ? documentInspectionPolicy(job.worktree, documentRanges)
         : undefined;
-    const selection = ctx.agentDefaultModel.currentSelection();
-    if (!ctx.llm.listProviders().some((p) => p.id === selection.provider))
-      throw new Error("Harness 默认模型的适配器未加载，请在宿主模型设置中配置");
+    const selection = await taskModel(ctx, settings, job.kind);
     const context =
       job.formatOnly ||
       issue.origin === "repository" ||

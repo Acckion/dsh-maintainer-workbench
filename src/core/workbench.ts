@@ -19,7 +19,9 @@ import type { OrganizeMode } from "./organize.ts";
 import type { PublishAction } from "./publish.ts";
 import { revision } from "./revision.ts";
 import { Store } from "./store.ts";
-import type { GlobalSettingsSnapshot, HostStatus, Job, JobKind, Runner, Snapshot } from "./types.ts";
+import type { GlobalSettingsSnapshot, HostModelCatalog, HostStatus, Job, JobKind, Runner, Snapshot } from "./types.ts";
+import { settingsSchema } from "../application/tasks.ts";
+import { assertCatalogChoice } from "./models.ts";
 export { revision } from "./revision.ts";
 /** Compatibility facade. Business rules live in the composed services. */
 export class Workbench {
@@ -40,6 +42,7 @@ export class Workbench {
     private github = new GitHub(),
     private autoStart = true,
     private hostStatus?: () => HostStatus,
+    private hostModels?: () => Promise<HostModelCatalog>,
   ) {
     this.processing = new ProcessingService(store);
     const deps: ServiceDependencies = {
@@ -265,19 +268,37 @@ export class Workbench {
   }
   globalSettings(): GlobalSettingsSnapshot {
     const host = this.hostStatus?.();
+    const settings = this.store.settings();
+    const defaultModel = settings.nativeDefaultModel;
+    const modelAvailable = defaultModel
+      ? !!host?.providers?.some(p => p.id === defaultModel.provider)
+      : !!host?.adapterRegistered;
     return {
-      settings: this.store.settings(),
+      settings,
       revision: this.tasks.settingsRevision(),
       capabilities: {
         harness: !!this.nativeRunner,
-        model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY),
+        model: this.nativeRunner ? modelAvailable : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY),
         github: !!process.env.GITHUB_TOKEN,
-        modelName: host?.model ?? this.store.settings().model,
+        modelName: defaultModel?.model ?? host?.model ?? settings.model,
         baseUrl: process.env.MAINTAINER_BASE_URL ?? "https://api.deepseek.com",
         running: this.scheduler.active.size,
         ...(host ? { host } : {}),
       },
     };
+  }
+  async models(): Promise<HostModelCatalog> {
+    if (!this.hostModels) throw new Error("模型列表需在 Harness 原生环境中读取");
+    const catalog = await this.hostModels();
+    return { ...catalog, failures: catalog.failures.map(f => ({ ...f, message: "模型目录读取失败，请在 Harness 模型设置中检查后重试" })) };
+  }
+  async validateModelSettings(input: unknown): Promise<void> {
+    const settings = settingsSchema.parse(input);
+    if (!this.nativeRunner) return;
+    const choices = [settings.nativeDefaultModel, ...Object.values(settings.stageModels ?? {})].filter((value): value is NonNullable<typeof value> => value !== undefined);
+    if (!choices.length) return;
+    const catalog = await this.models();
+    for (const choice of choices) assertCatalogChoice(choice, catalog);
   }
   snapshot(): Snapshot {
     const global = this.globalSettings();

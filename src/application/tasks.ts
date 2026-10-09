@@ -21,7 +21,13 @@ import {
 import { validationAcceptance } from "../core/validation-acceptance.ts";
 import { validationInstructions } from "../core/validation-context.ts";
 import { stageBlocker } from "../workflow/actions.ts";
-const settingsSchema = z.object({
+const modelChoiceSchema = z.object({
+  provider: z.string().min(1).max(200), model: z.string().min(1).max(500),
+  reasoningEffort: z.string().min(1).max(100).optional(),
+}).strict();
+export const settingsSchema = z.object({
+  nativeDefaultModel: modelChoiceSchema.optional(),
+  stageModels: z.record(z.enum(kinds), modelChoiceSchema).default({}),
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
   autoPreflight: z.boolean().default(false),
   triageMaxTokens: z.number().int().min(500).max(8000).default(1800),

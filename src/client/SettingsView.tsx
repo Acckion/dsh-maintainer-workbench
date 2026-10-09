@@ -3,13 +3,13 @@ import {
   GitBranch,
   Settings2,
   ShieldCheck,
-  Sparkles,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { Settings, Snapshot } from "../core/types.ts";
 import { Tag } from "./Primitives.tsx";
 import { WorkspacesPanel } from "./WorkspacesPanel.tsx";
 import { request } from "./api.ts";
+import { ModelSettings } from "./ModelSettings.tsx";
 import { settingsIdentity } from "./settings-draft.ts";
 export function GitHubConnection({
   refreshKey = false,
@@ -125,7 +125,7 @@ export function SettingsView({
 }: {
   scope: "global" | "repository";
   state: Pick<Snapshot, "settings" | "capabilities"> & { repos?: Snapshot["repos"] };
-  panel?: "all" | "automation" | "execution" | "connections" | "workspaces";
+  panel?: "all" | "models" | "automation" | "execution" | "connections" | "workspaces";
   changed?: (dirty: boolean) => void;
   repoId: string;
   busy: boolean;
@@ -223,7 +223,7 @@ export function SettingsView({
           <>
             <div className="mw-section-title">
               <Settings2 size={19} />
-              模型与连接
+              GitHub 连接
             </div>
             <div className="mw-credential-fields">
               {!native && (
@@ -280,35 +280,6 @@ export function SettingsView({
                 GitHub 令牌仅保存在服务端权限为 0600 的文件中，不返回浏览器。
               </p>
             </div>
-            {native && (
-              <div className="mw-host-model">
-                <div className="mw-section-title">
-                  <Sparkles size={19} />
-                  跟随 Harness 默认模型
-                </div>
-                <h3>{host?.model ?? "等待宿主模型配置"}</h3>
-                <p>
-                  {host?.provider ?? "未选择提供方"}
-                  {host?.reasoningEffort
-                    ? ` · 推理：${host.reasoningEffort}`
-                    : " · 推理使用宿主默认设置"}
-                </p>
-                <Tag tone={host?.adapterRegistered ? "green" : "amber"}>
-                  {host?.adapterRegistered
-                    ? "适配器已加载 · 凭据在调用时验证"
-                    : "模型适配器未加载"}
-                </Tag>
-                <p>
-                  模型、API 地址和密钥统一在{" "}
-                  <strong>Harness 左下角「设置 → 模型」</strong>
-                  管理。每次新任务读取宿主默认选择，无需在插件中重复填写；已运行任务保留启动时的模型。
-                </p>
-                <p className="mw-muted">
-                  单个聊天的临时模型选择不会改变宿主默认模型。所有真实任务均通过
-                  Harness Session 执行。
-                </p>
-              </div>
-            )}
             <div className="mw-connection-list">
               <GitHubConnection refreshKey={busy} />
               <div>
@@ -318,6 +289,13 @@ export function SettingsView({
           </>
         )}
       </section>}
+      {scope === "global" && (panel === "models" || (panel === "all" && native)) && <form
+        className="mw-settings-card" onSubmit={e => { e.preventDefault(); save(settings); }}>
+        {native ? <ModelSettings settings={settings} update={setSettings} /> : <p className="mw-muted">
+          Harness 模型选择仅在原生插件中可用。独立预览的模型在「执行」中配置。
+        </p>}
+        {native && <button className="mw-button primary" disabled={busy} type="submit">保存设置</button>}
+      </form>}
       {scope === "global" && (panel === "all" || panel === "automation" || panel === "execution") && (
         <form
           className="mw-settings-card"

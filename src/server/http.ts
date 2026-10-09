@@ -51,6 +51,10 @@ export function handler(
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.slice(API.length);
     try {
+      if (req.method === "GET" && path === "/models") {
+        send(res, 200, await workbench.models());
+        return;
+      }
       if (req.method === "GET" && path === "/settings/global") {
         send(res, 200, workbench.globalSettings());
         return;
@@ -162,6 +166,7 @@ export function handler(
       const input = await body(req);
       if (path === "/settings/global") {
         const p = z.object({ settings: z.unknown(), revision: z.string().length(64) }).parse(input);
+        await workbench.validateModelSettings(p.settings);
         workbench.updateSettings(p.settings, p.revision);
         send(res, 200, workbench.globalSettings());
         return;
@@ -608,7 +613,7 @@ export function handler(
           .object({ repoId: z.string(), policy: z.unknown() })
           .parse(input);
         workbench.updatePolicy(p.repoId, p.policy);
-      } else if (path === "/settings") workbench.updateSettings(input);
+      } else if (path === "/settings") { await workbench.validateModelSettings(input); workbench.updateSettings(input); }
       else {
         send(res, 404, { error: "接口不存在" });
         return;

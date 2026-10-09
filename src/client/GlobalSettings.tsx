@@ -4,7 +4,7 @@ import { SettingsView } from "./SettingsView.tsx";
 import { request } from "./api.ts";
 
 const panels = [
-  ["automation", "自动化"], ["execution", "执行"],
+  ["models", "模型"], ["automation", "自动化"], ["execution", "执行"],
   ["connections", "连接"], ["workspaces", "工作区"],
 ] as const;
 type Panel = typeof panels[number][0];

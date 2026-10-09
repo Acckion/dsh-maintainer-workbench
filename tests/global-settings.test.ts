@@ -8,6 +8,7 @@ import { Store } from '../src/core/store.ts';
 import { Workbench } from '../src/core/workbench.ts';
 import { handler, localRejection } from '../src/server/http.ts';
 import { fixtureRunner } from './support/fixtures.ts';
+import { modelCatalog } from './support/model-catalog.ts';
 import { settingsIdentity } from '../src/client/settings-draft.ts';
 
 async function setup(t: test.TestContext) {
@@ -15,7 +16,7 @@ async function setup(t: test.TestContext) {
   const store = new Store(join(dir, 'state.sqlite'));
   const w = new Workbench(store, dir, fixtureRunner, undefined, false, () => ({
     model: 'host-fixture', provider: 'fixture', adapterRegistered: true, agentPreset: 'host-default',
-  }));
+  }), async () => modelCatalog);
   const server = createServer(handler(w, localRejection));
   await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
   const address = server.address(); assert.ok(address && typeof address !== 'string');
@@ -73,6 +74,30 @@ test('draft cleanliness ignores SQLite row metadata and property order but track
     const settings = store.settings();
     const reordered = Object.fromEntries(Object.entries(settings).reverse()) as typeof settings;
     assert.equal(settingsIdentity(settings), settingsIdentity({...reordered, id:'main'} as typeof settings));
+    const models={...settings,stageModels:{review:{provider:'p',model:'m'},fix:{provider:'p',model:'n'}}};
+    assert.equal(settingsIdentity(models),settingsIdentity({...models,stageModels:{fix:{model:'n',provider:'p'},review:{model:'m',provider:'p'}},nativeDefaultModel:undefined}));
     assert.notEqual(settingsIdentity(settings), settingsIdentity({...reordered, syncLimit:0}));
   } finally { store.close(); }
+});
+
+
+test('configured Harness choices persist across reopen and catalog/validation expose no credentials', async t => {
+  const {store,url,dir} = await setup(t);
+  const catalogResponse = await fetch(url.replace('/settings/global','/models'));
+  assert.equal(catalogResponse.status,200); assert.deepEqual(await catalogResponse.json(),modelCatalog);
+  assert.equal((await fetch(url.replace('/settings/global','/models'),{headers:{Origin:'https://untrusted.example'}})).status,403);
+  let before = await (await fetch(url)).json();
+  const send = (settings:unknown) => fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings,revision:before.revision})});
+  const selected = {...before.settings,nativeDefaultModel:{provider:'openrouter',model:'laguna'},stageModels:{review:{provider:'deepseek',model:'pro',reasoningEffort:'high'}}};
+  const accepted=await send(selected);assert.equal(accepted.status,200);before=await accepted.json();
+  const reopened = new Store(join(dir,'state.sqlite'));
+  try {assert.deepEqual(reopened.settings().nativeDefaultModel,selected.nativeDefaultModel);assert.deepEqual(reopened.settings().stageModels,selected.stageModels);} finally {reopened.close();}
+  for (const settings of [{...selected,stageModels:{invented:{provider:'deepseek',model:'pro'}}},
+    {...selected,nativeDefaultModel:{provider:'deepseek',model:'removed'}},
+    {...selected,stageModels:{review:{provider:'deepseek',model:'pro',reasoningEffort:'invalid'}}},
+    {...selected,stageModels:null}]) {
+    assert.equal((await send(settings)).status,400);assert.deepEqual(store.settings().stageModels,selected.stageModels);
+  }
+  assert.equal((await send({...selected,nativeDefaultModel:undefined,stageModels:{}})).status,200);
+  assert.equal(store.settings().nativeDefaultModel,undefined);assert.deepEqual(store.settings().stageModels,{});
 });
