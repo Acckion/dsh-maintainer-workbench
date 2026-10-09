@@ -55,5 +55,23 @@
     "scripts/browser-maintenance-fixture.mjs": "df9044a42e2210f906e15fc8ef9df1f8bc17ec3251797ece09d7cc7f319f263d",
     "scripts/browser-navigation-fixture.mjs": "aca442607f7bcbeef5764e49642fa820e52d02085e31059a754de0cd8a6b4370",
     "scripts/browser-theme-check.mjs": "8c8d691c1bfd041b652eccf6bafdcaf9cbc6790e74f3cfc31e61ef7c71109f5f"
+  },
+  "baselineSourceCommit": "bf58bf6",
+  "screenshotsFor": "uiCleanup",
+  "uiCleanup": {
+    "changes": "Remove the classification, source-path and basis block above the stage navigation; retain the overview/plan/cycle controls.",
+    "checks": {
+      "typecheck": "passed",
+      "build": "passed",
+      "timelineBrowserWidths": [
+        1440,
+        390
+      ]
+    },
+    "sourceHashes": {
+      "src/client/WorkflowDetail.tsx": "7f21b84c696e0e8f96b50ff525c320157afda4b7223789d590026737677fa665",
+      "src/client/styles.css": "73a497d16887796277fcf312f7ee673253a677b460e9ad143fb29ea2bc80cabe",
+      "scripts/browser-timeline-fixture.mjs": "eead4ae3c9b671c8dde3e0f25adb7051320e76ce1080ebe1e00fa30f330c961e"
+    }
   }
 }

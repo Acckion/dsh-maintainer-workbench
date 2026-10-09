@@ -217,7 +217,9 @@ try {
         }),
         nav = flow.getByRole("navigation", { name: "处理阶段", exact: true }),
         panel = flow.getByRole("region", { name: "选中阶段", exact: true });
-      await flow.getByText("PR · 测试 / 夹具", { exact: true }).waitFor();
+      await nav.getByRole("button", { name: /^测试审查/ }).waitFor();
+      assert.equal(await flow.getByText("PR · 测试 / 夹具", { exact: true }).count(), 0);
+      assert.equal(await flow.getByText("依据已读取的源码，范围仍需核对", { exact: true }).count(), 0);
       await expect(panel).toContainText("审查证据不足");
       await expect(page.locator(".mw-reader-state")).toHaveText("草稿");
       assert.equal(

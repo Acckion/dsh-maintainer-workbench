@@ -549,9 +549,7 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 
 /* Phase navigation is a view of saved work, not a percentage or an execution control. */
 .mw-workflow-detail{min-width:0;max-width:100%;color:var(--mw-text,#29483e)}
-.mw-workflow-profile{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
-.mw-workflow-profile strong{font-size:14px}.mw-workflow-profile .mw-tag{margin-left:8px}
-.mw-workflow-profile p,.mw-workflow-profile small{color:var(--mw-muted,#63786e);margin-top:5px}
+.mw-workflow-toolbar{display:flex;justify-content:flex-end;align-items:center;gap:16px;flex-wrap:wrap}
 .mw-workflow-views{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .mw-workflow-detail select{max-width:100%;background:var(--mw-surface,#fff);color:inherit;border:1px solid var(--mw-border,#dce5df);border-radius:6px;padding:7px}
 .mw-workflow-timeline{overflow-x:auto;max-width:100%;padding:8px 0 16px;scrollbar-width:thin}
@@ -578,7 +576,7 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 .mw-stage-view-controls{display:flex;gap:16px;margin:10px 0 16px}.mw-stage-view-controls button[aria-pressed=true]{font-weight:700;text-decoration:underline;text-underline-offset:4px}
 .mw-stage-result h4{margin-top:16px}.mw-stage-result details{margin-top:16px}.mw-stage-result li,.mw-stage-panel li{line-height:1.8;overflow-wrap:anywhere}
 .mw-stage-activity{border-top:1px solid var(--mw-border,#dce5df);margin-top:24px;padding-top:14px;font-size:12px}.mw-stage-activity li{margin-top:8px;overflow-wrap:anywhere}
-@media(max-width:760px){.mw-workflow-current{flex-direction:column}.mw-workflow-actions{max-width:100%}.mw-timeline-node{min-width:125px}.mw-workflow-profile{gap:8px}.mw-workflow-views{font-size:12px}.mw-workflow-detail .mw-text-button{min-height:44px}.mw-workflow-current{padding:12px}.mw-stage-panel select{width:100%}}
+@media(max-width:760px){.mw-workflow-current{flex-direction:column}.mw-workflow-actions{max-width:100%}.mw-timeline-node{min-width:125px}.mw-workflow-toolbar{gap:8px}.mw-workflow-views{font-size:12px}.mw-workflow-detail .mw-text-button{min-height:44px}.mw-workflow-current{padding:12px}.mw-stage-panel select{width:100%}}
 @container content (max-width:560px){.mw-layout-tabs .mw-workarea:has(>.mw-reader-embedded)>.mw-list-panel{display:none}}
 
 .mw-stage-panel>header h3{font-size:18px;margin:0}.mw-stage-panel>header .mw-tag{font-size:11px}

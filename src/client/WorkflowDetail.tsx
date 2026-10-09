@@ -217,25 +217,7 @@ export function WorkflowDetail({
   const cycleLoading = !!cycle && timeline.caseId !== cycle;
   return (
     <section className="mw-workflow-detail" aria-label="事项处理流程">
-      <div className="mw-workflow-profile">
-        <div>
-          <strong>
-            {issue.type === "pr" ? "PR" : "Issue"} · {timeline.profile.label}
-          </strong>
-          {timeline.profile.provisional && (
-            <span className="mw-tag">初步判断</span>
-          )}
-          <p>
-            {timeline.profile.areas.length
-              ? timeline.profile.areas.join(" / ")
-              : "影响范围待核实"}
-          </p>
-          <small title={timeline.profile.basis}>
-            {timeline.profile.provisional
-              ? "依据已读取的源码，范围仍需核对"
-              : "依据保存的分类与证据"}
-          </small>
-        </div>
+      <div className="mw-workflow-toolbar">
         <div className="mw-workflow-views">
           <button
             type="button"
