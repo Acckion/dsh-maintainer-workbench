@@ -1,3 +1,4 @@
+import {issuePlanSchema} from '../core/issue-flow.ts';
 import { detailSections } from "../core/github-details.ts";
 import { organizeModes } from "../core/organize.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -67,6 +68,11 @@ export function handler(
         send(res, 200, await workbench.itemDetail(p.id, p.section, p.page));
         return;
       }
+      if (req.method === "GET" && path === "/item-draft") {
+        const id = z.string().min(1).max(400).parse(url.searchParams.get("id"));
+        if (!workbench.store.get("issues", id)) throw new Error("事项不存在");
+        send(res, 200, workbench.store.draft(id)); return;
+      }
       if (req.method === "GET" && path === "/state") {
         send(res, 200, workbench.snapshot());
         return;
@@ -122,6 +128,14 @@ export function handler(
         return;
       }
       const input = await body(req);
+      if (path === "/item-draft") {
+        const p = z.object({id:z.string().min(1).max(400), patch:z.object({
+          view:z.string().max(30).optional(), reply:z.string().max(30000).optional(),
+          instructions:z.string().max(10000).optional(), plan:issuePlanSchema.extend({acceptanceCriteria:z.array(z.string().max(1000)).max(20)}).optional()
+        }).strict()}).parse(input);
+        if (!workbench.store.get("issues", p.id)) throw new Error("事项不存在");
+        workbench.store.saveDraft(p.id,p.patch); send(res,200,{saved:true}); return;
+      }
       if (path === "/sync-all") {
         const names = [
           ...new Set(
@@ -240,6 +254,7 @@ export function handler(
             sourceJobId: z.string().optional(),
             instructions: z.string().max(8000).optional(),
             forceNew: z.boolean().optional(),
+            goal: z.enum(["resolve"]).optional(),
           })
           .parse(input);
         send(
@@ -249,6 +264,7 @@ export function handler(
             sourceJobId: p.sourceJobId,
             instructions: p.instructions,
             forceNew: p.forceNew,
+            goal: p.goal,
           }),
         );
         return;

@@ -242,6 +242,9 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 export interface Job {
+  goal?: "resolve";
+  goalId?: string;
+  goalPauseReason?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
   evidenceGate?: { allowed: boolean; reasons: string[] };

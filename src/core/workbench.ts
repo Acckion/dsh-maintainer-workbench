@@ -1,3 +1,5 @@
+import packageInfo from "../../package.json" with {type:"json"};
+import { nextGoalStep } from "./goal-flow.ts";
 import { documentAcceptance } from "./document-acceptance.ts";
 import { validationInstructions } from "./validation-context.ts";
 import { reviewRequiredSources } from "./review-context.ts";
@@ -324,7 +326,7 @@ export class Workbench {
         running: this.active.size,
         ...(host ? { host } : {}),
       },
-      version: "0.1.6",
+      version: packageInfo.version,
     };
   }
   saveJob(job: Job): void {
@@ -805,6 +807,8 @@ export class Workbench {
       sourceJobId?: string;
       instructions?: string;
       forceNew?: boolean;
+      goal?: "resolve";
+      goalId?: string;
     } = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
@@ -905,6 +909,7 @@ export class Workbench {
           prior &&
           (!options.forceNew || ["queued", "running"].includes(prior.status))
         ) {
+          if (options.goal && !prior.goal) this.saveJob({...prior,goal:options.goal,goalId:options.goalId ?? prior.id});
           reused.push(prior.id);
           this.store.audit(
             "job.deduplicated",
@@ -954,11 +959,14 @@ export class Workbench {
             findings: source.findingDecisions,
           });
         }
+        const id = randomUUID();
         const job: Job = {
+          goal: options.goal,
+          goalId: options.goal ? options.goalId ?? id : undefined,
           handoff,
           sourceJobId: options.sourceJobId,
           instructions: options.instructions?.slice(0, 8000),
-          id: randomUUID(),
+          id,
           repoId: repo.id,
           issueId: issue.id,
           kind,
@@ -1022,6 +1030,7 @@ export class Workbench {
     const result = this.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
+      goal: job.goal, goalId: job.goalId,
       forceNew: true,
     });
     for (const created of result.created)
@@ -1076,6 +1085,7 @@ export class Workbench {
     return this.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
+      goal: job.goal, goalId: job.goalId,
     });
   }
   async review(
@@ -1267,6 +1277,7 @@ export class Workbench {
     const issue = this.store.get<Issue>("issues", issueId);
     if (!issue || issue.type !== "issue" || issue.state !== "open")
       throw new Error("只能为开放 Issue 保存类型和验收计划");
+    if (this.store.jobs().some(job => job.issueId === issueId && ["queued","running"].includes(job.status))) throw new Error("任务运行中，请先停止任务再确认新计划");
     const plan = issuePlanSchema.parse(value);
     this.store.put("issues", {
       ...issue,
@@ -1648,8 +1659,31 @@ export class Workbench {
     this.store.audit("settings.updated", "更新并发、批量上限和模型配置");
     if (this.autoStart) this.pump();
   }
+  private advancingGoals = false;
+  private advanceGoals(): void {
+    if (this.advancingGoals) return;
+    this.advancingGoals = true;
+    try {
+      const jobs = this.store.jobs();
+      for (const job of jobs) {
+        if (!job.goal || job.goalPauseReason || jobs.some(child => child.sourceJobId === job.id)) continue;
+        const issue = this.store.get<Issue>("issues", job.issueId);
+        if (!issue) continue;
+        const continuation = nextGoalStep(job, issue);
+        if (continuation.pause) this.saveJob({...job,goalPauseReason:continuation.pause});
+        if (continuation.next) {
+          try {
+            this.enqueue([job.issueId], continuation.next, {sourceJobId:job.id, instructions:job.instructions,goal:job.goal,goalId:job.goalId});
+          } catch (error) {
+            this.saveJob({...job,goalPauseReason:error instanceof Error ? error.message : "需要确认后才能继续"});
+          }
+        }
+      }
+    } finally { this.advancingGoals = false; }
+  }
   pump(): void {
-    if (this.closed) return;
+    if (this.closed || this.advancingGoals) return;
+    this.advanceGoals();
     const queued = this.store.jobs().filter((j) => j.status === "queued");
     const repos = [...new Set(queued.map((j) => j.repoId))];
     const pivot = repos.indexOf(this.lastRepo);

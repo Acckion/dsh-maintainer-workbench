@@ -4,7 +4,7 @@
 
 ## 启动
 
-要求 Node.js 24+、Git。模型执行使用固定版本的 Harness `0.1.7-alpha.1`。
+要求 Node.js 24+、Git。开发环境使用 Harness `0.2.1-alpha.1`，已安装的 macOS 客户端兼容 `0.2.0-rc.2`。
 
 ```sh
 npm ci
@@ -28,11 +28,11 @@ npm start
 ## 从零完成一次真实维护
 
 1. **配置模型**：只在 Harness 的「设置 → 模型」配置一次默认模型、提供方和凭据。本插件每次真实任务开始读取宿主默认模型与推理设置；原生界面不重复提供 API Key、端点和模型输入。单个聊天的临时模型选择不等于全局默认。独立预览保留自己的兼容 API 配置。
-2. **接入仓库**：输入 `owner/repository`。公开仓库可以匿名读取；私有仓库、写入和更高读取限额需要在“设置与连接”填写 GitHub Token。细粒度令牌的读取需要 Metadata/Issues/Pull requests，发布还需要相应写权限，代码推送需要 Contents write。
+2. **发现仓库**：优先自动识别 Harness 工作区及 GitHub 远端；其他远程仓库可以输入 `owner/repository` 添加。公开仓库可以匿名读取；私有仓库、写入和更高读取限额需要在“设置与连接”填写 GitHub Token。细粒度令牌的读取需要 Metadata/Issues/Pull requests，发布还需要相应写权限，代码推送需要 Contents write。
 3. **准备仓库**：分诊可以直接使用远程仓库资料；调查、审查、修复与文档任务自动克隆到插件管理的目录，并在固定提交创建专用 worktree，无需用户配置路径。也可在设置中点击「自动准备仓库」，或绑定已有 clone。自动准备不安装依赖、不执行仓库脚本。私有仓库仍需 GitHub 凭据。已有用户克隆需要包含同步时提交，缺失时会提示 fetch。
 4. **批量派发**：勾选 Issue/PR，执行智能分诊、调查、修复、文档维护或 PR 审查。选中 Issue 时不能使用 PR 专属审查。默认每批 20 个、并发 2 个，可在设置修改。
 5. **处理宿主审批**：实际命令遵循 Harness 的权限 preset。调查/审查使用 `read-only`；修复/文档任务默认继承宿主权限预设。需要审批时在对应 Harness 会话中处理。任务详情可点击「打开 Harness 会话 / 审批」，直接进入对应原生会话。
-6. **审核结果**：查看结论、模型置信度、缺失信息、重复候选、工具结果、测试记录、真实 diff 和输入版本。测试列表是 Agent 的报告，实际执行输出保存在工具证据与 Harness Session 中；二者应一起检查。可以退回并重试、取消运行任务、导出结果 JSON 和补丁。
+6. **处理结果**：在 Overview 查看当前结论，在 Plan 确认目标，在 Work 查看运行证据，在 Review 审核产物；明确启动的修复目标会在改动完成后进入验证，通过验证后进入审查。Tasks 按处理链集中展示需要确认、运行中、完成和失败任务，快速分诊与预检默认隐藏。审核时查看工具结果、测试记录、真实 diff 和输入版本。测试列表是 Agent 的报告，实际执行输出保存在工具证据与 Harness Session 中；二者应一起检查。可以退回并重试、取消运行任务、导出结果 JSON 和补丁。
 7. **发布**：接受结果后，点击发布回复、应用标签或创建草稿 PR。二次预览显示即将写入的内容；草稿 PR 会提交已审核差异、推送专用分支并调用 GitHub API。工作台不自动合并 PR。发布记录保存在任务中。
 
 
@@ -59,7 +59,7 @@ npm start
 npm run build
 npm pack
 # 在已有 Harness 环境：
-dsh plugin --profile web add /absolute/path/dsh-maintainer-workbench-0.1.0.tgz
+dsh plugin --profile web add /absolute/path/dsh-maintainer-workbench-0.2.0.tgz
 dsh web
 ```
 
@@ -81,7 +81,7 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 - 原生模型凭据由 Harness 管理。GitHub 令牌以及独立预览凭据单独保存在 `credentials.json`（权限 0600），不返回浏览器、不包含在任务导出中。环境变量也可配置：`DEEPSEEK_API_KEY`、`MAINTAINER_API_KEY`、`MAINTAINER_BASE_URL`、`GITHUB_TOKEN`。启动器不会自动读取 `.env`，如使用 `.env`，由运行环境加载。
 - 每个数据目录只允许一个 worker 进程。崩溃中的任务转为失败，保留 worktree，人工决定是否重试；不会静默重放代码修改。
 - worktree 隔离 Git 修改，命令执行隔离由宿主提供。不要把它当成容器或多租户安全系统。
-- 当前同步上限为最近更新的 1000 个 Issue/PR，并在界面提示部分覆盖。分析最多获取前 30 条讨论、PR 前 100 个文件，GitHub 还可能截断 patch；结果需要说明范围。
+- 同步上限可在设置中调整，也可选择无上限；默认读取最近更新的 1000 个 Issue/PR。分析最多获取前 30 条讨论、PR 前 100 个文件，GitHub 还可能截断 patch；结果需要说明范围。
 - 默认不开启自动化；开启后按进程存活期间的分钟轮询执行。它不是云端常驻服务。
 - 并发、超时、每次请求输出上限均可配置；暂不提供精确的总金额预算、跨仓库权限分级、自动合并、依赖升级机器人或长期向量记忆。
 - 真实模型质量、真实 GitHub 写入尚需接入用户凭据验收。不能把模拟演示或本地测试的成功率当作真实维护成功率。
@@ -133,3 +133,21 @@ Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host.
 Issue 详情现支持类型化目标与验收计划、已提出的问题和等待用户记录；同步后提示新回复，维护者核对后再继续。后续审查显式追踪历史发现，支持批量处置和经预览确认的 GitHub 讨论串状态更新。原生测试报告可直接关联工具调用、实际退出码、执行基线、补丁指纹和原始日志。用法、证据限制和浏览器复现见 [本轮实现说明](docs/product/ISSUE-REVIEW-EVIDENCE.md)。
 
 关联 PR 的审查、CI、合并和源 Issue 关闭进度，以及 GitHub Actions 失败步骤和日志读取，见 [远端跟踪与 Actions 说明](docs/product/REMOTE-PR-ACTIONS.md)。
+
+0.2.0 的导航、处理目标与回滚说明见 [界面与处理目标](docs/product/UI-0.2.0.md)。
+
+### 事项详情面板（0.3.0）
+
+同一行左侧是 **Overview / Plan / Work / Review**，右侧是 **Summary / Activity / Diff**。Plan 仅用于 Issue；提问且没有计划时不显示。小屏幕使用两个选择器，不增加第二层页签。
+
+- Overview：已保存的结论、分类、缺少的信息及启动操作。
+- Plan：编辑目标、范围、复现和验收草稿；明确确认后才更新正式计划；也可一键确认并启动实施。运行中的任务阻止确认新计划，草稿仍保留。
+- Work：当前任务状态、失败与重试、真实工具日志、补充要求和处理历史。
+- Review：PR 发现与逐项处置，或实施产物的验收、同补丁验证和交付。失败或没有产物的任务在 Work 处理。
+- Summary：原始 Markdown、元数据；PR 的 Commits 与 Checks 按需展开。
+- Activity：原始讨论与本机回复草稿。使用已有回复建议无需再次调用模型；接受结果后可预览发布编辑后的回复。
+- Diff：GitHub PR 变更和本机产物分别显示，支持从审查位置跳转并返回。
+
+计划草稿、回复草稿、补充要求和上次查看的面板按事项保存到本机 SQLite 的 `item_drafts` 表。保存草稿不启动 Agent，也不覆盖已确认计划。回复预览绑定具体草稿内容；预览后修改草稿会阻止旧预览发布。
+
+本轮验证使用本机浏览器、合成仓库和模拟模型，没有产生真实 GitHub 写操作或收费模型调用。详见 [详情面板验收记录](docs/product/ITEM-PANELS.md)。
