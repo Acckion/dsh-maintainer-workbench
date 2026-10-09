@@ -81,7 +81,7 @@ try {
         const flow=page.getByRole('region',{name:'事项处理流程',exact:true});
         if(name==='Plan')return flow.getByRole('button',{name:'调整分类与计划',exact:true}).click();
         const back=flow.getByRole('button',{name:'返回当前阶段',exact:true});if(await back.count())await back.click();
-        return flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true}).click();
+        const control=flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true});if(await control.count())return control.click();
       };
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.locator('.mw-reader-topline').count(), 0);
@@ -161,8 +161,8 @@ try {
       assert.equal(store.get('issues','fixture/queue#131').informationRequests[0].state,'fulfilled');
 
       await openIssue('fixture/queue#132');
-      const resume=page.getByRole('button',{name:'等待填写补充信息',exact:true});
-      assert.equal(await resume.isDisabled(),true);
+      assert.equal(await page.getByRole('button',{name:'根据补充信息继续',exact:true}).count(),0);
+      assert.equal(await page.getByRole('button',{name:'保存补充输入',exact:true}).isDisabled(),true);
       await page.getByLabel('Expected queue behavior?',{exact:true}).fill('Keep queue order');
       await page.getByRole('button',{name:'保存补充输入',exact:true}).click();
       await page.getByText('已保存补充输入，可继续处理',{exact:true}).waitFor();
@@ -231,6 +231,7 @@ try {
       await summary.scrollIntoViewIfNeeded();
       await page.screenshot({ path: join(dir, `final-review-${width}.png`), fullPage: true });
       await selectPanel('Work');
+      await page.getByText(/命令与验证记录 ·/).click();
       await page.getByRole('button', { name: '读取保存的原始工具日志', exact: true }).click();
       await page.getByText(/Fixture assertion failed/, { exact: false }).last().waitFor();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

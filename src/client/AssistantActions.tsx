@@ -28,8 +28,9 @@ export function AssistantActions({
     issue.actionsAvailable ??
     availableActions(issue, job, history);
   const control = actions.controls?.[0];
-  if (control)
-    return (
+  if (control?.kind === "resume" && !control.enabled) return null;
+  if (control) {
+    const button = (
       <button
         className="mw-button primary"
         disabled={busy || !control.enabled}
@@ -57,6 +58,15 @@ export function AssistantActions({
         {control.label}
       </button>
     );
+    return control.kind === "cancel" ? (
+      <details className="mw-assistant-more">
+        <summary>更多</summary>
+        <div>{button}</div>
+      </details>
+    ) : (
+      button
+    );
+  }
   const run = (action: WorkflowAction, goal: boolean) =>
     act(
       action.kind === "triage" ? "/classify" : "/jobs",
@@ -87,29 +97,35 @@ export function AssistantActions({
           {actionLabel(actions.primary.kind, issue, job)}
         </button>
       )}
-      <details className="mw-assistant-more">
-        <summary>更多</summary>
-        <div>
-          {actions.stages
-            .filter((action) => action.kind !== actions.primary?.kind)
-            .map((action) => (
+      {(actions.stages.some((a) => a.kind !== actions.primary?.kind) ||
+        (!projected && job)) && (
+        <details className="mw-assistant-more">
+          <summary>更多</summary>
+          <div>
+            {actions.stages
+              .filter((action) => action.kind !== actions.primary?.kind)
+              .map((action) => (
+                <button
+                  key={action.kind}
+                  className="mw-button"
+                  disabled={busy || !action.enabled}
+                  title={action.blockedReasons.join("；")}
+                  onClick={() => void run(action, false)}
+                >
+                  {actionLabel(action.kind, issue, job)}
+                </button>
+              ))}
+            {!projected && job && (
               <button
-                key={action.kind}
                 className="mw-button"
-                disabled={busy || !action.enabled}
-                title={action.blockedReasons.join("；")}
-                onClick={() => void run(action, false)}
+                onClick={() => openEvidence(job.id)}
               >
-                {actionLabel(action.kind, issue, job)}
+                查看执行记录
               </button>
-            ))}
-          {job && (
-            <button className="mw-button" onClick={() => openEvidence(job.id)}>
-              查看执行记录
-            </button>
-          )}
-        </div>
-      </details>
+            )}
+          </div>
+        </details>
+      )}
     </>
   );
 }

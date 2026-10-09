@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { Audit, Issue, Job } from "../core/types.ts";
+import type { Issue, Job } from "../core/types.ts";
 import { eventDescription } from "../workflow/presentation.ts";
 import type { ProcessingCase } from "../domain/processing.ts";
 import type { ProcessingTimeline, TimelineNode } from "../domain/timeline.ts";
@@ -17,16 +17,17 @@ interface Props {
   jobs: Job[];
   job?: Job;
   legacyTab?: AgentTab;
-  audit?: Audit[];
   render: (
     tab: AgentTab,
     job?: Job,
     readOnly?: boolean,
     decision?: boolean,
+    execution?: boolean,
   ) => ReactNode;
   actions: (job?: Job, actions?: ProcessingTimeline["actions"]) => ReactNode;
   evidence: (job?: Job) => ReactNode;
   context: () => ReactNode;
+  instructions?: ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
 }
 type Selection = StageSelection;
@@ -60,11 +61,11 @@ export function WorkflowDetail({
   jobs,
   job,
   legacyTab,
-  audit = [],
   render,
   actions,
   evidence,
   context,
+  instructions,
   track,
 }: Props) {
   const history = jobs.filter((j) => j.issueId === issue.id);
@@ -168,12 +169,6 @@ export function WorkflowDetail({
       : undefined) ??
     timeline.nodes.find((n) => n.id === timeline.currentNodeId)!;
   const currentJob = history.find((j) => j.id === timeline.currentRunId);
-  const progress =
-    currentJob?.status === "running"
-      ? audit.find(
-          (a) => a.jobId === currentJob.id && a.action === "job.progress",
-        )?.detail
-      : undefined;
   const attempt = selected?.attemptIds.includes(selection.attemptId ?? "")
     ? explicitAttempt
     : (history.find((j) => j.id === selected?.attemptIds.at(-1)) ??
@@ -294,7 +289,11 @@ export function WorkflowDetail({
                       ? context
                       : undefined
                   }
-                  progress={progress}
+                  instructions={
+                    actionsForStage(timeline, selected)?.primary
+                      ? instructions
+                      : undefined
+                  }
                   actions={
                     actionsForStage(timeline, selected)
                       ? actions(currentJob, actionsForStage(timeline, selected))
