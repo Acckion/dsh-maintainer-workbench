@@ -324,7 +324,7 @@ export class Workbench {
         running: this.active.size,
         ...(host ? { host } : {}),
       },
-      version: "0.2.2",
+      version: "0.2.3",
     };
   }
   saveJob(job: Job): void {

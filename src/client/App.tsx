@@ -845,6 +845,7 @@ export function App({
                 className={`${page === n.id || n.id === "tasks" && page === "reviews" ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
                 onClick={() => {
                   navigate(n.id);
+                  setFocused(undefined);
                   setJobFocus(undefined);
                   setSearchValue("");
                   setDetailOpen(false);
