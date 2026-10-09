@@ -7,6 +7,7 @@ import { organizeModes } from "../core/organize.ts";
 import { kinds, type Job } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
+import { processingTimeline } from "../application/timeline.ts";
 export const API = "/maintainer/api";
 export function send(
   res: ServerResponse,
@@ -89,6 +90,18 @@ export function handler(
           200,
           await workbench.workspaces.inspect(
             z.string().min(1).parse(url.searchParams.get("id")),
+          ),
+        );
+        return;
+      }
+      if (req.method === "GET" && path === "/processing/timeline") {
+        send(
+          res,
+          200,
+          processingTimeline(
+            workbench.store,
+            z.string().min(1).max(400).parse(url.searchParams.get("issueId")),
+            url.searchParams.get("caseId") ?? undefined,
           ),
         );
         return;

@@ -204,6 +204,7 @@ export interface PRContext {
   warnings: string[];
 }
 export interface Issue {
+  draft?: boolean;
   processing?: import("../domain/processing.ts").ProcessingCase;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
   remotePRs?: import("./remote-progress.ts").RemotePR[];

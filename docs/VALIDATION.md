@@ -176,3 +176,15 @@ REGRESSION_PASSED
 合并远端 `cdaa83b` 后，维护浏览器夹具仍在两种宽度通过。新增 Mac 路径回归修复：恢复工作区以规范化的管理父目录加工作区 ID 对比真实路径，允许 `/var` 与 `/private/var` 的目录别名，但不允许工作区叶节点被替换为外部 checkout 的符号链接。新增可移植别名/替换测试，干净待提交副本中的类型检查、288 项测试和构建全部通过。原工作树未跟踪的 `src/client/item-next-step.ts` 仍引用旧 `Issue.workflow`，因此不改动该文件、不将它纳入提交；原工作树类型检查会因该文件报错。
 
 远端新增的 `@deepseek-ai/dsh-tools` peer 范围已扩展为 `0.2.0-rc.2 || ^0.2.1-alpha.1`，与其他 Harness peer 保持一致；本机官方 rc.2 工具模块包含所用 `defineTool`、`register` 和 `concludeTurn` 接口。真实客户端兼容性以安装后的加载结果验收。
+
+
+## 2026-10-09：类型化阶段导航与所选阶段面板
+
+分支 `feat/workflow-timeline`，从最新 master `2ba01e3` 创建。实现与边界见 [阶段导航说明](product/WORKFLOW-UX.md)，本轮源文件指纹与结果见 [验收摘要](evidence/workflow-timeline-2026-10-09/summary.json)。
+
+- `npm run check`：严格类型检查、304 项测试及完整构建通过。新增 13 项覆盖真实阶段顺序与尝试、Question 路径、Draft 与维护者确认、等待归属、迟到运行、历史周期只读、保守分类、实际决定与交付来源、读取无副作用、输入变化与旧批准失效、活动裁剪，以及历史范围节点不挂载当前可编辑计划。
+- 新阶段浏览器夹具在 1440px、390px 通过：节点上方留白至少 12px，下方只显示所选阶段；点击历史/未来不执行；实时更新保留所选历史；重试与旧周期只读；暂停输入保存后显式继续；当前确认阶段单独提供审批。明暗模式与窄屏无页面横向溢出。主操作请求经过截获核对 issueId、sourceJobId、expectedVersion，PR 补足证据不携带自动实施目标。
+- 既有维护浏览器夹具在两种宽度通过：计划草稿和派发、追问/回复、补充输入、事件历史、发现处置与复核、讨论串两步确认、GitHub 阅读与回复草稿、远端 PR/CI/Actions 日志、原始工具日志、工作区清理，以及实时主题与对比度。外部返回均为夹具。
+- 既有导航竞态夹具在两种宽度通过：返回来源恢复筛选/滚动/焦点、移除任务后的返回、跨仓库派发、跨任务审批、操作追踪与慢轮询。手机详情替换列表后，返回会重新展示原列表。
+
+截图使用公开 PR 标题与明确标记为“演示”的合成分析，不是对真实 PR 的新审查结论：[浅色当前阶段](evidence/workflow-timeline-2026-10-09/timeline-light-1440.png)、[查看历史](evidence/workflow-timeline-2026-10-09/timeline-history-1440.png)、[深色执行中](evidence/workflow-timeline-2026-10-09/timeline-dark-running-1440.png)、[手机](evidence/workflow-timeline-2026-10-09/timeline-light-390.png)。无付费模型调用、外部 GitHub 写入或新增原生 Harness 端到端验证。

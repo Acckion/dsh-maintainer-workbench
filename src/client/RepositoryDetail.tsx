@@ -157,6 +157,7 @@ export function RepositoryDetail({
   localPatch,
   responseDraft,
   onPreviewReply,
+  workflow = false,
 }: {
   issue: Issue;
   repository: string;
@@ -178,6 +179,7 @@ export function RepositoryDetail({
   localPatch?: { patch: string; label: string; revision: string };
   responseDraft?: string;
   onPreviewReply?: () => void;
+  workflow?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<ReaderTab>(initialTab);
@@ -318,7 +320,7 @@ export function RepositoryDetail({
   }, [tab, cache.files, diffSource, requestedTab?.sequence]);
   const summary = cache.summary?.summary;
   const data = isAgent(tab) ? undefined : cache[tab as DetailSection];
-  const aiTabs: ReaderTab[] = [
+  const aiTabs: ReaderTab[] = workflow ? ["overview"] : [
     "overview",
     ...(issue.type === "issue" &&
     (issue.plan ||
@@ -337,7 +339,7 @@ export function RepositoryDetail({
   const state =
     (summary?.merged ?? issue.merged)
       ? "已合并"
-      : summary?.draft
+      : (summary?.draft ?? issue.draft)
         ? "草稿"
         : (summary?.state ?? issue.state) === "closed"
           ? "已关闭"
@@ -439,11 +441,11 @@ export function RepositoryDetail({
             {aiTabs.map((key) => (
               <button
                 key={key}
-                aria-current={tab === key ? "page" : undefined}
-                className={tab === key ? "active" : ""}
+                aria-current={(workflow ? isAgent(tab) : tab === key) ? "page" : undefined}
+                className={(workflow ? isAgent(tab) : tab === key) ? "active" : ""}
                 onClick={() => selectTab(key)}
               >
-                {names[key]}
+                {workflow ? "处理流程" : names[key]}
               </button>
             ))}
           </nav>
@@ -465,7 +467,7 @@ export function RepositoryDetail({
           <div className="mw-reader-compact-tabs">
             <select
               aria-label="AI 功能"
-              value={isAgent(tab) ? tab : ""}
+              value={isAgent(tab) ? workflow ? "overview" : tab : ""}
               onChange={(e) => selectTab(e.target.value as ReaderTab)}
             >
               <option value="" disabled>
@@ -473,7 +475,7 @@ export function RepositoryDetail({
               </option>
               {aiTabs.map((key) => (
                 <option key={key} value={key}>
-                  {names[key]}
+                  {workflow ? "处理流程" : names[key]}
                 </option>
               ))}
             </select>

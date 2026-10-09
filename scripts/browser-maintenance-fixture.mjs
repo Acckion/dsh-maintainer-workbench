@@ -65,7 +65,16 @@ try {
       await page.getByRole('button', { name: 'Issues & PRs' }).click();
       await page.locator('[id="mw-item-fixture/queue#128"]').click();
       await verifyTheme(page,dir,width);
-      const selectPanel=async(name)=>{if(width>760)await page.getByRole('button',{name,exact:true}).click();else await page.locator('select[aria-label="AI 功能"]').selectOption(name.toLowerCase());};
+      const openIssue=async(id)=>{const back=page.getByRole('button',{name:'返回来源列表',exact:true});if(width<=760&&await back.isVisible())await back.click();await page.locator(`[id="mw-item-${id}"]`).click();};
+      const selectPanel=async(name)=>{
+        if(width>760)await page.getByRole('button',{name:'处理流程',exact:true}).click();
+        else await page.locator('select[aria-label="AI 功能"]').selectOption('overview');
+        const flow=page.getByRole('region',{name:'事项处理流程',exact:true});
+        if(name==='Plan')return flow.getByRole('button',{name:'调整分类与计划',exact:true}).click();
+        if(name==='Overview')return flow.getByRole('button',{name:'处理概览',exact:true}).click();
+        const back=flow.getByRole('button',{name:'返回当前阶段',exact:true});if(await back.count())await back.click();
+        return flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true}).click();
+      };
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.locator('.mw-reader-topline').count(), 0);
       await page.locator('.mw-reader-header h2').evaluate(el=>{const text=[...el.childNodes].find(n=>n.nodeType===Node.TEXT_NODE && n.textContent.trim());text.textContent='[Bug]: plugin load is CPU-bound on module compilation - one heavy channel plugin entry costs 5-13 seconds cold and three channel plugins use most of the startup budget '.repeat(2);});
@@ -73,6 +82,7 @@ try {
       const refLink=await page.locator('.mw-title-reference>a').boundingBox();
       assert.ok(Math.abs((refNumber.y+refNumber.height/2)-(refLink.y+refLink.height/2))<3, 'number and GitHub link stay on the same line with long titles');
       assert.equal(await page.locator('.mw-reader-meta > .mw-reader-top-actions').count(), 1);
+      if(width<=760)await page.getByRole('button',{name:'返回来源列表',exact:true}).click();
       const listTab = await page.getByRole('button',{name:'Issues',exact:true}).boundingBox();
       const searchBox = await page.getByLabel('搜索问题',{exact:true}).boundingBox();
       assert.ok(listTab.height <= 40, 'inbox tabs use compact height');
@@ -89,6 +99,7 @@ try {
       const selection = await row.locator('input[type=checkbox]').boundingBox();
       const rowBox = await row.boundingBox();
       assert.ok(selection.x > rowBox.x + rowBox.width / 2, 'selection belongs at the upper right');
+      if(width<=760)await openIssue('fixture/queue#128');
       await selectPanel('Plan');
       assert.equal(await page.getByRole('button', {name:'Triage',exact:true}).count(), 0);
       assert.equal(await page.getByRole('button', {name:'Execution',exact:true}).count(), 0);
@@ -105,12 +116,12 @@ try {
       assert.equal(store.get('issues','fixture/queue#128').plan,undefined);
       const beforeDraftJobs=store.jobs().length;
       await page.reload();await page.getByRole('button',{name:'Issues & PRs'}).click();await page.locator('[id="mw-item-fixture/queue#128"]').click();
-      await page.getByLabel('维护目标',{exact:true}).waitFor();assert.equal(await page.getByLabel('维护目标',{exact:true}).inputValue(),'Fixture offline sync');assert.equal(store.jobs().length,beforeDraftJobs);
+      await selectPanel('Plan');await page.getByLabel('维护目标',{exact:true}).waitFor();assert.equal(await page.getByLabel('维护目标',{exact:true}).inputValue(),'Fixture offline sync');assert.equal(store.jobs().length,beforeDraftJobs);
       await page.getByRole('button',{name:'确认计划并开始实施',exact:true}).click();
       await page.getByText('已按确认计划开始实施',{exact:true}).waitFor();
       assert.equal(store.jobs().find(item => item.kind === 'fix')?.issueSnapshot.plan?.goal, 'Fixture offline sync');
 
-      await page.locator('[id="mw-item-fixture/queue#131"]').click();
+      await openIssue('fixture/queue#131');
       await selectPanel('Plan');
       await page.getByText(/补充信息与追问记录/).click();
       await page.getByLabel('已提出的问题（每行一项）', { exact: true }).fill('Which version?\nReproduction steps?');
@@ -125,7 +136,7 @@ try {
       await page.getByRole('button', { name: '信息已足够', exact: true }).click();
       await page.getByText('维护者确认信息已足够', { exact: false }).waitFor();
 
-      await page.locator('[id="mw-item-fixture/queue#132"]').click();
+      await openIssue('fixture/queue#132');
       const resume=page.getByRole('button',{name:'等待填写补充信息',exact:true});
       assert.equal(await resume.isDisabled(),true);
       await page.getByLabel('Expected queue behavior?',{exact:true}).fill('Keep queue order');
@@ -141,14 +152,14 @@ try {
       await page.screenshot({path:join(dir,`processing-input-${width}.png`),fullPage:true});
 
       await selectPanel('Work');
-      await page.getByText('处理状态与事件历史',{exact:true}).click();
+      await page.getByText('处理记录与操作追踪',{exact:true}).click();await page.getByText('处理状态与事件历史',{exact:true}).click();
       await page.getByText('input.submitted',{exact:true}).waitFor();
       await page.getByLabel('查看处理周期',{exact:true}).selectOption(inputIssue.processing.id);
       await page.getByText('input.submitted',{exact:true}).waitFor();
       await page.getByRole('button', { name: 'Tasks' }).click();
       await page.locator('#mw-item-review-current').click();
       await selectPanel('Review');
-      await page.getByText('远端 PR 与 CI', {exact:true}).click();
+      await page.getByRole('navigation',{name:'处理阶段',exact:true}).getByRole('button',{name:/^交付与跟踪/}).click();
       await page.getByRole('button',{name:'刷新关联 PR 进度',exact:true}).click();
       await page.getByText('审查要求修改',{exact:true}).waitFor();
       await page.getByText('存在合并冲突',{exact:true}).waitFor();
@@ -157,7 +168,7 @@ try {
       await page.getByRole('button',{name:'读取 job 42 日志',exact:true}).click();
       await page.getByText('FIXTURE_ACTIONS_ASSERTION_FAILED',{exact:true}).waitFor();
       await page.screenshot({path:join(dir,`remote-progress-${width}.png`),fullPage:true});
-      await page.getByText('批量处置审查发现', { exact: true }).click();
+      await selectPanel('Review');await page.getByText('发现处置与讨论串',{exact:true}).click();await page.getByText('批量处置审查发现', { exact: true }).click();
       await page.getByLabel('P1 · Fixture regression', { exact: true }).check();
       await page.getByLabel('批量处置', { exact: true }).selectOption('needs_evidence');
       await page.getByRole('button', { name: '应用到 1 项发现', exact: true }).click();
@@ -186,16 +197,14 @@ try {
       await page.waitForFunction(async()=>{const r=await fetch('/maintainer/api/item-draft?id=fixture%2Fqueue%23135');return (await r.json()).reply==='Persistent maintainer reply';});
       await selectPanel('Work');await selectSource('Activity');assert.equal(await page.getByLabel('回复草稿',{exact:true}).inputValue(),'Persistent maintainer reply');
       assert.equal(store.jobs().length,jobsBeforeRead);assert.ok(sourceReads>=3);await selectPanel('Review');
-      // Review preserves guarded actions and existing guarded actions together.
-      const summary = page.getByRole('region', { name: '审阅摘要', exact: true });
-      await summary.getByRole('heading', { name: 'PR 审查', exact: true }).waitFor();
-      for (const name of ['未解决发现', '交付操作']) {
-        await summary.getByRole('heading', { name, exact: true }).waitFor();
-      }
+      // Selected stage preserves evidence and the guarded local decision actions.
+      const summary = page.getByRole('region', { name: '选中阶段', exact: true });
+      await summary.getByRole('button',{name:'sum.ts:1',exact:true}).waitFor();
+      await summary.getByText('审核与交付操作',{exact:true}).click();
       assert.equal(await summary.getByRole('button', { name: '接受此报告', exact: true }).count(), 1);
       assert.equal(await page.getByRole('button', { name: '接受此报告', exact: true }).count(), 1);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-      await summary.getByRole('heading', { name: 'PR 审查', exact: true }).scrollIntoViewIfNeeded();
+      await summary.scrollIntoViewIfNeeded();
       await page.screenshot({ path: join(dir, `final-review-${width}.png`), fullPage: true });
       await selectPanel('Work');
       await page.getByRole('button', { name: '读取保存的原始工具日志', exact: true }).click();
