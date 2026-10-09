@@ -442,3 +442,12 @@
 .mw-reader-embedded .mw-reader-header h2{font-size:19px;line-height:1.4;margin-top:0}
 .mw-reader-header h2>.mw-mobile-list-return{display:none}
 @media(max-width:760px){.mw-reader-embedded .mw-reader-header h2{font-size:18px}.mw-reader-header h2>.mw-mobile-list-return{display:inline-flex;margin-right:6px}}
+
+/* Keep actions beside navigation, never in a separate header row. */
+.mw-reader-tabbar>.mw-reader-top-actions{flex:none;align-self:center;margin-left:12px}
+.mw-reader-tabbar .mw-reader-top-actions:empty{display:none}
+.mw-reader-tabbar .mw-reader-stage-actions .mw-button{min-height:30px;padding:5px 9px;font-size:12px}
+.mw-layout-tabs .mw-list-panel>.mw-panel-top{min-height:0;padding:4px 14px 0;gap:0}
+.mw-layout-tabs .mw-list-panel>.mw-panel-top .mw-tabs button{min-height:34px;height:34px;padding:4px 7px}
+.mw-layout-tabs .mw-list-panel>.mw-toolbar{padding-top:10px;padding-bottom:10px}
+@media(max-width:760px){.mw-reader-compact-tabs{flex:1;min-width:0;width:auto}.mw-reader-tabbar>.mw-reader-top-actions{margin-left:6px}.mw-reader-stage-actions{flex-wrap:wrap}}

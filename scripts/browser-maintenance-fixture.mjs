@@ -55,6 +55,12 @@ try {
       await page.locator('[id="mw-item-fixture/queue#128"]').click();
       const selectPanel=async(name)=>{if(width>760)await page.getByRole('button',{name,exact:true}).click();else await page.locator('select[aria-label="AI 功能"]').selectOption(name.toLowerCase());};
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
+      assert.equal(await page.locator('.mw-reader-topline').count(), 0);
+      assert.equal(await page.locator('.mw-reader-tabbar > .mw-reader-top-actions').count(), 1);
+      const listTab = await page.getByRole('button',{name:'Issues',exact:true}).boundingBox();
+      const searchBox = await page.getByLabel('搜索问题',{exact:true}).boundingBox();
+      assert.ok(listTab.height <= 40, 'inbox tabs use compact height');
+      assert.ok(searchBox.y - (listTab.y + listTab.height) >= 8, 'search has a visible gap below tabs');
       assert.equal(await page.getByLabel('筛选问题', {exact:true}).count(), 0);
       await page.getByRole('button', {name:'展开筛选',exact:true}).click();
       await page.getByRole('dialog', {name:'筛选问题'}).getByRole('button',{name:'所有开放问题',exact:true}).click();
