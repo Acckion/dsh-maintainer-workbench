@@ -20,7 +20,24 @@ export function transition(
     throw new Error("事件不属于当前处理周期");
   const next = structuredClone(state);
   const payload = event.payload;
-  if (payload.type === "workflow.upgraded") {
+  if (payload.type === "planning.recorded") {
+    if (payload.planning.run && payload.planning.run.caseId !== next.id)
+      throw new Error("计划授权不属于当前处理周期");
+    next.planning = structuredClone(payload.planning);
+    const run = next.planning.run;
+    // Intermediate artifacts are consumed by the confirmed chain, not individually approved.
+    // Preserve final approval and all explicit input/environment waits.
+    if (run?.status === "running")
+      next.waits = next.waits.map((wait) =>
+        pending(wait) &&
+        wait.type === "approval" &&
+        wait.requestedByRunId &&
+        wait.requestedByRunId !== run.currentJobId &&
+        run.completedJobIds.includes(wait.requestedByRunId)
+          ? { ...wait, state: "superseded" }
+          : wait,
+      );
+  } else if (payload.type === "workflow.upgraded") {
     if (next.workflowDefinitionVersion !== payload.from)
       throw new Error("流程迁移的来源版本不一致");
     next.workflowDefinitionVersion = payload.to;

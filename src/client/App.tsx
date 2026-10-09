@@ -1742,13 +1742,13 @@ export function App({
               action("workflow", path, data, message)
             }
           />
-          <h3>
-            {active
-              ? `${kindNames[active.kind]}中`
-              : saved
-                ? "当前结论"
-                : "尚未分析"}
-          </h3>
+          {(saved || displayedIssue.origin) && (
+            <h3>
+              {displayedIssue.origin && active
+                ? `${kindNames[active.kind]}中`
+                : saved ? "当前结论" : "尚未分析"}
+            </h3>
+          )}
           {saved ? (
             <>
               <p>{saved.summary}</p>
@@ -1767,9 +1767,9 @@ export function App({
                 </details>
               )}
             </>
-          ) : (
+          ) : displayedIssue.origin ? (
             <p>点击“开始处理”整理现有材料和建议。</p>
-          )}
+          ) : null}
           {job?.error && (
             <p role="alert">
               最近一次任务失败：{job.error}。已保存的结论仍可查看。

@@ -1,3 +1,4 @@
+import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { randomUUID } from "node:crypto";
 import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
@@ -9,45 +10,16 @@ import {
 import { issuePlanSchema, planBlocker } from "../core/issue-flow.ts";
 import { validationState } from "../core/workflow-state.ts";
 
-export interface WorkflowRun {
-  caseId?: string;
-  id: string;
-  inputKey: string;
-  planVersion: string;
-  plan: IssuePlan;
-  route: JobKind;
-  status:
-    | "running"
-    | "blocked"
-    | "review"
-    | "paused"
-    | "cancelled"
-    | "waiting_author";
-  currentJobId?: string;
-  checkpoint?: { kind: JobKind; sourceJobId?: string; instructions: string };
-  completedJobIds: string[];
-  reason: string;
-  startedAt: string;
-  deadlineAt: string;
-  maxSteps: number;
-  waitingHead?: string;
-}
-export interface WorkflowProgress {
-  status:
-    | "plan"
-    | "running"
-    | "blocked"
-    | "review"
-    | "waiting"
-    | "stale"
-    | "deferred";
-  reason: string;
-}
-export interface WorkflowState {
-  draft?: PlanDraft;
-  run?: WorkflowRun;
-  previousRuns?: WorkflowRun[];
-}
+import type {
+  WorkflowRun,
+  WorkflowState,
+  WorkflowProgress,
+} from "../domain/plan-workflow.ts";
+export type {
+  WorkflowRun,
+  WorkflowState,
+  WorkflowProgress,
+} from "../domain/plan-workflow.ts";
 
 /** Coordinates existing jobs; never approves artifacts or writes to GitHub. */
 export class Orchestration {
@@ -58,7 +30,14 @@ export class Orchestration {
     return issue;
   }
   private put(issue: Issue, state: WorkflowState) {
-    this.wb.store.put("issues", { ...issue, orchestration: state });
+    const current = this.wb.store.get<Issue>("issues", issue.id);
+    if (!current || current.processing?.id !== issue.processing?.id)
+      throw new Error("处理周期已变化，请重新确认计划");
+    this.wb.store.put("issues", {
+      ...current,
+      plan: issue.plan,
+      orchestration: state,
+    });
   }
   private stop(issue: Issue, status: WorkflowRun["status"], reason: string) {
     const run = issue.orchestration?.run;
@@ -159,6 +138,7 @@ export class Orchestration {
     route?: JobKind,
     sourceJobId?: string,
     feedback = "",
+    expectedVersion?: number,
   ) {
     let issue = this.issue(id);
     const repo = this.wb.store.get<import("../core/types.ts").Repo>(
@@ -210,6 +190,11 @@ export class Orchestration {
         };
       throw new Error("当前事项正在执行，请先暂停或取消");
     }
+    if (
+      expectedVersion !== undefined &&
+      issue.processing?.version !== expectedVersion
+    )
+      throw new ProcessingConflictError();
     if (
       this.wb.store
         .jobs()
@@ -589,7 +574,14 @@ export class Orchestration {
       );
     return { created: [], reused: [] };
   }
-  startBatch(items: { issueId: string; inputKey: string; plan?: unknown }[]) {
+  startBatch(
+    items: {
+      issueId: string;
+      inputKey: string;
+      plan?: unknown;
+      expectedVersion?: number;
+    }[],
+  ) {
     if (
       !items.length ||
       items.length > this.wb.store.settings().maxJobsPerBatch
@@ -600,7 +592,15 @@ export class Orchestration {
         try {
           return {
             id: item.issueId,
-            ...this.start(item.issueId, item.inputKey, item.plan),
+            ...this.start(
+              item.issueId,
+              item.inputKey,
+              item.plan,
+              undefined,
+              undefined,
+              "",
+              item.expectedVersion,
+            ),
           };
         } catch (e) {
           return {

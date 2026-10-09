@@ -220,7 +220,11 @@ test("an old processing cycle cannot advance a reopened item", async () => {
     wb.orchestration.completed(completed);
     wb.orchestration.synced(repo.id);
     assert.equal(store.jobs().length, 1);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "blocked");
+    assert.equal(store.issues()[0].orchestration, undefined);
+    assert.equal(
+      store.processing.cases(issue.id)[0].planning?.run?.id,
+      job.workflowRunId,
+    );
     assert.throws(
       () =>
         wb.orchestration.start(
@@ -228,7 +232,7 @@ test("an old processing cycle cannot advance a reopened item", async () => {
           issue.orchestration!.draft!.inputKey,
           accept,
         ),
-      /变化/,
+      /变化|草稿/,
     );
   } finally {
     await wb.close();
@@ -724,5 +728,145 @@ test("document plan runs real git changes and document checks continuously then 
     "passed",
   );
   assert.ok(store.jobs().find((j) => j.kind === "docs")?.patch);
+  const approvals = store.processing
+    .current(issue.id)!
+    .waits.filter((wait) => wait.type === "approval" && wait.state === "open");
+  assert.equal(
+    approvals.length,
+    1,
+    "only final review requires a maintainer decision",
+  );
+  assert.equal(
+    approvals[0].requestedByRunId,
+    store.jobs().find((j) => j.kind === "review")!.id,
+  );
+
   assert.ok(store.jobs().every((j) => !j.publications));
+});
+
+test("planning has one durable case state and duplicate events do not advance its version", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    const state = store.processing.current(issue.id)!;
+    assert.deepEqual(state.planning, issue.orchestration);
+    const raw = JSON.parse(
+      String(
+        store.db.prepare("SELECT data FROM issues WHERE id=?").get(issue.id)!
+          .data,
+      ),
+    );
+    assert.equal(raw.orchestration, undefined);
+    const events = store.processing.events(state.id);
+    assert.ok(
+      events.some((event) => event.payload.type === "planning.recorded"),
+    );
+    store.processing.recordPlanning(issue.id, state.planning!, state.version);
+    assert.equal(store.processing.current(issue.id)!.version, state.version);
+    assert.equal(store.processing.events(state.id).length, events.length);
+    assert.throws(
+      () =>
+        store.processing.recordPlanning(
+          issue.id,
+          state.planning!,
+          state.version - 1,
+        ),
+      /变化|冲突|更新/,
+    );
+    assert.throws(
+      () =>
+        store.processing.recordPlanning(
+          issue.id,
+          {
+            ...state.planning,
+            run: { caseId: "another-cycle" } as never,
+          },
+          state.version,
+        ),
+      /处理周期/,
+    );
+    assert.deepEqual(store.processing.current(issue.id), state);
+  } finally {
+    await wb.close();
+  }
+});
+
+test("legacy planning migration is durable, idempotent and cannot authorize an unbound run", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mw-planning-migration-"));
+  const path = join(directory, "state.sqlite");
+  try {
+    let store = new Store(path);
+    seedFixture(store);
+    const issue = store.issues()[0],
+      repo = store.repos()[0];
+    const planning = {
+      draft: {
+        ...draft,
+        inputKey: planInputKey(issue, repo),
+        generatedAt: new Date().toISOString(),
+      },
+      run: {
+        id: "legacy",
+        inputKey: planInputKey(issue, repo),
+        planVersion: "legacy",
+        plan: accept,
+        route: "docs",
+        status: "running",
+        completedJobIds: [],
+        reason: "legacy",
+        startedAt: new Date().toISOString(),
+        deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        maxSteps: 6,
+      },
+    };
+    store.db
+      .prepare("UPDATE issues SET data=? WHERE id=?")
+      .run(JSON.stringify({ ...issue, orchestration: planning }), issue.id);
+    store.db.close();
+    store = new Store(path);
+    const migrated = store.issues()[0];
+    assert.equal(migrated.orchestration?.run?.status, "blocked");
+    assert.equal(migrated.orchestration?.run?.caseId, migrated.processing?.id);
+    assert.equal(store.jobs().length, 0);
+    const count = store.processing.events(migrated.processing!.id).length;
+    store.db.close();
+    store = new Store(path);
+    assert.equal(
+      store.processing.events(migrated.processing!.id).length,
+      count,
+    );
+    assert.deepEqual(store.issues()[0].orchestration, migrated.orchestration);
+    store.db.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("confirmation rejects a stale case version before granting authorization", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    const version = issue.processing!.version;
+    store.processing.recordPlanning(
+      issue.id,
+      { ...issue.orchestration, previousRuns: [] },
+      version,
+    );
+    assert.throws(
+      () =>
+        wb.orchestration.start(
+          issue.id,
+          issue.orchestration!.draft!.inputKey,
+          accept,
+          undefined,
+          undefined,
+          "",
+          version,
+        ),
+      /变化/,
+    );
+    assert.equal(store.jobs().length, 0);
+    assert.equal(store.issues()[0].plan, undefined);
+    assert.equal(store.issues()[0].orchestration?.run, undefined);
+  } finally {
+    await wb.close();
+  }
 });

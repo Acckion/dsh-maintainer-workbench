@@ -136,6 +136,8 @@ try {
       await page.locator('[id="mw-item-fixture/queue#129"]').click();
       await selectPanel('Overview');
       await page.getByText('Fixture sourced docs',{exact:true}).waitFor();
+      assert.equal(await page.getByRole('heading',{name:'尚未分析',exact:true}).count(),0);
+      assert.equal(await page.getByText('点击“开始处理”整理现有材料和建议。',{exact:true}).count(),0);
       await page.getByRole('button',{name:'修改建议',exact:true}).click();
       await page.getByLabel('维护目标',{exact:true}).fill('Fixture sourced docs revised');
       await page.waitForFunction(async()=>{const r=await fetch('/maintainer/api/item-draft?id=fixture%2Fqueue%23129');return (await r.json()).plan?.goal==='Fixture sourced docs revised';});
@@ -147,6 +149,13 @@ try {
       await page.getByRole('button',{name:'确认并开始',exact:true}).click();
       await page.getByText('已确认计划，系统将连续执行并整理最终审核',{exact:true}).waitFor();
       assert.equal(store.get('issues',proposed.id).orchestration.run.status,'running');
+      assert.equal(store.processing.current(proposed.id).planning.run.id, store.get('issues',proposed.id).orchestration.run.id);
+      assert.equal(JSON.parse(store.db.prepare('SELECT data FROM issues WHERE id=?').get(proposed.id).data).orchestration, undefined);
+      await selectPanel('Work');
+      await page.getByText('处理状态与事件历史',{exact:true}).click();
+      await page.getByRole('heading',{name:'此周期的处理计划',exact:true}).waitFor();
+      await page.getByText('处理计划与进度已保存',{exact:false}).first().waitFor();
+
       await page.locator('[id="mw-item-fixture/queue#132"]').click();
       const resume=page.getByRole('button',{name:'等待填写补充信息',exact:true});
       assert.equal(await resume.isDisabled(),true);
@@ -164,9 +173,9 @@ try {
 
       await selectPanel('Work');
       await page.getByText('处理状态与事件历史',{exact:true}).click();
-      await page.getByText('input.submitted',{exact:true}).waitFor();
+      await page.getByText('补充输入已提交',{exact:true}).waitFor();
       await page.getByLabel('查看处理周期',{exact:true}).selectOption(inputIssue.processing.id);
-      await page.getByText('input.submitted',{exact:true}).waitFor();
+      await page.getByText('补充输入已提交',{exact:true}).waitFor();
       await page.getByRole('button', { name: 'Tasks' }).click();
       await page.locator('#mw-item-review-current').click();
       await selectPanel('Review');

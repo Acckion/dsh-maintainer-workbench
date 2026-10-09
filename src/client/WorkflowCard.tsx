@@ -90,6 +90,7 @@ export function WorkflowCard({
       {
         issueId: issue.id,
         inputKey: draft.inputKey,
+        expectedVersion: issue.processing?.version,
         plan,
         route,
         sourceJobId,

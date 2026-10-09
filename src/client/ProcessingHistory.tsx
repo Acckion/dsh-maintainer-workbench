@@ -1,7 +1,31 @@
 import { useEffect, useState } from "react";
+import { kindNames } from "../core/types.ts";
 import type { Issue } from "../core/types.ts";
 import type { ProcessingCase, ProcessingEvent } from "../domain/processing.ts";
 import { request } from "./api.ts";
+
+const eventNames: Record<ProcessingEvent["payload"]["type"], string> = {
+  "planning.recorded": "处理计划与进度已保存",
+  "source.observed": "事项材料已同步",
+  "decision.recorded": "维护者决定已记录",
+  "information.observed": "补充信息已更新",
+  "run.observed": "执行进度已更新",
+  "input.requested": "需要补充输入",
+  "input.submitted": "补充输入已提交",
+  "remote.activity": "远端进度已更新",
+  "publication.confirmed": "交付已确认",
+  "environment.observed": "仓库环境已更新",
+  "wait.cancelled": "等待已结束",
+  "workflow.upgraded": "工作流已升级",
+};
+const runStates = {
+  running: "自动处理中",
+  blocked: "需要解除阻塞",
+  review: "待最终审核",
+  paused: "已暂停",
+  cancelled: "已取消",
+  waiting_author: "等待作者新提交",
+};
 
 export function ProcessingHistory({
   issue,
@@ -117,15 +141,48 @@ export function ProcessingHistory({
             周期 {history.selected.cycle} · {history.selected.lifecycle} ·{" "}
             {history.selected.reason}
           </p>
+          {history.selected.planning && (
+            <section aria-label="此周期的处理计划">
+              <h4>此周期的处理计划</h4>
+              <p>
+                {history.selected.planning.run?.plan.goal ??
+                  history.selected.planning.draft?.goal}
+              </p>
+              <p>
+                范围：
+                {history.selected.planning.run?.plan.scope ??
+                  history.selected.planning.draft?.scope}
+              </p>
+              {history.selected.planning.run && (
+                <p>
+                  {runStates[history.selected.planning.run.status]} ·{" "}
+                  {history.selected.planning.run.reason}
+                  {history.selected.planning.run.checkpoint
+                    ? ` · 当前步骤：${kindNames[history.selected.planning.run.checkpoint.kind]}`
+                    : ""}
+                </p>
+              )}
+            </section>
+          )}
           <ol>
             {history.events.map((event) => (
               <li key={event.id}>
                 <small>
                   {new Date(event.receivedAt).toLocaleString("zh-CN")} ·{" "}
-                  {event.source}
+                  {
+                    {
+                      github: "GitHub",
+                      user: "维护者",
+                      agent: "执行器",
+                      system: "系统",
+                    }[event.source]
+                  }
                 </small>
                 <p>
-                  {event.payload.type}
+                  {eventNames[event.payload.type]}
+                  {event.payload.type === "planning.recorded"
+                    ? ` · ${event.payload.planning.run?.reason ?? event.payload.planning.draft?.goal ?? "计划已更新"}`
+                    : ""}
                   {"reason" in event.payload
                     ? ` · ${event.payload.reason}`
                     : ""}

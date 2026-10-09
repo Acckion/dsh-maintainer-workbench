@@ -26,11 +26,7 @@ export function BatchWorkflow({
       setResults((response as { results: typeof results }).results);
   };
   const ready = issues.filter(
-    (i) =>
-      i.orchestration?.draft &&
-      !["running", "stale", "waiting", "deferred"].includes(
-        i.processingSuggestion?.status ?? "",
-      ),
+    (i) => i.orchestration?.draft && i.processingSuggestion?.status === "plan",
   );
   return (
     <section aria-label="批量处理建议">
@@ -50,6 +46,7 @@ export function BatchWorkflow({
               items: ready.map((i) => ({
                 issueId: i.id,
                 inputKey: i.orchestration!.draft!.inputKey,
+                expectedVersion: i.processing?.version,
                 plan: { ...i.orchestration!.draft, decision: "accepted" },
               })),
             })

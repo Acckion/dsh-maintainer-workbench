@@ -46,6 +46,20 @@ export class Store {
         DELETE FROM processing_inputs WHERE caseId IN (SELECT id FROM processing_cases WHERE workItemId NOT IN (SELECT id FROM issues));
         DELETE FROM processing_cases WHERE workItemId NOT IN (SELECT id FROM issues);`);
       this.processing.migrate(this.all<Issue>("issues"));
+      for (const row of this.db.prepare("SELECT data FROM issues").all()) {
+        const issue = JSON.parse(String(row.data)) as Issue;
+        this.processing.migratePlanning(issue);
+        const {
+          orchestration,
+          processingSuggestion,
+          processing,
+          actionsAvailable,
+          ...stored
+        } = currentIssue(issue);
+        this.db
+          .prepare("UPDATE issues SET data=? WHERE id=?")
+          .run(JSON.stringify(stored), issue.id);
+      }
       for (const original of this.jobs())
         if (original.issueId) {
           const job = {
@@ -79,6 +93,7 @@ export class Store {
       ? ({
           ...currentIssue(issue),
           processing,
+          orchestration: processing.planning,
         } as T)
       : value;
   }
@@ -108,8 +123,21 @@ export class Store {
           previous as unknown as Issue | undefined,
           issue,
         );
+        const prior = previous as unknown as Issue | undefined;
+        if (
+          issue.orchestration &&
+          (!prior || prior.processing?.id === state.id) &&
+          JSON.stringify(issue.orchestration) !== JSON.stringify(state.planning)
+        )
+          this.processing.recordPlanning(
+            issue.id,
+            issue.orchestration,
+            state.version,
+          );
         stored = {
           ...currentIssue(issue),
+          orchestration: undefined,
+          processingSuggestion: undefined,
           processing: undefined,
           actionsAvailable: undefined,
         } as unknown as T;

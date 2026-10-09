@@ -349,6 +349,7 @@ export function handler(
                   issueId: z.string(),
                   inputKey: z.string(),
                   plan: z.unknown(),
+                  expectedVersion: z.number().int().nonnegative().optional(),
                 }),
               )
               .min(1)
@@ -374,6 +375,7 @@ export function handler(
             route: z.enum(kinds).optional(),
             sourceJobId: z.string().optional(),
             feedback: z.string().max(4000).optional(),
+            expectedVersion: z.number().int().nonnegative().optional(),
           })
           .parse(input);
         send(
@@ -386,6 +388,7 @@ export function handler(
             p.route,
             p.sourceJobId,
             p.feedback,
+            p.expectedVersion,
           ),
         );
         return;

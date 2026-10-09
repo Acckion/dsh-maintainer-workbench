@@ -205,8 +205,9 @@ export interface PRContext {
   warnings: string[];
 }
 export interface Issue {
-  orchestration?: import("./orchestration.ts").WorkflowState;
-  processingSuggestion?: import("./orchestration.ts").WorkflowProgress;
+  /** Compatibility projection of processing.planning; never stored on the issue. */
+  orchestration?: import("../domain/plan-workflow.ts").WorkflowState;
+  processingSuggestion?: import("../domain/plan-workflow.ts").WorkflowProgress;
   processing?: import("../domain/processing.ts").ProcessingCase;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
   remotePRs?: import("./remote-progress.ts").RemotePR[];
