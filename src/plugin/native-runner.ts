@@ -367,7 +367,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
     const abort = () => handle.agent.cancel({ kind: "user" });
     try {
       await workspace?.attachSession(sessionId);
-      const titles = Reflect.get(ctx, "sessionTitle") as
+      const titles = ctx.get?.("sessionTitle") as
         | { rename: (session: unknown, title: string) => unknown }
         | undefined;
       titles?.rename(handle.agent.session, taskWorkspaceTitle(repo, job));
