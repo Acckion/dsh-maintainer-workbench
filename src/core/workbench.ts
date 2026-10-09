@@ -1,3 +1,4 @@
+import packageInfo from "../../package.json" with {type:"json"};
 import { nextGoalStep } from "./goal-flow.ts";
 import { documentAcceptance } from "./document-acceptance.ts";
 import { validationInstructions } from "./validation-context.ts";
@@ -324,7 +325,7 @@ export class Workbench {
         running: this.active.size,
         ...(host ? { host } : {}),
       },
-      version: "0.2.3",
+      version: packageInfo.version,
     };
   }
   saveJob(job: Job): void {

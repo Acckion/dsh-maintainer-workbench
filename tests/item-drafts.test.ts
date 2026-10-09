@@ -1,3 +1,4 @@
+import packageInfo from "../package.json" with {type:"json"};
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
@@ -17,6 +18,7 @@ test('item drafts survive restart, merge fields and remain isolated from accepte
 });
 test('a running task blocks confirmation of a changed plan without destroying the draft',async()=>{
  const store=new Store(':memory:');seedFixture(store);const issue=store.issues()[0],repo=store.repos()[0];const w=new Workbench(store,tmpdir(),fixtureRunner,new GitHub('',async()=>{throw Error('no network');}),false);
+ assert.equal(w.snapshot().version,packageInfo.version);
  const plan={category:'feature',goal:'new goal',scope:'scope',reproduction:'',expected:'',actual:'',acceptanceCriteria:['check'],decision:'accepted'};
  store.saveDraft(issue.id,{plan});store.put('jobs',{id:'active',repoId:repo.id,issueId:issue.id,issueSnapshot:issue,kind:'fix',status:'running'});
  assert.throws(()=>w.savePlan(issue.id,plan),/先停止任务/);assert.equal(store.get<import('../src/core/types.ts').Issue>('issues',issue.id)?.plan,undefined);assert.deepEqual(store.draft(issue.id).plan,plan);await w.close();
