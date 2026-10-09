@@ -374,6 +374,12 @@ export interface Snapshot {
   };
   version: string;
 }
+/** Small settings projection: excludes repository contents, jobs and credentials. */
+export interface GlobalSettingsSnapshot {
+  settings: Settings;
+  capabilities: Snapshot["capabilities"];
+  revision: string;
+}
 export type Runner = (input: {
   repo: Repo;
   issue: Issue;

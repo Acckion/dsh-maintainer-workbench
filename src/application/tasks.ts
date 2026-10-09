@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   ServiceBase,
@@ -587,10 +587,21 @@ export class TaskService extends ServiceBase {
     });
     this.store.audit("finding.decision", `${ids.join(", ")}: ${decision}`, id);
   }
-  updateSettings(input: unknown): void {
+  settingsRevision(): string {
+    return createHash("sha256")
+      .update(JSON.stringify(settingsSchema.parse(this.store.settings())))
+      .digest("hex");
+  }
+  updateSettings(input: unknown, expectedRevision?: string): void {
     const settings = settingsSchema.parse(input);
+    if (expectedRevision !== undefined && expectedRevision !== this.settingsRevision())
+      throw new SettingsConflictError();
     this.store.put("settings", { ...settings, id: "main" });
     this.store.audit("settings.updated", "更新并发、批量上限和模型配置");
     if (this.autoStart) this.pump();
   }
+}
+
+export class SettingsConflictError extends Error {
+  constructor() { super("全局设置已在另一处修改。请重新加载最新设置后再保存；当前草稿仍保留。"); }
 }

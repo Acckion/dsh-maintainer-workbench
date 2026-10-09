@@ -19,7 +19,7 @@ import type { OrganizeMode } from "./organize.ts";
 import type { PublishAction } from "./publish.ts";
 import { revision } from "./revision.ts";
 import { Store } from "./store.ts";
-import type { HostStatus, Job, JobKind, Runner, Snapshot } from "./types.ts";
+import type { GlobalSettingsSnapshot, HostStatus, Job, JobKind, Runner, Snapshot } from "./types.ts";
 export { revision } from "./revision.ts";
 /** Compatibility facade. Business rules live in the composed services. */
 export class Workbench {
@@ -230,8 +230,8 @@ export class Workbench {
   findings(id: string, findingIds: string[], decision: FindingDecision) {
     return this.tasks.findings(id, findingIds, decision);
   }
-  updateSettings(input: unknown) {
-    return this.tasks.updateSettings(input);
+  updateSettings(input: unknown, expectedRevision?: string) {
+    return this.tasks.updateSettings(input, expectedRevision);
   }
   followup(id: string, value: import("./types.ts").FindingFollowup) {
     return this.reviews.followup(id, value);
@@ -263,8 +263,24 @@ export class Workbench {
   drain() {
     return this.scheduler.drain();
   }
-  snapshot(): Snapshot {
+  globalSettings(): GlobalSettingsSnapshot {
     const host = this.hostStatus?.();
+    return {
+      settings: this.store.settings(),
+      revision: this.tasks.settingsRevision(),
+      capabilities: {
+        harness: !!this.nativeRunner,
+        model: this.nativeRunner ? !!host?.adapterRegistered : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY),
+        github: !!process.env.GITHUB_TOKEN,
+        modelName: host?.model ?? this.store.settings().model,
+        baseUrl: process.env.MAINTAINER_BASE_URL ?? "https://api.deepseek.com",
+        running: this.scheduler.active.size,
+        ...(host ? { host } : {}),
+      },
+    };
+  }
+  snapshot(): Snapshot {
+    const global = this.globalSettings();
     const issues = this.store.issues(),
       repositories = this.store.repos();
     const items = new Map(issues.map((issue) => [issue.id, issue]));
@@ -316,18 +332,8 @@ export class Workbench {
           : undefined,
       })),
       audit: this.store.audits(),
-      settings: this.store.settings(),
-      capabilities: {
-        harness: !!this.nativeRunner,
-        model: this.nativeRunner
-          ? !!host?.adapterRegistered
-          : !!(process.env.MAINTAINER_API_KEY || process.env.DEEPSEEK_API_KEY),
-        github: !!process.env.GITHUB_TOKEN,
-        modelName: host?.model ?? this.store.settings().model,
-        baseUrl: process.env.MAINTAINER_BASE_URL ?? "https://api.deepseek.com",
-        running: this.scheduler.active.size,
-        ...(host ? { host } : {}),
-      },
+      settings: global.settings,
+      capabilities: global.capabilities,
       version: packageInfo.version,
     };
   }

@@ -40,6 +40,7 @@ import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 
 import { type DetailTab } from "./ReviewSummary.tsx";
 import { GitHubConnection, SettingsView } from "./SettingsView.tsx";
+import { GlobalSettings } from "./GlobalSettings.tsx";
 
 import { API, request } from "./api.ts";
 import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
@@ -565,6 +566,7 @@ export function App({
             <button
               className={`mw-button ${page === "settings" ? "active" : ""}`}
               aria-label="全局设置"
+              title={host ? "全局设置 · 也可从 Harness 设置 → 维护工作台进入" : "全局设置"}
               onClick={() => navigate("settings")}
             >
               <Settings2 size={16} />
@@ -1237,12 +1239,11 @@ export function App({
                   }
                 />
               )}
-              {(page === "settings" || page === "repository-settings") && (
+              {page === "settings" && <GlobalSettings native={host} />}
+              {page === "repository-settings" && (
                 <SettingsView
                   key={page}
-                  scope={
-                    page === "repository-settings" ? "repository" : "global"
-                  }
+                  scope="repository"
                   state={state}
                   repoId={repoId}
                   busy={!!busy}

@@ -7,6 +7,7 @@ import { organizeModes } from "../core/organize.ts";
 import { kinds, type Job } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
+import { SettingsConflictError } from "../application/tasks.ts";
 export const API = "/maintainer/api";
 export function send(
   res: ServerResponse,
@@ -50,6 +51,10 @@ export function handler(
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.slice(API.length);
     try {
+      if (req.method === "GET" && path === "/settings/global") {
+        send(res, 200, workbench.globalSettings());
+        return;
+      }
       if (req.method === "GET" && path === "/github/connection") {
         send(res, 200, await workbench.githubConnection());
         return;
@@ -155,6 +160,12 @@ export function handler(
         return;
       }
       const input = await body(req);
+      if (path === "/settings/global") {
+        const p = z.object({ settings: z.unknown(), revision: z.string().length(64) }).parse(input);
+        workbench.updateSettings(p.settings, p.revision);
+        send(res, 200, workbench.globalSettings());
+        return;
+      }
       if (path === "/item-draft") {
         const p = z
           .object({
@@ -604,11 +615,11 @@ export function handler(
       }
       send(res, 200, { ok: true });
     } catch (error) {
-      send(res, error instanceof ProcessingConflictError ? 409 : 400, {
+      send(res, error instanceof ProcessingConflictError || error instanceof SettingsConflictError ? 409 : 400, {
         code:
           error instanceof ProcessingConflictError
             ? error.code
-            : "INVALID_REQUEST",
+            : error instanceof SettingsConflictError ? "SETTINGS_CONFLICT" : "INVALID_REQUEST",
         error:
           error instanceof z.ZodError
             ? `输入格式错误：${error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`
