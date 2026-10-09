@@ -6,10 +6,10 @@ import { ExternalLink, RefreshCw, X, Loader2, GitPullRequest, CircleDot } from '
 import type { Issue } from '../core/types.ts';
 import type { DetailSection, ItemDetail, DetailRow } from '../core/github-details.ts';
 
-type AgentTab='triage'|'execution'|'review';
+type AgentTab='triage'|'execution'|'review'|'assistant';
 type ReaderTab=DetailSection|'agent'|AgentTab;
-const names:Record<ReaderTab,string>={summary:'Summary',activity:'Activity',files:'Changes',commits:'Commits',checks:'Checks',agent:'Review',triage:'Triage',execution:'Execution',review:'Review'};
-const isAgent=(tab:ReaderTab)=>['agent','triage','execution','review'].includes(tab);
+const names:Record<ReaderTab,string>={summary:'Summary',activity:'Activity',files:'Changes',commits:'Commits',checks:'Checks',agent:'Review',triage:'Triage',execution:'Execution',review:'Review',assistant:'Assistant'};
+const isAgent=(tab:ReaderTab)=>['agent','triage','execution','review','assistant'].includes(tab);
 const isChanges=(tab:ReaderTab)=>['files','commits','checks'].includes(tab);
 const events: Record<string, string> = { commented: '发表了评论', reviewed: '提交了审查', inline_comment: '发表了逐行评论', committed: '提交了代码', closed: '关闭了此事项', reopened: '重新打开了此事项', merged: '合并了 PR', labeled: '添加了标签', unlabeled: '移除了标签', assigned: '指派了负责人', unassigned: '移除了负责人', renamed: '修改了标题', milestoned: '设置了里程碑', demilestoned: '移除了里程碑', head_ref_force_pushed: '强制推送了分支', ready_for_review: '标记为可审查', convert_to_draft: '转为草稿', review_requested: '请求审查', review_dismissed: '撤销了审查', cross_referenced: '引用了此事项', referenced: '关联了提交', connected: '关联了事项', disconnected: '取消了关联' };
 const statusNames: Record<string, string> = { success: '通过', failure: '失败', error: '错误', pending: '等待', queued: '排队中', in_progress: '进行中', completed: '已完成', cancelled: '已取消', skipped: '已跳过', neutral: '中性', timed_out: '超时', action_required: '需要处理', stale: '已过期', APPROVED: '已批准', CHANGES_REQUESTED: '请求修改', COMMENTED: '审查评论' };
@@ -20,9 +20,9 @@ export function RepositoryMarkdown({ text }: { text: string }) {
 }
 function Diff({ patch }: { patch: string }) { return <pre className="mw-reader-diff">{diffLines(patch).map((line, index) => <div key={index} className={line.kind}><i className="mw-reader-line-number" aria-label={line.oldLine !== undefined ? `原文件第 ${line.oldLine} 行` : undefined}>{line.oldLine}</i><i className="mw-reader-line-number" aria-label={line.newLine !== undefined ? `新文件第 ${line.newLine} 行` : undefined}>{line.newLine}</i><span className="mw-reader-code">{line.text || ' '}</span></div>)}</pre>; }
 
-export function RepositoryDetail({ issue, repository, hasGitHub, agentPanel, renderAgentPanel, renderAgentActions, close, embedded = false, initialTab = 'summary' }: { issue: Issue; repository: string; hasGitHub: boolean; agentPanel: React.ReactNode; renderAgentPanel?:(stage:AgentTab)=>React.ReactNode; renderAgentActions?:(stage:AgentTab)=>React.ReactNode; close: () => void; embedded?: boolean; initialTab?: ReaderTab }) {
+export function RepositoryDetail({ issue, repository, hasGitHub, agentPanel, renderAgentPanel, renderAgentActions, close, returnToList, embedded = false, initialTab = 'assistant' }: { issue: Issue; repository: string; hasGitHub: boolean; agentPanel: React.ReactNode; renderAgentPanel?:(stage:AgentTab)=>React.ReactNode; renderAgentActions?:(stage:AgentTab)=>React.ReactNode; close: () => void; returnToList?: () => void; embedded?: boolean; initialTab?: ReaderTab }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [tab, setTab] = useState<ReaderTab>(initialTab === 'agent' ? 'review' : initialTab);
+  const [tab, setTab] = useState<ReaderTab>(isAgent(initialTab) ? 'assistant' : initialTab);
   const [page, setPage] = useState(1);
   const [reload, setReload] = useState(0);
   const [cache, setCache] = useState<Partial<Record<DetailSection, ItemDetail>>>({});
@@ -59,11 +59,11 @@ export function RepositoryDetail({ issue, repository, hasGitHub, agentPanel, ren
   }, [issue.id, tab, page, reload, hasGitHub]);
   const summary = cache.summary?.summary;
   const data = isAgent(tab) ? undefined : cache[tab as DetailSection];
-  const tabs:ReaderTab[]=issue.type==='pr' ? ['summary','activity','files','triage','execution','review'] : ['summary','activity','triage','execution','review'];
+  const tabs:ReaderTab[]=issue.type==='pr' ? ['assistant','summary','files','activity'] : ['assistant','summary','activity'];
   const state = summary?.merged ?? issue.merged ? '已合并' : summary?.draft ? '草稿' : (summary?.state ?? issue.state) === 'closed' ? '已关闭' : '开放中';
   const refresh = () => { setCache({}); setPage(1); setReload(value => value + 1); };
   const content = <>
-    <header className="mw-reader-header"><div className="mw-reader-topline"><div className="mw-reader-breadcrumb">{repository} <span>/ {issue.type === 'pr' ? 'Pull request' : 'Issue'} #{issue.number}</span></div><div className="mw-reader-top-actions">{hasGitHub && !isAgent(tab) && <button className="mw-icon-button" title="刷新详情" aria-label="刷新详情" disabled={loading} onClick={refresh}><RefreshCw size={16}/></button>}{safeLink(issue.url) && <a className="mw-icon-button" title="在 GitHub 查看" aria-label="在 GitHub 查看" href={safeLink(issue.url)} target="_blank" rel="noreferrer"><ExternalLink size={16}/></a>}<button className="mw-reader-close" onClick={close} aria-label={embedded ? "关闭详情" : "关闭完整详情"}><X size={18} /></button></div></div>
+    <header className="mw-reader-header"><div className="mw-reader-topline"><div className="mw-reader-breadcrumb">{returnToList && <button className="mw-text-button" aria-label="返回来源列表" onClick={returnToList}>返回列表</button>}{repository} <span>/ {issue.type === 'pr' ? 'Pull request' : 'Issue'} #{issue.number}</span></div><div className="mw-reader-top-actions">{hasGitHub && !isAgent(tab) && <button className="mw-icon-button" title="刷新详情" aria-label="刷新详情" disabled={loading} onClick={refresh}><RefreshCw size={16}/></button>}{safeLink(issue.url) && <a className="mw-icon-button" title="在 GitHub 查看" aria-label="在 GitHub 查看" href={safeLink(issue.url)} target="_blank" rel="noreferrer"><ExternalLink size={16}/></a>}<button className="mw-reader-close" onClick={close} aria-label={embedded ? "关闭详情" : "关闭完整详情"}><X size={18} /></button></div></div>
       <h2>{summary?.title ?? issue.title} <span>#{issue.number}</span></h2>
       <div className="mw-reader-meta"><span className={`mw-reader-state ${state === '已合并' ? 'merged' : state === '已关闭' ? 'closed' : ''}`}>{issue.type === 'pr' ? <GitPullRequest size={15} /> : <CircleDot size={15} />}{state}</span><strong>{summary?.author ?? issue.author}</strong><span>{summary ? `创建于 ${when(summary.createdAt)}` : `同步于 ${when(issue.updatedAt)}`}</span>{summary?.headRef && <><code>{summary.headRef}</code><span>→</span><code>{summary.baseRef}</code></>}</div>
       <div className="mw-reader-tabbar"><nav className="mw-reader-tabs" aria-label="仓库详情页签">{tabs.map(key => <button aria-current={(tab === key || key === 'files' && isChanges(tab)) ? 'page' : undefined} className={(tab === key || key === 'files' && isChanges(tab)) ? 'active' : ''} key={key} onClick={() => { setTab(key); setPage(1); }}>{names[key]}</button>)}</nav>{isAgent(tab) && renderAgentActions && <div className="mw-reader-stage-actions">{renderAgentActions(tab === 'agent' ? 'review' : tab as AgentTab)}</div>}</div>

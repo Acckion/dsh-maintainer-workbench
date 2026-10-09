@@ -6,6 +6,8 @@ export type WorkflowAction = (path: string, data: unknown, message: string) => P
 const lines = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
 export function IssuePlanning({ issue, job, busy, act }: { issue: Issue; job?: Job; busy: boolean; act: WorkflowAction }) {
   const [plan, setPlan] = useState(defaultPlan(issue));
+  const [planOpen, setPlanOpen] = useState(!!issue.plan || issue.analysis?.category === 'feature');
+  useEffect(() => { setPlanOpen(!!issue.plan || issue.analysis?.category === 'feature'); }, [issue.id]);
   const [questions, setQuestions] = useState('');
   const [waitingFor, setWaitingFor] = useState(issue.author);
   const [askedAt, setAskedAt] = useState('');
@@ -21,7 +23,7 @@ export function IssuePlanning({ issue, job, busy, act }: { issue: Issue; job?: J
   const edit = <K extends keyof IssuePlan>(key: K, value: IssuePlan[K]) => setPlan(plan => ({ ...plan, [key]: value }));
   const blocker = planBlocker({ ...issue, plan }, plan.category === 'docs' ? 'docs' : 'fix');
   return <section aria-label="事项类型与补充信息" className="mw-issue-planning">
-    <details open={!!issue.plan || active.length > 0}>
+    <details open={planOpen} onToggle={event => setPlanOpen(event.currentTarget.open)}>
       <summary>事项类型、目标与验收</summary>
       <label>处理类型<select aria-label="处理类型" value={plan.category} disabled={busy} onChange={event => edit('category', event.target.value as IssuePlan['category'])}>{Object.entries(categoryNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>{plan.category === 'question' ? '需要回答的问题' : '维护目标'}<textarea aria-label={plan.category === 'question' ? '需要回答的问题' : '维护目标'} value={plan.goal} rows={2} onChange={event => edit('goal', event.target.value)} /></label>

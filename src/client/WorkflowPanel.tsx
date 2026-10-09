@@ -139,6 +139,11 @@ export function WorkflowPanel({
       },
       "已派发下一阶段，自动交接现有证据",
     );
+  if (compact) return <section className="mw-triage-followup">
+    {!issue.origin && issue.type === "issue" && issue.state === "open" && <IssuePlanning issue={issue} job={job} busy={busy} act={act}/>}
+    {a?.stage === "preflight" && a.risks.length > 0 && <section><h4>需核对事项</h4><ul>{a.risks.map((risk,index) => <li key={index}>{risk}</li>)}</ul></section>}
+    {job?.prContext && <details><summary>判断依据 · PR 版本与 CI</summary><p>HEAD {job.prContext.headSha} · BASE {job.prContext.baseSha}</p>{job.prContext.warnings.map(w => <p key={w}>{w}</p>)}<pre>{JSON.stringify({checks:job.prContext.checks,reviews:job.prContext.reviews},null,2)}</pre></details>}
+  </section>;
   return (
     <section className={compact ? "mw-triage-followup" : "mw-workflow"}>
       {compact && <p className="mw-muted">{job?.status === "completed" ? "分析报告已保存" : "尚未完成分析"}{issue.type === "pr" && <> · {history.some(j => j.kind === "review") ? "已创建代码审查任务，可在 Execution 查看" : "尚未启动代码审查"}</>}</p>}

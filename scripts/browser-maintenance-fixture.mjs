@@ -45,9 +45,15 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 900 } }); page.setDefaultTimeout(12000);
     try {
       await page.goto(`http://127.0.0.1:${server.address().port}`);
-      await page.getByRole('button', { name: '收件箱' }).click();
+      await page.getByRole('button', { name: 'Issues & PRs' }).click();
       await page.locator('[id="mw-item-fixture/queue#128"]').click();
-      await page.getByText('事项类型、目标与验收', { exact: true }).click();
+      assert.equal(await page.getByRole('button', {name:'Assistant',exact:true}).count(), 1);
+      assert.equal(await page.getByRole('button', {name:'Triage',exact:true}).count(), 0);
+      assert.equal(await page.getByRole('button', {name:'Execution',exact:true}).count(), 0);
+
+      await page.screenshot({path:join(dir,`assistant-${width}.png`),fullPage:true});
+      const planDetails = page.getByText('事项类型、目标与验收', {exact:true}).locator('..');
+      if (!await planDetails.evaluate(el => el.open)) await page.getByText('事项类型、目标与验收', { exact: true }).click();
       await page.getByLabel('处理类型', { exact: true }).selectOption('feature');
       await page.getByLabel('维护目标', { exact: true }).fill('Fixture offline sync');
       await page.getByLabel('实施范围与排除项', { exact: true }).fill('Sync only');
@@ -55,9 +61,8 @@ try {
       await page.getByLabel('维护者取舍', { exact: true }).selectOption('accepted');
       await page.getByRole('button', { name: '保存类型与验收计划', exact: true }).click();
       await page.getByText('已保存事项类型与验收计划', { exact: true }).waitFor();
-      await page.getByText('补充要求与下一步操作', { exact: true }).click();
-      await page.getByRole('button', { name: '下一步：实施变更', exact: true }).click();
-      await page.getByText(/已派发下一阶段/).waitFor();
+      await page.getByRole('button', { name: '确认并实现', exact: true }).click();
+      await page.getByText('已启动任务，结果会保存在此事项中', {exact:true}).waitFor();
       assert.equal(store.jobs().find(item => item.kind === 'fix')?.issueSnapshot.plan?.goal, 'Fixture offline sync');
 
       await page.locator('[id="mw-item-fixture/queue#131"]').click();
@@ -74,8 +79,9 @@ try {
       await page.getByRole('button', { name: '信息已足够', exact: true }).click();
       await page.getByText('维护者确认信息已足够', { exact: false }).waitFor();
 
-      await page.getByRole('button', { name: '待我审核' }).click();
+      await page.getByRole('button', { name: 'Tasks' }).click();
       await page.locator('#mw-item-review-current').click();
+      await page.getByText('后续操作与远端进度', {exact:true}).click();
       await page.getByRole('button',{name:'刷新关联 PR 进度',exact:true}).click();
       await page.getByText('审查要求修改',{exact:true}).waitFor();
       await page.getByText('存在合并冲突',{exact:true}).waitFor();

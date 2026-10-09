@@ -17,11 +17,11 @@ test('GitHub Markdown supports tables and task lists, skips HTML and does not au
 
 test('PR and Issue have appropriate traditional browsing tabs and retain original body', () => {
   const issue: Issue = { id: 'other/public#1', repoId: 'other/public', number: 1, type: 'issue', title: 'Title', body: '## Original body', author: 'author', labels: ['bug'], state: 'open', comments: 0, updatedAt: '', url: '' };
-  const props = { issue, repository: 'other/public', hasGitHub: true, agentPanel: 'Agent', close() {} };
+  const props = { issue, repository: 'other/public', hasGitHub: true, initialTab:'summary' as const, agentPanel: 'Agent', close() {} };
   const html = renderToStaticMarkup(React.createElement(RepositoryDetail, props));
   assert.match(html, /Activity/); assert.match(html, /Original body/); assert.doesNotMatch(html, /Files changed/);
   const pr = renderToStaticMarkup(React.createElement(RepositoryDetail, { ...props, issue: { ...issue, type: 'pr' } }));
-  for (const name of ['Summary', 'Activity', 'Changes', 'Triage', 'Execution', 'Review']) assert.ok(pr.includes(name));
+  for (const name of ['Assistant', 'Summary', 'Changes', 'Activity']) assert.ok(pr.includes(name));
 });
 
 test('diff coordinates preserve old/new locations across deletions, additions and separate hunks', () => {
@@ -36,6 +36,6 @@ test('embedded task details expose the complete Agent panel without a modal or b
   assert.doesNotMatch(html, /<dialog/);
   assert.match(html, /<section class="mw-reader-embedded"/);
   assert.match(html, /审核产物/);
-  assert.match(html, /aria-current="page"[^>]*>Review/);
+  assert.match(html, /aria-current="page"[^>]*>Assistant/);
   assert.doesNotMatch(html, /正在读取|同步时的快照/);
 });

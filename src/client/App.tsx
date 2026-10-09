@@ -1,3 +1,5 @@
+import { nextIssueStage, planBlocker } from "../core/issue-flow.ts";
+import { taskGroups, type TaskFilter } from "./task-presentation.ts";
 import { RepositoryDetail } from "./RepositoryDetail.tsx";
 import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
@@ -423,7 +425,7 @@ export function App({
   openSession,
 }: { openSession?: (id: string) => void } = {}) {
   const [state, setState] = useState<Snapshot>();
-  const [page, setPage] = useState<Page>("attention");
+  const [page, setPage] = useState<Page>("inbox");
   const [repoId, setRepoId] = useState(() => {
     try {
       return localStorage.getItem("maintainer.repository") ?? "";
@@ -437,6 +439,9 @@ export function App({
   const [selected, setSelected] = useState<string[]>([]);
   const [focused, setFocused] = useState<string>();
   const [jobFocus, setJobFocus] = useState<string>();
+  const [taskFilter, setTaskFilter] = useState<TaskFilter>("attention");
+  const [assistantInstructions, setAssistantInstructions] = useState<Record<string,string>>({});
+  const [showQuickTasks, setShowQuickTasks] = useState(false);
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
   const [type, setType] = useState("all");
@@ -573,6 +578,10 @@ export function App({
       selected,
       focused: focus,
       scrollTop: mainRef.current?.scrollTop ?? 0,
+      listScrollTop: (document.getElementById(`mw-list-${page}`)?.querySelector(".mw-issues") ?? document.getElementById(`mw-list-${page}`))?.scrollTop ?? 0,
+      areaScrollTop: document.getElementById(`mw-list-${page}`)?.parentElement?.scrollTop ?? 0,
+      taskFilter,
+      showQuickTasks,
       focusId: focus ? `mw-item-${focus}` : `mw-list-${page}`,
     });
   };
@@ -591,6 +600,8 @@ export function App({
       ...values,
       [pageSearchKey(origin.repoId, origin.page)]: origin.search,
     }));
+    if (origin.taskFilter) setTaskFilter(origin.taskFilter as TaskFilter);
+    if (origin.showQuickTasks !== undefined) setShowQuickTasks(origin.showQuickTasks);
     setFilter(origin.filter);
     setType(origin.type);
     setSelected(origin.selected);
@@ -599,24 +610,19 @@ export function App({
     restoreOrigin(origin, repoId, {
       frame: (callback) =>
         requestAnimationFrame(() => requestAnimationFrame(callback)),
-      scrollTo: (top) => mainRef.current?.scrollTo({ top }),
+      scrollTo: (top) => {
+        mainRef.current?.scrollTo({top});
+        const list = document.getElementById(`mw-list-${origin.page}`);
+        (list?.querySelector(".mw-issues") ?? list)?.scrollTo({top:origin.listScrollTop ?? 0});
+        list?.parentElement?.scrollTo({top:origin.areaScrollTop ?? 0});
+      },
       focus: (id) => {
         const element = document.getElementById(id) as HTMLElement | null;
         element?.focus({ preventScroll: true });
         return document.activeElement === element;
       },
     });
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        console.log("origin-return", {
-          target: origin?.scrollTop,
-          scrollTop: mainRef.current?.scrollTop,
-          scrollHeight: mainRef.current?.scrollHeight,
-          clientHeight: mainRef.current?.clientHeight,
-          active: document.activeElement?.id,
-        }),
-      ),
-    );
+
   };
   async function action(
     label: string,
@@ -704,7 +710,7 @@ export function App({
     jobs.find((j) => j.id === jobFocus) ??
     (issue ? jobs.find((j) => j.issueId === issue.id) : undefined);
   const previewJob = jobs.find((item) => item.id === publishPreview?.id);
-  const displayedIssue = page === "inbox" ? issue : job?.issueSnapshot;
+  const displayedIssue = page === "inbox" ? issue : issues.find(i => i.id === job?.issueId) ?? job?.issueSnapshot;
   const result = selectedAnalysis(page === "inbox" ? issue : undefined, job);
   const openEvidenceJob = (id: string, tab: DetailTab) => {
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
@@ -712,6 +718,7 @@ export function App({
     navigationGeneration.current += 1;
     rememberOrigin();
     navigate("tasks", repoId, true);
+    setTaskFilter("all");
     setFocused(undefined);
     setJobFocus(id);
     setDetailTab(tab);
@@ -719,15 +726,10 @@ export function App({
     if (id !== job?.id) setReviewNote("");
     moveFocusToDetail();
   };
-  const listJobs = jobs
-    .filter(
-      (j) => page !== "reviews" || pending.some((item) => item.id === j.id),
-    )
-    .filter((j) =>
-      `${j.issueSnapshot.title} ${j.issueSnapshot.number} ${kindNames[j.kind]}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-    );
+  const groups = taskGroups(jobs, showQuickTasks);
+  const visibleGroups = groups.filter(group => (page === "reviews" ? group.state === "attention" : taskFilter === "all" || group.state === taskFilter))
+    .filter(group => group.members.some(j => `${j.issueSnapshot.title} ${j.issueSnapshot.number} ${kindNames[j.kind]}`.toLowerCase().includes(search.toLowerCase())));
+  const listJobs = visibleGroups.map(group => group.latest);
   async function openPublishPreview(
     publishKind: NonNullable<typeof publishAction>,
   ) {
@@ -777,17 +779,9 @@ export function App({
     }
   }
   const nav = [
-    { id: "organize", label: "仓库整理", icon: FileCheck2, count: 0 },
-    { id: "attention", label: "需要我处理", icon: CheckCheck, count: 0 },
-    { id: "inbox", label: "维护收件箱", icon: Inbox, count: open.length },
-    { id: "tasks", label: "执行任务", icon: Layers3, count: running.length },
-    {
-      id: "reviews",
-      label: "待我审核",
-      icon: FileCheck2,
-      count: pending.length,
-    },
-    { id: "activity", label: "活动记录", icon: Activity, count: 0 },
+    { id: "inbox", label: "Issues & PRs", icon: Inbox, count: open.length },
+    { id: "organize", label: "Repository", icon: FileCheck2, count: 0 },
+    { id: "tasks", label: "Tasks", icon: Layers3, count: groups.filter(g => g.state === "attention").length },
     { id: "repository-settings", label: "仓库设置", icon: Settings2, count: 0 },
   ] as const;
   return (
@@ -804,7 +798,6 @@ export function App({
               <Code2 size={16} />
               <select
                 aria-label="选择仓库"
-                disabled={!!busy}
                 value={repoId}
                 onChange={(e) => navigate(page, e.target.value)}
               >
@@ -848,8 +841,8 @@ export function App({
             {nav.map((n) => (
               <button
                 key={n.id}
-                aria-current={page === n.id ? "page" : undefined}
-                className={`${page === n.id ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
+                aria-current={(page === n.id || n.id === "tasks" && page === "reviews") ? "page" : undefined}
+                className={`${page === n.id || n.id === "tasks" && page === "reviews" ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
                 onClick={() => {
                   navigate(n.id);
                   setJobFocus(undefined);
@@ -965,6 +958,7 @@ export function App({
                   navigationGeneration.current += 1;
                   rememberOrigin(id);
                   navigate("tasks", repoId, true);
+    setTaskFilter("all");
                   setFocused(undefined);
                   setJobFocus(id);
                   setDetailTab("overview");
@@ -986,11 +980,13 @@ export function App({
                     );
                     if (r) {
                       setPage("tasks");
+                      setTaskFilter("all");
                       setJobFocus(r.created[0] ?? r.reused[0]);
                     }
                   }}
                   open={(id) => {
                     setPage("tasks");
+                    setTaskFilter("all");
                     setJobFocus(id);
                   }}
                 />
@@ -1140,7 +1136,7 @@ export function App({
                         </select>
                       </div>
                     </div>
-                    <div className="mw-issues">
+                    <div className="mw-issues" id="mw-inbox-items">
                       {filtered.slice(0, listLimit).map((i) => {
                         const current = jobs.find(
                           (j) =>
@@ -1283,9 +1279,13 @@ export function App({
                   >
                     <div className="mw-panel-top">
                       <h3>
-                        {page === "reviews" ? "待审核结果" : "所有任务"}{" "}
+                        {"任务"}{" "}
                         <span>{listJobs.length}</span>
                       </h3>
+                      <div className="mw-task-filters" aria-label="任务状态筛选">
+                        {([['attention','需要我处理'],['running','正在运行'],['completed','已完成'],['failed','失败 / 已停止'],['all','全部']] as const).map(([value,label]) => <button className={taskFilter === value ? 'active' : ''} key={value} onClick={() => {setTaskFilter(value); if(page === 'reviews') setPage('tasks');}}>{label} <small>{groups.filter(g => value === 'all' || g.state === value).length}</small></button>)}
+                      </div>
+                      <details className="mw-task-options"><summary>显示选项</summary><label><input type="checkbox" checked={showQuickTasks} onChange={e => setShowQuickTasks(e.target.checked)}/>包含快速分诊与预检</label></details>
                       <label className="mw-search">
                         <Search size={16} />
                         <input
@@ -1296,12 +1296,13 @@ export function App({
                         />
                       </label>
                     </div>
+                    {taskFilter === "attention" && issues.filter(i => i.state === "open" && !i.origin && (["decision","needs_info"].includes(i.workflow?.stage ?? "") || i.informationRequests?.some(r => r.state === "reply_received"))).map(i => <button className="mw-task-row mw-decision-row" key={`decision-${i.id}`} onClick={() => {navigate("inbox",repoId);setFocused(i.id);}}><div><strong>{i.title}</strong><p>#{i.number} · {i.workflow?.stage === "needs_info" ? "需要补充信息" : "需要确认目标"}</p></div></button>)}
                     {listJobs.length ? (
                       listJobs.slice(0, listLimit).map((j) => (
                         <button
                           key={j.id}
                           id={`mw-item-${j.id}`}
-                          className={`mw-task-row ${jobFocus === j.id ? "focused" : ""}`}
+                          className={`mw-task-row ${visibleGroups.find(g => g.latest.id === j.id)?.members.some(m => m.id === jobFocus) ? "focused" : ""}`}
                           onClick={() => {
                             rememberOrigin(j.id);
                             navigationGeneration.current += 1;
@@ -1328,7 +1329,7 @@ export function App({
                                 ? "仓库整理"
                                 : `#${j.issueSnapshot.number}`}{" "}
                               <span>·</span> {kindNames[j.kind]} <span>·</span>{" "}
-                              第 {j.attempt} 次尝试
+                              {visibleGroups.find(g => g.latest.id === j.id)?.members.length ?? 1} 个处理步骤
                             </p>
                             <small>
                               {j.engine ?? "等待执行器"} · {date(j.createdAt)} ·{" "}
@@ -1348,7 +1349,7 @@ export function App({
                             ? "暂时没有待审核结果"
                             : "还没有维护任务"
                         }
-                        text="从收件箱选择问题并派发，任务与执行证据会显示在这里。"
+                        text="当前筛选下没有任务，可切换筛选或从 Issues & PRs 开始处理。"
                       />
                     )}
                     {listJobs.length > listLimit && (
@@ -1378,7 +1379,7 @@ export function App({
                       <h3>
                         {jobFocus
                           ? "任务已不在当前列表中"
-                          : "结果可追溯，决策可检查"}
+                          : "选择任务"}
                       </h3>
                       <p>
                         {jobFocus
@@ -1580,7 +1581,8 @@ export function App({
             )
           }
           close={() => setDetailOpen(false)}
-          renderAgentPanel={renderStage}
+          returnToList={originRef.current?.repoId === repoId ? returnToOrigin : undefined}
+        renderAgentPanel={renderStage}
         renderAgentActions={renderStageActions}
           agentPanel={
             <>
@@ -1831,9 +1833,11 @@ export function App({
           )
         }
         close={() => {
+          navigationGeneration.current += 1;
           setFocused(undefined);
           setJobFocus(undefined);
         }}
+        returnToList={originRef.current?.repoId === repoId ? returnToOrigin : undefined}
         renderAgentPanel={renderStage}
         renderAgentActions={renderStageActions}
         agentPanel={renderDetail()}
@@ -1841,8 +1845,28 @@ export function App({
     );
   }
 
-  function renderStageActions(stage: "triage" | "execution" | "review") {
-    if (!displayedIssue || stage === "review") return null;
+  function renderStageActions(stage: "triage" | "execution" | "review" | "assistant") {
+    if (!displayedIssue) return null;
+    if (stage === "assistant") {
+      const active = jobs.find(j => j.issueId === displayedIssue.id && ["running", "queued"].includes(j.status));
+      if (active) return <button className="mw-button" disabled={!!busy} onClick={() => void action("cancel", "/cancel", {id:active.id}, "任务已停止，已有产物保留")}>停止任务</button>;
+      if (job && ["failed","cancelled","rejected"].includes(job.status)) return <button className="mw-button" disabled={!!busy || job.artifactState === "stale"} onClick={() => void action("retry", "/retry", {id:job.id}, "已重新派发任务")}>重试任务</button>;
+      const category = displayedIssue.plan?.category ?? displayedIssue.analysis?.category;
+      let primary: JobKind | undefined = displayedIssue.type === "pr" ? "review" : nextIssueStage(displayedIssue, job);
+      if (!primary && displayedIssue.type !== "pr") primary = !displayedIssue.analysis ? "triage" : category === "question" ? undefined : category === "feature" ? undefined : "investigate";
+      if (job && ["fix","docs"].includes(job.kind) && job.patch) primary = "validate";
+      if (job?.kind === "validate" && job.artifact?.stage === "validate" && job.artifact.tests.length && job.artifact.tests.every(t => t.status === "passed") && !job.artifact.blockers.length) primary = "review";
+      if (job?.kind === "review") primary = undefined;
+      if (job?.artifactState === "stale") primary = displayedIssue.type === "pr" ? "preflight" : "triage";
+      const labels: Partial<Record<JobKind,string>> = {triage:"分析此 Issue",preflight:"重新预检",review:"审查此 PR",investigate:"调查并修复",fix:"开始修复",docs:"检查并更新",validate:"验证改动"};
+      if (category === "feature") labels.fix = "确认并实现";
+      const secondary: JobKind[] = displayedIssue.type === "pr" ? ["preflight","review","ci"] : ["triage","investigate",...(category === "docs" ? ["docs" as JobKind] : [])];
+      return <>
+        {primary && <button className="mw-button primary" title={planBlocker(displayedIssue, primary)} disabled={!!busy || !!planBlocker(displayedIssue, primary)} onClick={() => void action("workflow", primary === "triage" ? "/classify" : "/jobs", {issueIds:[displayedIssue.id],kind:primary,sourceJobId:job?.result && job.artifactState !== "stale" ? job.id : undefined, instructions:assistantInstructions[displayedIssue.id], goal:["investigate","fix","docs"].includes(primary) ? "resolve" : undefined}, "已启动任务，结果会保存在此事项中")}>{labels[primary] ?? kindNames[primary]}</button>}
+        <details className="mw-assistant-more"><summary>更多</summary><div>{secondary.filter(kind => kind !== primary).map(kind => <button key={kind} className="mw-button" disabled={!!busy || !!planBlocker(displayedIssue,kind)} onClick={() => void action("workflow", kind === "triage" ? "/classify" : "/jobs", {issueIds:[displayedIssue.id],kind,sourceJobId:job?.result && job.artifactState !== "stale" ? job.id : undefined,instructions:assistantInstructions[displayedIssue.id]}, "已启动所选操作")}>{kind === "preflight" ? "快速预检" : kindNames[kind]}</button>)}{job && <button className="mw-button" onClick={() => openEvidenceJob(job.id,"log")}>查看执行记录</button>}</div></details>
+      </>;
+    }
+    if (stage === "review") return null;
     const kinds: JobKind[] = stage === "triage"
       ? (displayedIssue.type === "pr" ? ["preflight", "review"] : ["triage"])
       : displayedIssue.type === "pr" ? ["review", "ci"] : ["investigate", "fix"];
@@ -1854,9 +1878,34 @@ export function App({
     ));
   }
 
-  function renderStage(stage: "triage" | "execution" | "review") {
+  function renderAssistant(history: Job[]) {
+    if (!displayedIssue) return null;
+    const active = history.find(j => ["running", "queued"].includes(j.status));
+    const selected = job;
+    const quick = !selected || ["triage", "preflight"].includes(selected.kind) && detailTab === "overview";
+    const saved = selected?.result ?? displayedIssue.analysis;
+    const category = displayedIssue.plan?.category ?? displayedIssue.analysis?.category;
+    const needsPlan = displayedIssue.type === "issue" && category === "feature" && displayedIssue.plan?.decision !== "accepted";
+    return <section className="mw-assistant" aria-label="Assistant 处理事项">
+      <div className="mw-assistant-status" role="status">
+        <strong>{active ? `${kindNames[active.kind]}中` : selected?.error ? "任务未完成" : selected?.artifactState === "stale" ? "结果对应旧版本" : needsPlan ? "需要确认需求" : selected?.result ? "结果已保存" : "尚未开始处理"}</strong>
+        <span>{active?.waitingReason ?? (selected?.status === "approved" ? undefined : selected?.goalPauseReason) ?? (selected ? taskStatus(selected).label : displayedIssue.type === "pr" ? "审查此 PR 后显示具体发现" : "分析问题后选择处理方向")}</span>
+      </div>
+      {quick ? <>
+        {saved ? <Result result={saved} classification /> : <p className="mw-assistant-intro">{displayedIssue.type === "pr" ? "查看变更范围、CI 和源码中的问题。" : "确认问题类型、影响和缺少的信息。"}</p>}
+        <WorkflowPanel compact hideSummary issue={displayedIssue} job={selected} history={history} busy={!!busy} act={(path,data,message) => action("workflow",path,data,message)} />
+      </> : renderDetail(true)}
+      {selected?.error && quick && <p className="mw-callout red">{selected.error}</p>}
+      {quick && <details><summary>验证与执行详情</summary>{selected?.result?.evidence.map((e,i) => <p key={i}>{e.detail}</p>)}{selected?.sessionId && openSession && <button className="mw-button" onClick={() => openSession(selected.sessionId!)}>打开 Harness 会话</button>}</details>}
+      <details className="mw-assistant-instructions"><summary>补充本次要求</summary><label>给 Agent 的补充要求<textarea rows={3} value={assistantInstructions[displayedIssue.id] ?? ""} onChange={e => setAssistantInstructions(values => ({...values,[displayedIssue.id]:e.target.value}))} placeholder="已有调查与验收条件会自动传递，无需重复填写" /></label></details>
+      <details className="mw-assistant-history"><summary>处理历史 · {history.length}</summary>{history.map(j => <button className="mw-task-row" key={j.id} onClick={() => openEvidenceJob(j.id,"overview")}><div><strong>{kindNames[j.kind]} · {taskStatus(j).label}</strong><small>{date(j.createdAt)}{j.artifactState === "stale" ? " · 旧版本" : ""}</small></div></button>)}</details>
+    </section>;
+  }
+
+  function renderStage(stage: "triage" | "execution" | "review" | "assistant") {
     if (!displayedIssue) return null;
     const history = jobs.filter((j) => j.issueId === displayedIssue.id);
+    if (stage === "assistant") return renderAssistant(history);
     const relevant = history.filter((j) =>
       stage === "triage"
         ? ["triage", "preflight"].includes(j.kind)
@@ -1943,7 +1992,7 @@ export function App({
     );
   }
 
-  function renderDetail() {
+  function renderDetail(assistantMode = false) {
     if (!displayedIssue) return null;
     const acceptance = job ? acceptanceEligibility(job, jobs) : undefined;
     const reviewActions = job && (
@@ -2117,7 +2166,7 @@ export function App({
       </div>
     );
     return (
-      <aside id="mw-detail" tabIndex={-1} className="mw-detail">
+      <aside id="mw-detail" tabIndex={-1} className={`mw-detail${assistantMode ? " mw-assistant-detail" : ""}`}>
         <div className="mw-detail-header">
           <span>
             {displayedIssue.origin === "repository"
@@ -2235,6 +2284,7 @@ export function App({
                   openSession={openSession}
                 />
               )}
+              <details open={!assistantMode}><summary>后续操作与远端进度</summary>
               <WorkflowPanel
                 hideSummary={!!job}
                 key={displayedIssue.id}
@@ -2249,6 +2299,7 @@ export function App({
                   action("workflow", path, data, message)
                 }
               />
+              </details>
               {job?.error && (
                 <div className="mw-callout red">
                   <TriangleAlert size={17} />
@@ -2261,7 +2312,7 @@ export function App({
                   <p>{job.rawOutput}</p>
                 </details>
               )}
-              {result ? (
+              {result && (!assistantMode || !job?.artifact) ? (
                 <Result
                   result={result}
                   summary={!job?.artifact}
@@ -2269,7 +2320,7 @@ export function App({
                     !job?.artifact || job.artifact.stage === "triage"
                   }
                 />
-              ) : (
+              ) : !result ? (
                 <>
                   <div className="mw-section-title">
                     <BookOpen size={15} /> 问题描述
@@ -2288,7 +2339,7 @@ export function App({
                     </p>
                   </div>
                 </>
-              )}
+              ) : null}
               {result && (
                 <details className="mw-original">
                   <summary>查看原始报告</summary>
