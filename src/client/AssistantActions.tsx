@@ -1,5 +1,6 @@
 import type { Issue, Job } from "../core/types.ts";
 import { availableActions, type WorkflowAction } from "../workflow/actions.ts";
+import { actionLabel } from "../workflow/presentation.ts";
 
 interface Props {
   issue: Issue;
@@ -9,6 +10,7 @@ interface Props {
   instructions?: string;
   act: (path: string, data: unknown, message: string) => Promise<unknown>;
   openEvidence: (id: string) => void;
+  projected?: import("../workflow/actions.ts").WorkflowActions;
 }
 export function AssistantActions({
   issue,
@@ -18,8 +20,10 @@ export function AssistantActions({
   instructions,
   act,
   openEvidence,
+  projected,
 }: Props) {
   const actions =
+    projected ??
     job?.actionsAvailable ??
     issue.actionsAvailable ??
     availableActions(issue, job, history);
@@ -63,7 +67,9 @@ export function AssistantActions({
         instructions,
         expectedVersion: actions.expectedVersion,
         goal:
-          goal && ["investigate", "fix", "docs"].includes(action.kind)
+          goal &&
+          ["investigate", "fix", "docs"].includes(action.kind) &&
+          !(issue.type === "pr" && action.kind === "investigate")
             ? "resolve"
             : undefined,
       },
@@ -78,7 +84,7 @@ export function AssistantActions({
           disabled={busy || !actions.primary.enabled}
           onClick={() => void run(actions.primary!, true)}
         >
-          {actions.primary.label}
+          {actionLabel(actions.primary.kind, issue, job)}
         </button>
       )}
       <details className="mw-assistant-more">
@@ -94,7 +100,7 @@ export function AssistantActions({
                 title={action.blockedReasons.join("；")}
                 onClick={() => void run(action, false)}
               >
-                {action.label}
+                {actionLabel(action.kind, issue, job)}
               </button>
             ))}
           {job && (

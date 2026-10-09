@@ -40,7 +40,7 @@ import {
 import { RepositoryDetail } from "./RepositoryDetail.tsx";
 import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 
-import { type DetailTab } from "./ReviewSummary.tsx";
+import { ReviewSummary, type DetailTab } from "./ReviewSummary.tsx";
 import { GitHubConnection, SettingsView } from "./SettingsView.tsx";
 import type { HostWorkspaces } from "./host-workspaces.ts";
 import { GlobalSettings } from "./GlobalSettings.tsx";
@@ -73,7 +73,9 @@ import {
 } from "./review-evidence.ts";
 import { ReviewActions } from "./ReviewActions.tsx";
 import { ReviewFindingControls } from "./ReviewFindingControls.tsx";
-import { ReviewSummary } from "./ReviewSummary.tsx";
+
+import { WorkflowDetail } from "./WorkflowDetail.tsx";
+import { StageResult } from "./StageResult.tsx";
 import { taskGroups, type TaskFilter } from "./task-presentation.ts";
 export function App({
   openSession,
@@ -278,8 +280,10 @@ export function App({
     setFilter(origin.filter);
     setType(origin.type);
     setSelected(origin.selected);
-    if (origin.page === "inbox") setFocused(origin.focused);
-    else setJobFocus(origin.focused);
+    const narrow = (mainRef.current?.clientWidth ?? window.innerWidth) <= 560;
+    if (origin.page === "inbox")
+      setFocused(narrow ? undefined : origin.focused);
+    else setJobFocus(narrow ? undefined : origin.focused);
     restoreOrigin(origin, repoId, {
       frame: (callback) =>
         requestAnimationFrame(() => requestAnimationFrame(callback)),
@@ -372,7 +376,8 @@ export function App({
   const issues = state?.issues.filter((i) => i.repoId === repoId) ?? [];
   const jobs = state?.jobs.filter((j) => j.repoId === repoId) ?? [];
   const pending = reviewQueue(jobs).filter((job) => {
-    const run = issues.find((issue) => issue.id === job.issueId)?.orchestration?.run;
+    const run = issues.find((issue) => issue.id === job.issueId)?.orchestration
+      ?.run;
     return !run || (run.status === "review" && run.currentJobId === job.id);
   });
   const running = jobs.filter((j) => ["running", "queued"].includes(j.status));
@@ -460,7 +465,12 @@ export function App({
   const listJobs = visibleGroups.map((group) => group.latest);
   async function openPublishPreview(
     publishKind: NonNullable<typeof publishAction>,
+    targetId?: string,
   ) {
+    const job = targetId
+      ? jobs.find((j) => j.id === targetId)
+      : (jobs.find((j) => j.id === jobFocus) ??
+        (issue ? jobs.find((j) => j.issueId === issue.id) : undefined));
     if (!job || busy) return;
     if (publishKind === "comment") {
       try {
@@ -526,7 +536,7 @@ export function App({
     { id: "repository-settings", label: "仓库设置", icon: Settings2, count: 0 },
   ] as const;
   return (
-    <div className="mw mw-layout-tabs" data-mw-host={host ? '' : undefined}>
+    <div className="mw mw-layout-tabs" data-mw-host={host ? "" : undefined}>
       <div className="mw-shell">
         <header className="mw-header">
           <div className="mw-header-controls">
@@ -573,7 +583,11 @@ export function App({
             <button
               className={`mw-button ${page === "settings" ? "active" : ""}`}
               aria-label="全局设置"
-              title={host ? "全局设置 · 也可从 Harness 设置 → 维护工作台进入" : "全局设置"}
+              title={
+                host
+                  ? "全局设置 · 也可从 Harness 设置 → 维护工作台进入"
+                  : "全局设置"
+              }
               onClick={() => navigate("settings")}
             >
               <Settings2 size={16} />
@@ -736,7 +750,11 @@ export function App({
                   open={(id, issueId) => {
                     navigate("inbox", id);
                     setFocused(issueId);
-                    setReaderRequest(issueId ? { sequence: Date.now(), issueId, tab: "overview" } : undefined);
+                    setReaderRequest(
+                      issueId
+                        ? { sequence: Date.now(), issueId, tab: "overview" }
+                        : undefined,
+                    );
                     if (issueId) moveFocusToDetail();
                   }}
                 />
@@ -821,49 +839,54 @@ export function App({
                       </label>
                       <div>
                         <BatchWorkflow
-                          issues={issues.filter((issue) => selected.includes(issue.id))}
+                          issues={issues.filter((issue) =>
+                            selected.includes(issue.id),
+                          )}
                           busy={!!busy}
-                          act={(path, data, message) => action("workflow-batch", path, data, message)}
-                        />
-                        <details><summary>高级操作</summary>
-                        <button
-                          disabled={!selected.length || !!busy}
-                          onClick={() => void enqueue("triage")}
-                        >
-                          <Sparkles size={14} />
-                          分诊 / 预检
-                        </button>
-                        <button
-                          disabled={!selected.length || !!busy}
-                          onClick={() => void enqueue("investigate")}
-                        >
-                          <Search size={14} />
-                          调查
-                        </button>
-                        <select
-                          aria-label="更多批量操作"
-                          value=""
-                          disabled={!selected.length || !!busy}
-                          onChange={(e) =>
-                            e.target.value &&
-                            void enqueue(
-                              e.target.value.replace("rerun:", "") as JobKind,
-                              selected,
-                              e.target.value.startsWith("rerun:"),
-                            )
+                          act={(path, data, message) =>
+                            action("workflow-batch", path, data, message)
                           }
-                        >
-                          <option value="">更多操作</option>
-                          <option value="fix">修复与验证</option>
-                          <option value="preflight">PR 预检</option>
-                          <option value="review">PR 审查</option>
-                          <option value="rerun:review">
-                            重新运行 PR 审查（原始 PR）
-                          </option>
-                          <option value="validate">验证变更</option>
-                          <option value="ci">诊断 CI</option>
-                          <option value="docs">文档维护</option>
-                        </select>
+                        />
+                        <details>
+                          <summary>高级操作</summary>
+                          <button
+                            disabled={!selected.length || !!busy}
+                            onClick={() => void enqueue("triage")}
+                          >
+                            <Sparkles size={14} />
+                            分诊 / 预检
+                          </button>
+                          <button
+                            disabled={!selected.length || !!busy}
+                            onClick={() => void enqueue("investigate")}
+                          >
+                            <Search size={14} />
+                            调查
+                          </button>
+                          <select
+                            aria-label="更多批量操作"
+                            value=""
+                            disabled={!selected.length || !!busy}
+                            onChange={(e) =>
+                              e.target.value &&
+                              void enqueue(
+                                e.target.value.replace("rerun:", "") as JobKind,
+                                selected,
+                                e.target.value.startsWith("rerun:"),
+                              )
+                            }
+                          >
+                            <option value="">更多操作</option>
+                            <option value="fix">修复与验证</option>
+                            <option value="preflight">PR 预检</option>
+                            <option value="review">PR 审查</option>
+                            <option value="rerun:review">
+                              重新运行 PR 审查（原始 PR）
+                            </option>
+                            <option value="validate">验证变更</option>
+                            <option value="ci">诊断 CI</option>
+                            <option value="docs">文档维护</option>
+                          </select>
                         </details>
                       </div>
                     </div>
@@ -1401,8 +1424,8 @@ export function App({
           returnToListVisible={
             !!readerRequest || originRef.current?.page !== page
           }
-          renderAgentPanel={renderStage}
-          renderAgentActions={renderStageActions}
+          workflow
+          renderAgentPanel={renderWorkflow}
           agentPanel={null}
         />
       )}
@@ -1516,9 +1539,11 @@ export function App({
                 }[] = [];
                 for (let i = 0; i < names.length; i += 20)
                   results.push(
-                    ...(await request("/sync-many", {
-                      names: names.slice(i, i + 20),
-                    })).results,
+                    ...(
+                      await request("/sync-many", {
+                        names: names.slice(i, i + 20),
+                      })
+                    ).results,
                   );
                 await refresh();
                 setConnectionResults(results);
@@ -1664,19 +1689,41 @@ export function App({
         returnToListVisible={
           !!readerRequest || originRef.current?.page !== page
         }
-        renderAgentPanel={renderStage}
-        renderAgentActions={renderStageActions}
+        workflow
+        renderAgentPanel={renderWorkflow}
         agentPanel={null}
       />
     );
   }
 
-  function renderStageActions(stage: AgentTab) {
-    if (!displayedIssue || stage === "review" || stage === "plan") return null;
+  function renderWorkflow(tab: AgentTab) {
+    if (!displayedIssue) return null;
+    return (
+      <WorkflowDetail
+        issue={displayedIssue}
+        jobs={jobs}
+        job={job}
+        legacyTab={tab}
+        audit={state?.audit}
+        render={renderStage}
+        track={renderTrack}
+        evidence={renderLinkedEvidence}
+        context={renderProcessingAdvice}
+        actions={renderWorkflowActions}
+      />
+    );
+  }
+
+  function renderWorkflowActions(
+    currentJob?: typeof job,
+    projected?: import("../workflow/actions.ts").WorkflowActions,
+  ) {
+    if (!displayedIssue) return null;
     return (
       <AssistantActions
         issue={displayedIssue}
-        job={job}
+        job={currentJob}
+        projected={projected}
         history={jobs.filter((j) => j.issueId === displayedIssue.id)}
         busy={!!busy}
         instructions={assistantInstructions[displayedIssue.id]}
@@ -1690,162 +1737,108 @@ export function App({
     );
   }
 
-  function renderStage(stage: AgentTab) {
+  function renderStage(
+    stage: AgentTab,
+    selectedJob = job,
+    readOnly = false,
+    decision = false,
+  ) {
+    const job = selectedJob;
     if (!displayedIssue) return null;
     const history = jobs.filter((j) => j.issueId === displayedIssue.id);
-    if (stage === "overview") {
-      const saved =
-        history.find((j) => j.result && j.artifactState !== "stale")?.result ??
-        displayedIssue.analysis;
-      const active = history.find((j) =>
-        ["queued", "running"].includes(j.status),
-      );
-      return (
-        <section className="mw-item-overview">
-          <WorkflowCard issue={displayedIssue} history={history} busy={!!busy} act={(path, data, message) => action("workflow", path, data, message)} />
-          <ProcessingInput
-            issue={displayedIssue}
-            busy={!!busy}
-            act={(path, data, message) =>
-              action("workflow", path, data, message)
-            }
-          />
-          <h3>
-            {active
-              ? `${kindNames[active.kind]}中`
-              : saved
-                ? "当前结论"
-                : "尚未分析"}
-          </h3>
-          {saved ? (
-            <>
-              <p>{saved.summary}</p>
-              <div className="mw-tags">
-                <span className="mw-tag">{saved.category}</span>
-                <span className="mw-tag">{saved.priority}</span>
-              </div>
-              {saved.missingInfo.length > 0 && (
-                <details>
-                  <summary>需要补充的信息 · {saved.missingInfo.length}</summary>
-                  <ul>
-                    {saved.missingInfo.map((text) => (
-                      <li key={text}>{text}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </>
-          ) : (
-            <p>选择上方操作开始分析。</p>
-          )}
-          {job?.error && (
-            <p role="alert">
-              最近一次任务失败：{job.error}。已保存的结论仍可查看。
-            </p>
-          )}
-          {displayedIssue.type === "issue" &&
-            displayedIssue.analysis?.category === "question" && (
-              <button
-                className="mw-text-button"
-                onClick={() =>
-                  setReaderRequest({
-                    sequence: Date.now(),
-                    issueId: displayedIssue.id,
-                    tab: "plan",
-                  })
-                }
-              >
-                调整事项类型
-              </button>
-            )}
-          {job && (
-            <button
-              className="mw-text-button"
-              onClick={() => openEvidenceJob(job.id, "log")}
-            >
-              查看执行记录
-            </button>
-          )}
-        </section>
-      );
-    }
     if (stage === "plan")
-      return (
+      return readOnly ? (
+        <p>
+          历史计划只读：{job?.issueSnapshot.plan?.goal ?? "未保存单独计划"}
+          。当前计划请返回当前阶段查看。
+        </p>
+      ) : (
         <>
-        <WorkflowCard issue={displayedIssue} history={history} busy={!!busy} act={(path, data, message) => action("workflow", path, data, message)} />
-        <details open={!displayedIssue.orchestration?.draft}>
-        <summary>高级操作</summary>
-        <IssuePlanning
-          start={(kind, expectedVersion) =>
-            action(
-              "workflow",
-              "/jobs",
-              {
-                issueIds: [displayedIssue.id],
-                kind,
-                expectedVersion,
-                goal: "resolve",
-                instructions: assistantInstructions[displayedIssue.id],
-              },
-              "已按确认计划开始实施",
-            )
-          }
-          issue={displayedIssue}
-          job={job}
-          busy={
-            !!busy ||
-            history.some((j) => ["running", "queued"].includes(j.status))
-          }
-          act={(path, data, message) => action("workflow", path, data, message)}
-        />
-        </details>
+          {renderProcessingAdvice(true)}
+          <details open={!displayedIssue.orchestration?.draft}>
+            <summary>高级操作</summary>
+            <IssuePlanning
+              start={(kind, expectedVersion) =>
+                action(
+                  "workflow",
+                  "/jobs",
+                  {
+                    issueIds: [displayedIssue.id],
+                    kind,
+                    expectedVersion,
+                    goal: "resolve",
+                    instructions: assistantInstructions[displayedIssue.id],
+                  },
+                  "已按确认计划开始实施",
+                )
+              }
+              issue={displayedIssue}
+              job={job}
+              busy={
+                !!busy ||
+                history.some((j) => ["running", "queued"].includes(j.status))
+              }
+              act={(path, data, message) =>
+                action("workflow", path, data, message)
+              }
+            />
+          </details>
         </>
       );
     if (stage === "work")
       return (
         <section className="mw-item-work">
-          <WorkflowCard issue={displayedIssue} history={history} busy={!!busy} act={(path, data, message) => action("workflow", path, data, message)} />
-          <ProcessingInput
-            issue={displayedIssue}
-            busy={!!busy}
-            act={(path, data, message) =>
-              action("workflow", path, data, message)
-            }
-          />
-          <ProcessingHistory
-            issue={displayedIssue}
-            busy={!!busy}
-            act={(path, data, message) =>
-              action("workflow", path, data, message)
-            }
-          />
-          <OperationTracker
-            record={operationRecords[repoId]}
-            jobs={jobs}
-            close={() =>
-              setOperationRecords((records) => {
-                const next = { ...records };
-                delete next[repoId];
-                return next;
-              })
-            }
-            open={(id) => {
-              navigationGeneration.current += 1;
-              rememberOrigin(id);
-              navigate("tasks", repoId, true);
-              setTaskFilter("all");
-              setFocused(undefined);
-              setJobFocus(id);
-              setReaderRequest(undefined);
-              setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
-              moveFocusToDetail();
-            }}
-          />
+          {!readOnly && (
+            <ProcessingInput
+              issue={displayedIssue}
+              busy={!!busy}
+              act={(path, data, message) =>
+                action("workflow", path, data, message)
+              }
+            />
+          )}
+          <details className="mw-processing-tools">
+            <summary>处理记录与操作追踪</summary>
+            {!readOnly && (
+              <ProcessingHistory
+                issue={displayedIssue}
+                busy={!!busy}
+                act={(path, data, message) =>
+                  action("workflow", path, data, message)
+                }
+              />
+            )}
+            <OperationTracker
+              record={operationRecords[repoId]}
+              jobs={jobs}
+              close={() =>
+                setOperationRecords((records) => {
+                  const next = { ...records };
+                  delete next[repoId];
+                  return next;
+                })
+              }
+              open={(id) => {
+                navigationGeneration.current += 1;
+                rememberOrigin(id);
+                navigate("tasks", repoId, true);
+                setTaskFilter("all");
+                setFocused(undefined);
+                setJobFocus(id);
+                setReaderRequest(undefined);
+                setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
+                moveFocusToDetail();
+              }}
+            />
+          </details>
           {job ? (
             <>
-              <h3>
-                {kindNames[job.kind]} · {taskStatus(job).label}
-              </h3>
+              <button
+                className="mw-text-button"
+                onClick={() => openEvidenceJob(job.id, "log")}
+              >
+                查看执行记录
+              </button>
               {job.error && <p role="alert">{job.error}</p>}
               {job.result && <p>{job.result.summary}</p>}
               {job.sessionId && openSession && (
@@ -1917,15 +1910,17 @@ export function App({
           ) : (
             <p>暂无执行任务。</p>
           )}
-          <ItemInstructions
-            issueId={displayedIssue.id}
-            onChange={(value) =>
-              setAssistantInstructions((current) => ({
-                ...current,
-                [displayedIssue.id]: value,
-              }))
-            }
-          />
+          {!readOnly && (
+            <ItemInstructions
+              issueId={displayedIssue.id}
+              onChange={(value) =>
+                setAssistantInstructions((current) => ({
+                  ...current,
+                  [displayedIssue.id]: value,
+                }))
+              }
+            />
+          )}
           <details>
             <summary>处理历史 · {history.length}</summary>
             {history.map((j) => (
@@ -1942,27 +1937,11 @@ export function App({
         </section>
       );
     if (stage === "review")
-      return job &&
-        !["triage", "preflight"].includes(job.kind) &&
-        (job.result || job.patch) &&
-        ![
-          "failed",
-          "cancelled",
-          "running",
-          "queued",
-          "waiting_input",
-          "waiting_environment",
-        ].includes(job.status) ? (
+      return job && (job.result || job.artifact || job.patch) ? (
         <>
-          <ReviewSummary
-            compact
+          <StageResult
             job={job}
-            jobs={jobs}
-            issue={displayedIssue}
-            audit={state?.audit ?? []}
-            native={!!state?.capabilities.harness}
             open={openEvidenceJob}
-            openSession={openSession}
             openLocation={(path, line) =>
               setReaderRequest({
                 sequence: Date.now(),
@@ -1972,37 +1951,121 @@ export function App({
                 line,
               })
             }
-            deliveryActions={renderReviewActions()}
           />
-          {job.kind === "review" && (
-            <ReviewFindingControls
-              job={job}
-              history={history}
-              busy={!!busy}
-              act={(path, data, message) =>
-                action("workflow", path, data, message)
-              }
-            />
+          {!readOnly &&
+            !["triage", "preflight"].includes(job.kind) &&
+            (decision ? (
+              renderReviewActions(job)
+            ) : (
+              <details className="mw-stage-review-actions">
+                <summary>审核与交付操作</summary>
+                {renderReviewActions(job)}
+              </details>
+            ))}
+          {job.kind === "review" && !readOnly && (
+            <details>
+              <summary>发现处置与讨论串</summary>
+              <ReviewFindingControls
+                job={job}
+                history={history}
+                busy={!!busy}
+                act={(path, data, message) =>
+                  action("workflow", path, data, message)
+                }
+              />
+            </details>
           )}
-          <details>
-            <summary>远端 PR 与 CI</summary>
-            <RemoteProgress
-              issue={displayedIssue}
-              busy={!!busy}
-              act={(path, data, message) =>
-                action("workflow", path, data, message)
-              }
-            />
-          </details>
         </>
       ) : (
-        <p>尚无可审核的产物。执行失败或未生成结果时，请在 Work 查看并重试。</p>
+        <p>尚无保存结果，请查看执行详情与恢复入口。</p>
       );
 
     return null;
   }
 
-  function renderReviewActions() {
+  function renderProcessingAdvice(full = false) {
+    if (!displayedIssue) return null;
+    const card = (
+      <WorkflowCard
+        issue={displayedIssue}
+        history={jobs.filter((j) => j.issueId === displayedIssue.id)}
+        busy={!!busy}
+        act={(path, data, message) => action("workflow", path, data, message)}
+      />
+    );
+    return full || displayedIssue.orchestration ? (
+      card
+    ) : (
+      <details>
+        <summary>处理建议与进度</summary>
+        {card}
+      </details>
+    );
+  }
+
+  function renderLinkedEvidence(selectedJob?: typeof job) {
+    if (
+      !displayedIssue ||
+      !selectedJob ||
+      ["triage", "preflight"].includes(selectedJob.kind)
+    )
+      return null;
+    return (
+      <details className="mw-delivery-evidence">
+        <summary>关联验证与交付证据</summary>
+        <ReviewSummary
+          compact
+          job={selectedJob}
+          jobs={jobs}
+          issue={displayedIssue}
+          audit={state?.audit ?? []}
+          native={!!state?.capabilities.harness}
+          open={openEvidenceJob}
+          openSession={openSession}
+        />
+      </details>
+    );
+  }
+
+  function renderTrack(
+    selectedJob = job,
+    readOnly = false,
+    monitoring = false,
+  ) {
+    if (!displayedIssue) return null;
+    return (
+      <>
+        {renderLinkedEvidence(selectedJob)}
+        {selectedJob &&
+          (readOnly
+            ? Object.entries(selectedJob.publications ?? {}).map(
+                ([kind, receipt]) => (
+                  <p key={kind}>
+                    {kind} · {receipt.status}
+                    {receipt.urls.map((url) => (
+                      <a key={url} href={url} target="_blank" rel="noreferrer">
+                        查看交付结果
+                      </a>
+                    ))}
+                  </p>
+                ),
+              )
+            : renderReviewActions(selectedJob))}
+        {(!readOnly || monitoring) && (
+          <RemoteProgress
+            issue={displayedIssue}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
+        )}
+      </>
+    );
+  }
+
+  function renderReviewActions(selectedJob = job) {
+    const job = selectedJob;
     return (
       <ReviewActions
         job={job}
@@ -2012,7 +2075,7 @@ export function App({
         reviewNote={reviewNote}
         setReviewNote={setReviewNote}
         action={action}
-        openPublishPreview={openPublishPreview}
+        openPublishPreview={(kind) => openPublishPreview(kind, job?.id)}
         openSession={openSession}
       />
     );

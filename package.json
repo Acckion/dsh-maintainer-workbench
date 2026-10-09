@@ -58,6 +58,7 @@
     "harness:isolated": "node scripts/harness.mjs --isolated",
     "evaluate": "node scripts/evaluate.mjs",
     "test:browser:maintenance": "node --import tsx scripts/browser-maintenance-fixture.mjs",
+    "test:browser:timeline": "node --import tsx scripts/browser-timeline-fixture.mjs",
     "test:browser:settings": "node --import tsx scripts/browser-settings-fixture.mjs"
   },
   "engines": {
