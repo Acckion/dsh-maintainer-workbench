@@ -21,7 +21,7 @@ test('PR and Issue have appropriate traditional browsing tabs and retain origina
   const html = renderToStaticMarkup(React.createElement(RepositoryDetail, props));
   assert.match(html, /Activity/); assert.match(html, /Original body/); assert.doesNotMatch(html, /Files changed/);
   const pr = renderToStaticMarkup(React.createElement(RepositoryDetail, { ...props, issue: { ...issue, type: 'pr' } }));
-  for (const name of ['Assistant', 'Summary', 'Changes', 'Activity']) assert.ok(pr.includes(name));
+  for (const name of ['Overview', 'Work', 'Review', 'Summary', 'Diff', 'Activity']) assert.ok(pr.includes(name));
 });
 
 test('diff coordinates preserve old/new locations across deletions, additions and separate hunks', () => {
@@ -32,10 +32,10 @@ test('diff coordinates preserve old/new locations across deletions, additions an
 
 test('embedded task details expose the complete Agent panel without a modal or background Summary fetch', () => {
   const issue: Issue = { id: 'r#2', repoId: 'r', number: 2, type: 'pr', title: 'Task', body: 'Original', author: 'author', labels: [], state: 'open', comments: 0, updatedAt: '', url: '' };
-  const html = renderToStaticMarkup(React.createElement(RepositoryDetail, { issue, repository: 'r', hasGitHub: true, embedded: true, initialTab: 'assistant', agentPanel: React.createElement('button', null, '审核产物'), close() {} }));
+  const html = renderToStaticMarkup(React.createElement(RepositoryDetail, { issue, repository: 'r', hasGitHub: true, embedded: true, initialTab: 'review', agentPanel: React.createElement('button', null, '审核产物'), close() {} }));
   assert.doesNotMatch(html, /<dialog/);
-  assert.match(html, /<section class="mw-reader-embedded"/);
+  assert.match(html, /<section[^>]*class="mw-reader-embedded"/);
   assert.match(html, /审核产物/);
-  assert.match(html, /aria-current="page"[^>]*>Assistant/);
+  assert.match(html, /aria-current="page"[^>]*>Review/);
   assert.doesNotMatch(html, /正在读取|同步时的快照/);
 });

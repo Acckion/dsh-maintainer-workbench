@@ -15,19 +15,25 @@ import type {
   ItemDetail,
 } from "../core/github-details.ts";
 import type { Issue } from "../core/types.ts";
+import { SummaryRecords } from "./SummaryRecords.tsx";
 import { diffLines } from "./diff-lines.ts";
+import { useItemDraft } from "./item-draft.ts";
 
-type AgentTab = "assistant";
+export type AgentTab = "overview" | "plan" | "work" | "review";
 type ReaderTab = DetailSection | AgentTab;
 const names: Record<ReaderTab, string> = {
   summary: "Summary",
   activity: "Activity",
-  files: "Changes",
+  files: "Diff",
   commits: "Commits",
   checks: "Checks",
-  assistant: "Assistant",
+  review: "Review",
+  overview: "Overview",
+  plan: "Plan",
+  work: "Work",
 };
-const isAgent = (tab: ReaderTab) => tab === "assistant";
+const isAgent = (tab: ReaderTab) =>
+  ["overview", "plan", "work", "review"].includes(tab);
 const isChanges = (tab: ReaderTab) =>
   ["files", "commits", "checks"].includes(tab);
 const events: Record<string, string> = {
@@ -107,7 +113,7 @@ function Diff({ patch }: { patch: string }) {
   return (
     <pre className="mw-reader-diff">
       {diffLines(patch).map((line, index) => (
-        <div key={index} className={line.kind}>
+        <div key={index} className={line.kind} data-new-line={line.newLine}>
           <i
             className="mw-reader-line-number"
             aria-label={
@@ -144,8 +150,13 @@ export function RepositoryDetail({
   renderAgentActions,
   close,
   returnToList,
+  returnToListVisible = false,
   embedded = false,
-  initialTab = "assistant",
+  initialTab = "overview",
+  requestedTab,
+  localPatch,
+  responseDraft,
+  onPreviewReply,
 }: {
   issue: Issue;
   repository: string;
@@ -155,14 +166,63 @@ export function RepositoryDetail({
   renderAgentActions?: (stage: AgentTab) => React.ReactNode;
   close: () => void;
   returnToList?: () => void;
+  returnToListVisible?: boolean;
   embedded?: boolean;
   initialTab?: ReaderTab;
+  requestedTab?: {
+    sequence: number;
+    tab: ReaderTab;
+    path?: string;
+    line?: number;
+  };
+  localPatch?: { patch: string; label: string; revision: string };
+  responseDraft?: string;
+  onPreviewReply?: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
-  const [tab, setTab] = useState<ReaderTab>(
-    isAgent(initialTab) ? "assistant" : initialTab,
-  );
+  const [tab, setTab] = useState<ReaderTab>(initialTab);
+  const { draft, ready, error: draftError, update } = useItemDraft(issue.id);
+  const restored = useRef(false);
+  useEffect(() => {
+    if (ready && !restored.current) {
+      restored.current = true;
+      if (
+        draft.view &&
+        [
+          "overview",
+          "plan",
+          "work",
+          "review",
+          "summary",
+          "activity",
+          "files",
+        ].includes(draft.view)
+      )
+        setTab(draft.view as ReaderTab);
+    }
+  }, [ready]);
+  const selectTab = (key: ReaderTab) => {
+    restored.current = true;
+    setTab(key);
+    setPage(1);
+    update({ view: key });
+  };
+  useEffect(() => {
+    setCache({});
+    setPage(1);
+  }, [issue.headSha, issue.updatedAt]);
   const [page, setPage] = useState(1);
+  const [diffSource, setDiffSource] = useState<"github" | "local">(
+    localPatch && issue.type !== "pr" ? "local" : "github",
+  );
+  useEffect(() => {
+    if (requestedTab) {
+      restored.current = true;
+      setTab(requestedTab.tab);
+      setPage(1);
+      if (requestedTab.tab === "files" && localPatch) setDiffSource("local");
+    }
+  }, [requestedTab?.sequence]);
   const [reload, setReload] = useState(0);
   const [cache, setCache] = useState<
     Partial<Record<DetailSection, ItemDetail>>
@@ -183,6 +243,7 @@ export function RepositoryDetail({
     setError("");
     if (
       isAgent(tab) ||
+      (tab === "files" && diffSource === "local") ||
       !hasGitHub ||
       (cache[tab as DetailSection]?.page ?? 0) >= page
     ) {
@@ -237,13 +298,42 @@ export function RepositoryDetail({
       }
     })();
     return () => controller.abort();
-  }, [issue.id, tab, page, reload, hasGitHub]);
+  }, [issue.id, tab, page, reload, hasGitHub, diffSource]);
+  useEffect(() => {
+    if (tab === "files" && requestedTab?.path) {
+      const node = [
+        ...document.querySelectorAll<HTMLDetailsElement>(".mw-reader-file"),
+      ].find((node) => node.dataset.path === requestedTab.path);
+      if (node) {
+        node.open = true;
+        const line = requestedTab.line
+          ? node.querySelector<HTMLElement>(
+              `[data-new-line="${requestedTab.line}"]`,
+            )
+          : null;
+        (line ?? node).scrollIntoView({ block: "start" });
+        line?.classList.add("mw-diff-target");
+      }
+    }
+  }, [tab, cache.files, diffSource, requestedTab?.sequence]);
   const summary = cache.summary?.summary;
   const data = isAgent(tab) ? undefined : cache[tab as DetailSection];
-  const tabs: ReaderTab[] =
-    issue.type === "pr"
-      ? ["assistant", "summary", "files", "activity"]
-      : ["assistant", "summary", "activity"];
+  const aiTabs: ReaderTab[] = [
+    "overview",
+    ...(issue.type === "issue" &&
+    (issue.plan ||
+      draft.plan ||
+      issue.analysis?.category !== "question" ||
+      tab === "plan")
+      ? ["plan" as const]
+      : []),
+    "work",
+    "review",
+  ];
+  const sourceTabs: ReaderTab[] =
+    issue.type === "pr" || localPatch
+      ? ["summary", "activity", "files"]
+      : ["summary", "activity"];
   const state =
     (summary?.merged ?? issue.merged)
       ? "已合并"
@@ -260,23 +350,65 @@ export function RepositoryDetail({
   const content = (
     <>
       <header className="mw-reader-header">
-        <div className="mw-reader-topline">
-          <div className="mw-reader-breadcrumb">
-            {returnToList && (
-              <button
-                className="mw-text-button"
-                aria-label="返回来源列表"
-                onClick={returnToList}
-              >
-                返回列表
-              </button>
-            )}
-            {repository}{" "}
-            <span>
-              / {issue.type === "pr" ? "Pull request" : "Issue"} #{issue.number}
+        <h2>
+          {returnToList && (
+            <button
+              className={`mw-icon-button mw-mobile-list-return ${returnToListVisible ? "mw-origin-return" : ""}`}
+              aria-label="返回来源列表"
+              onClick={returnToList}
+            >
+              ←
+            </button>
+          )}
+          {summary?.title ?? issue.title}
+        </h2>
+        <div className="mw-reader-meta">
+          <div className="mw-reader-facts">
+            <span
+              className={`mw-reader-state ${state === "已合并" ? "merged" : state === "已关闭" ? "closed" : ""}`}
+            >
+              {issue.type === "pr" ? (
+                <GitPullRequest size={15} />
+              ) : (
+                <CircleDot size={15} />
+              )}
+              {state}
             </span>
+            <span className="mw-title-reference">
+              <span>#{issue.number}</span>{" "}
+              {safeLink(issue.url) && (
+                <a
+                  className="mw-icon-button"
+                  title="在 GitHub 查看"
+                  aria-label="在 GitHub 查看"
+                  href={safeLink(issue.url)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink size={16} />
+                </a>
+              )}
+            </span>
+            <strong>{summary?.author ?? issue.author}</strong>
+            <span>
+              {summary
+                ? `创建于 ${when(summary.createdAt)}`
+                : `同步于 ${when(issue.updatedAt)}`}
+            </span>
+            {summary?.headRef && (
+              <>
+                <code>{summary.headRef}</code>
+                <span>→</span>
+                <code>{summary.baseRef}</code>
+              </>
+            )}
           </div>
           <div className="mw-reader-top-actions">
+            {isAgent(tab) && renderAgentActions && (
+              <div className="mw-reader-stage-actions">
+                {renderAgentActions(tab as AgentTab)}
+              </div>
+            )}
             {hasGitHub && !isAgent(tab) && (
               <button
                 className="mw-icon-button"
@@ -288,103 +420,82 @@ export function RepositoryDetail({
                 <RefreshCw size={16} />
               </button>
             )}
-            {safeLink(issue.url) && (
-              <a
-                className="mw-icon-button"
-                title="在 GitHub 查看"
-                aria-label="在 GitHub 查看"
-                href={safeLink(issue.url)}
-                target="_blank"
-                rel="noreferrer"
+            {!embedded && (
+              <button
+                className="mw-reader-close"
+                onClick={close}
+                aria-label="关闭完整详情"
               >
-                <ExternalLink size={16} />
-              </a>
+                <X size={18} />
+              </button>
             )}
-            <button
-              className="mw-reader-close"
-              onClick={close}
-              aria-label={embedded ? "关闭详情" : "关闭完整详情"}
-            >
-              <X size={18} />
-            </button>
           </div>
         </div>
-        <h2>
-          {summary?.title ?? issue.title} <span>#{issue.number}</span>
-        </h2>
-        <div className="mw-reader-meta">
-          <span
-            className={`mw-reader-state ${state === "已合并" ? "merged" : state === "已关闭" ? "closed" : ""}`}
-          >
-            {issue.type === "pr" ? (
-              <GitPullRequest size={15} />
-            ) : (
-              <CircleDot size={15} />
-            )}
-            {state}
-          </span>
-          <strong>{summary?.author ?? issue.author}</strong>
-          <span>
-            {summary
-              ? `创建于 ${when(summary.createdAt)}`
-              : `同步于 ${when(issue.updatedAt)}`}
-          </span>
-          {summary?.headRef && (
-            <>
-              <code>{summary.headRef}</code>
-              <span>→</span>
-              <code>{summary.baseRef}</code>
-            </>
-          )}
-        </div>
         <div className="mw-reader-tabbar">
-          <nav className="mw-reader-tabs" aria-label="仓库详情页签">
-            {tabs.map((key) => (
+          <nav
+            className="mw-reader-tabs mw-reader-ai-tabs"
+            aria-label="AI 功能"
+          >
+            {aiTabs.map((key) => (
               <button
-                aria-current={
-                  tab === key || (key === "files" && isChanges(tab))
-                    ? "page"
-                    : undefined
-                }
-                className={
-                  tab === key || (key === "files" && isChanges(tab))
-                    ? "active"
-                    : ""
-                }
                 key={key}
-                onClick={() => {
-                  setTab(key);
-                  setPage(1);
-                }}
+                aria-current={tab === key ? "page" : undefined}
+                className={tab === key ? "active" : ""}
+                onClick={() => selectTab(key)}
               >
                 {names[key]}
               </button>
             ))}
           </nav>
-          {isAgent(tab) && renderAgentActions && (
-            <div className="mw-reader-stage-actions">
-              {renderAgentActions("assistant")}
-            </div>
-          )}
-        </div>
-      </header>
-      <main className="mw-reader-content">
-        {isChanges(tab) && (
-          <nav className="mw-tabs" aria-label="Change details">
-            {(["files", "commits", "checks"] as const).map((key) => (
+          <nav
+            className="mw-reader-tabs mw-reader-source-tabs"
+            aria-label="GitHub 原始内容"
+          >
+            {sourceTabs.map((key) => (
               <button
                 key={key}
+                aria-current={tab === key ? "page" : undefined}
                 className={tab === key ? "active" : ""}
-                onClick={() => {
-                  setTab(key);
-                  setPage(1);
-                }}
+                onClick={() => selectTab(key)}
               >
-                {key === "files" ? "Files" : names[key]}
+                {names[key]}
               </button>
             ))}
           </nav>
-        )}
+          <div className="mw-reader-compact-tabs">
+            <select
+              aria-label="AI 功能"
+              value={isAgent(tab) ? tab : ""}
+              onChange={(e) => selectTab(e.target.value as ReaderTab)}
+            >
+              <option value="" disabled>
+                AI
+              </option>
+              {aiTabs.map((key) => (
+                <option key={key} value={key}>
+                  {names[key]}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="GitHub 原始内容"
+              value={!isAgent(tab) ? tab : ""}
+              onChange={(e) => selectTab(e.target.value as ReaderTab)}
+            >
+              <option value="" disabled>
+                GitHub
+              </option>
+              {sourceTabs.map((key) => (
+                <option key={key} value={key}>
+                  {names[key]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </header>
+      <main className="mw-reader-content">
+        {draftError && <p role="alert">{draftError}</p>}
         {error && (
           <div className="mw-callout red" role="alert">
             <div>
@@ -441,6 +552,60 @@ export function RepositoryDetail({
             </aside>
           </div>
         )}
+        {tab === "summary" && issue.type === "pr" && hasGitHub && (
+          <section>
+            <SummaryRecords
+              key={`${issue.id}:commits:${reload}`}
+              id={issue.id}
+              section="commits"
+            />
+            <SummaryRecords
+              key={`${issue.id}:checks:${reload}`}
+              id={issue.id}
+              section="checks"
+            />
+          </section>
+        )}
+        {tab === "activity" && (
+          <section className="mw-reply-editor">
+            <h4>回复草稿</h4>
+            <textarea
+              aria-label="回复草稿"
+              rows={4}
+              disabled={!ready}
+              value={draft.reply ?? ""}
+              onChange={(e) => update({ reply: e.target.value })}
+            />
+            {responseDraft && (
+              <button
+                className="mw-text-button"
+                disabled={!ready}
+                onClick={() => update({ reply: responseDraft })}
+              >
+                填入当前分析的回复建议
+              </button>
+            )}
+            <button
+              className="mw-button"
+              disabled={!draft.reply?.trim()}
+              onClick={() => void navigator.clipboard.writeText(draft.reply!)}
+            >
+              复制草稿
+            </button>
+            <button
+              className="mw-button"
+              disabled={!onPreviewReply || !draft.reply?.trim() || !!draftError}
+              onClick={onPreviewReply}
+            >
+              预览发布回复
+            </button>
+            <small>
+              {onPreviewReply
+                ? "保存在本机，尚未发布"
+                : "本机草稿；先在 Review 接受结果才能发布"}
+            </small>
+          </section>
+        )}
         {tab === "activity" && (
           <div className="mw-reader-timeline">
             {data?.rows.map((row) => (
@@ -482,7 +647,56 @@ export function RepositoryDetail({
             ))}
           </div>
         )}
-        {tab === "files" && (
+        {tab === "files" && requestedTab?.path && (
+          <button
+            className="mw-text-button"
+            onClick={() => selectTab("review")}
+          >
+            返回 Review
+          </button>
+        )}
+        {tab === "files" && localPatch && (
+          <div className="mw-workflow-actions">
+            {issue.type === "pr" && (
+              <button
+                className="mw-button"
+                onClick={() => setDiffSource("github")}
+              >
+                PR 原始变更
+              </button>
+            )}
+            <button
+              className="mw-button"
+              onClick={() => setDiffSource("local")}
+            >
+              本机产物 · {localPatch.label}
+            </button>
+          </div>
+        )}
+        {tab === "files" && diffSource === "local" && localPatch && (
+          <section>
+            <p>
+              本机产物 · 基线 <code>{localPatch.revision.slice(0, 12)}</code>
+            </p>
+            {localPatch.patch
+              .split(/(?=^diff --git )/m)
+              .filter(Boolean)
+              .map((patch, index) => (
+                <details
+                  className="mw-reader-file"
+                  open={index === 0}
+                  key={index}
+                >
+                  <summary>
+                    {patch.match(/^\+\+\+ b\/(.*)$/m)?.[1] ??
+                      patch.split("\n")[0]}
+                  </summary>
+                  <Diff patch={patch} />
+                </details>
+              ))}
+          </section>
+        )}
+        {tab === "files" && diffSource === "github" && (
           <div className="mw-reader-files">
             <p>
               {data?.rows.length ?? 0} 个已加载文件 · + / − 为 GitHub 报告的行数
@@ -490,6 +704,7 @@ export function RepositoryDetail({
             {data?.rows.map((row, index) => (
               <details
                 className="mw-reader-file"
+                data-path={row.path}
                 key={row.id}
                 open={index === 0 ? true : undefined}
               >
@@ -579,14 +794,17 @@ export function RepositoryDetail({
         )}
         {isAgent(tab) && (
           <div className="mw-reader-agent">
-            {renderAgentPanel ? renderAgentPanel("assistant") : agentPanel}
+            {renderAgentPanel ? renderAgentPanel(tab as AgentTab) : agentPanel}
           </div>
         )}
-        {!hasGitHub && tab !== "summary" && !isAgent(tab) && (
-          <p className="mw-reader-empty">
-            当前只有本地事项。关联 GitHub 远端并同步后可查看讨论和活动。
-          </p>
-        )}
+        {!hasGitHub &&
+          !(tab === "files" && localPatch) &&
+          tab !== "summary" &&
+          !isAgent(tab) && (
+            <p className="mw-reader-empty">
+              当前只有本地事项。关联 GitHub 远端并同步后可查看讨论和活动。
+            </p>
+          )}
         {data && !data.rows.length && !loading && tab !== "summary" && (
           <p className="mw-reader-empty">
             {tab === "checks"
@@ -610,6 +828,8 @@ export function RepositoryDetail({
   );
   return embedded ? (
     <section
+      id="mw-detail"
+      tabIndex={-1}
       className="mw-reader-embedded"
       aria-label={`${issue.type === "pr" ? "PR" : "Issue"} #${issue.number} 详情`}
     >

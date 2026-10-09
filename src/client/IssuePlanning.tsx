@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { categoryNames, defaultPlan, planBlocker } from "../core/issue-flow.ts";
 import type { Issue, IssuePlan, Job } from "../core/types.ts";
+import { useItemDraft } from "./item-draft.ts";
 
 export type WorkflowAction = (
   path: string,
@@ -16,13 +17,32 @@ export function IssuePlanning({
   issue,
   job,
   busy,
-  act,
+  act: perform,
+  start,
 }: {
   issue: Issue;
   job?: Job;
   busy: boolean;
   act: WorkflowAction;
+  start?: (kind: "fix" | "docs", version?: number) => Promise<unknown>;
 }) {
+  const act: WorkflowAction = (path, data, message) =>
+    perform(
+      path,
+      {
+        ...(data as Record<string, unknown>),
+        expectedVersion: issue.processing?.version,
+      },
+      message,
+    );
+  const { draft, ready, error, update } = useItemDraft(issue.id);
+  const restored = React.useRef(false);
+  useEffect(() => {
+    if (ready && !restored.current) {
+      restored.current = true;
+      if (draft.plan) setPlan(draft.plan);
+    }
+  }, [ready]);
   const [plan, setPlan] = useState(defaultPlan(issue));
   const [planOpen, setPlanOpen] = useState(
     !!issue.plan || issue.analysis?.category === "feature",
@@ -53,7 +73,7 @@ export function IssuePlanning({
   ]);
   const planKey = JSON.stringify(issue.plan);
   useEffect(() => {
-    setPlan(defaultPlan(issue));
+    if (!restored.current) setPlan(defaultPlan(issue));
   }, [issue.id, planKey, issue.analysis?.category]);
   useEffect(() => {
     setQuestions("");
@@ -75,16 +95,21 @@ export function IssuePlanning({
       ? job.artifact.missingInfo
       : (issue.analysis?.missingInfo ?? [])
   ).filter((text) => !pendingQuestions.has(text.trim().toLowerCase()));
-  const edit = <K extends keyof IssuePlan>(key: K, value: IssuePlan[K]) =>
-    setPlan((plan) => ({ ...plan, [key]: value }));
+  const edit = <K extends keyof IssuePlan>(key: K, value: IssuePlan[K]) => {
+    const next = { ...plan, [key]: value };
+    setPlan(next);
+    if (ready) update({ plan: next });
+  };
   const blocker = planBlocker(
     { ...issue, plan },
     plan.category === "docs" ? "docs" : "fix",
   );
   return (
     <section aria-label="事项类型与补充信息" className="mw-issue-planning">
+      <p className="mw-muted">此处编辑的是本机草稿；确认后才更新正式计划。</p>
+      {error && <p role="alert">{error}</p>}
       <details
-        open={planOpen}
+        open={true}
         onToggle={(event) => setPlanOpen(event.currentTarget.open)}
       >
         <summary>事项类型、目标与验收</summary>
@@ -192,14 +217,13 @@ export function IssuePlanning({
           保存新的目标或验收条件会使旧版本产物失效。文档事项可直接进入文档维护。
         </p>
         <button
-          className="mw-button"
-          disabled={busy}
+          className="mw-button primary"
+          disabled={busy || !ready}
           onClick={() =>
             void act(
               "/issue-plan",
               {
                 issueId: issue.id,
-                expectedVersion: issue.processing?.version,
                 plan: {
                   ...plan,
                   acceptanceCriteria: lines(plan.acceptanceCriteria.join("\n")),
@@ -209,8 +233,47 @@ export function IssuePlanning({
             )
           }
         >
-          保存类型与验收计划
+          确认类型与验收计划
         </button>
+        {start &&
+          !["question"].includes(plan.category) &&
+          plan.decision !== "deferred" && (
+            <button
+              className="mw-button primary"
+              disabled={
+                busy ||
+                !ready ||
+                !!planBlocker(
+                  { ...issue, plan: { ...plan, decision: "accepted" } },
+                  plan.category === "docs" ? "docs" : "fix",
+                )
+              }
+              onClick={async () => {
+                const confirmed = {
+                  ...plan,
+                  decision: "accepted" as const,
+                  acceptanceCriteria: lines(plan.acceptanceCriteria.join("\n")),
+                };
+                const saved = await act(
+                  "/issue-plan",
+                  { issueId: issue.id, plan: confirmed },
+                  "已确认计划",
+                );
+                if (saved) {
+                  setPlan(confirmed);
+                  update({ plan: confirmed });
+                  await start(
+                    plan.category === "docs" ? "docs" : "fix",
+                    (saved as { version?: number }).version,
+                  );
+                }
+              }}
+            >
+              {plan.category === "docs"
+                ? "确认并更新文档"
+                : "确认计划并开始实施"}
+            </button>
+          )}
       </details>
       <details
         open={informationOpen}

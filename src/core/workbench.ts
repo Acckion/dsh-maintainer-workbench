@@ -1,3 +1,4 @@
+import packageInfo from "../../package.json" with { type: "json" };
 import { IssueService } from "../application/issues.ts";
 import { ProcessingService } from "../application/processing.ts";
 import { PublicationService } from "../application/publication.ts";
@@ -327,7 +328,7 @@ export class Workbench {
         running: this.scheduler.active.size,
         ...(host ? { host } : {}),
       },
-      version: "0.2.3",
+      version: packageInfo.version,
     };
   }
   saveJob(job: Job): void {

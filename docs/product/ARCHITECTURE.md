@@ -37,7 +37,7 @@ src/
   plugin/input-tool.ts          原生 ask_user_question 的持久化暂停桥接
   core/workbench.ts             应用组合入口
   core/github.ts                保留原 GitHub API 接口的适配入口
-  client/                      Assistant 操作、输入表单、详情、设置及公共 UI
+  client/                      Overview/Plan/Work/Review、操作投影、输入/历史、审核和设置
 ```
 
 `Workbench` 负责实例组合和兼容入口，不再承担各业务模块的实现。GitHub facade 组合各资源客户端；认证、重试及原有发布检查保持兼容。现有补丁发布、证据检查和阶段产物模块继续复用。
@@ -108,7 +108,7 @@ Agent 也可以在阶段报告中返回：
 
 源信息更新会使绑定旧指纹的输入请求过期，过期回答不能恢复旧运行。仓库准备失败保存为 `waiting_environment`，释放槽位；准备完成只满足等待，点击继续创建新运行。等待期间不自动重试，不持有 Agent 会话。
 
-追问草稿经维护者确认发布后，发布服务依据已确认回执创建报告者等待；稳定请求 ID、事务和回执标记支持重启恢复且不重复创建追问。普通评论不完成事项；已确认的提问答复可以完成本地处理，GitHub 状态保持独立。
+追问草稿经维护者确认发布后，发布服务依据已确认回执创建报告者等待；稳定请求 ID、事务和回执标记支持重启恢复且不重复创建追问。回执保存实际发布回复；维护者编辑过回复时，需要核对并登记实际追问，不按旧报告自动创建等待。普通评论不完成事项；已确认的提问答复可以完成本地处理，GitHub 状态保持独立。
 
 ## 一致性与并发
 
@@ -150,11 +150,11 @@ SQLite 新增：
 
 ## 兼容迁移
 
-原 `issues / jobs / repos / settings / audit / triage_cache` 表保留。启动时为旧事项建立首个处理周期，把原 workflow/plan/追问转成初始状态；存量 Job 补充周期身份，恢复排队/运行状态记录，但不调用 Agent。已经运行而进程中断的任务继续使用原失败恢复策略，保留目录和提示。
+原 `issues / jobs / repos / settings / audit / triage_cache / item_drafts` 表保留。本地草稿与已确认计划独立保存，草稿编辑不产生处理事件；正式计划确认携带当前状态版本，运行中的事项禁止确认新计划。启动时为旧事项建立首个处理周期，把原 workflow/plan/追问转成初始状态；存量 Job 补充周期身份，恢复排队/运行状态记录，但不调用 Agent。已经运行而进程中断的任务继续使用原失败恢复策略，保留目录和提示。
 
 已知旧 worktree 只在路径严格位于当前数据目录的 `worktrees/<安全标识>` 且分支为 `maintainer/` 时登记，不遍历、不删除用户其他目录。迁移重复执行不会新增周期或重复登记。
 
-`Issue.processing` 是唯一权威处理状态。已移除运行时 `Issue.workflow` 及重复的旧下一步判断；旧磁盘字段仅由迁移适配器读取，之后不再保存。客户端不可达的旧 Triage/Execution/Review 页签分支也已移除。`actionsAvailable` 由后端生成，界面展示相同操作策略和阻塞原因，避免自行维护另一套下一步规则。历史 Analysis、阶段报告、导出和发布入口仍可使用。
+`Issue.processing` 是唯一权威处理状态。已移除运行时 `Issue.workflow` 及重复的旧下一步判断；旧磁盘字段仅由迁移适配器读取，之后不再保存。客户端保留 Overview / Plan / Work / Review 分栏、原始 GitHub 内容与本地草稿持久化，移除不可达的 Triage/Execution 和旧单页渲染。等待输入展示在 Overview 和 Work，完整周期事件历史在 Work；审核操作独立为 ReviewActions。`actionsAvailable` 由后端生成，界面展示相同操作策略和阻塞原因，避免自行维护另一套下一步规则。历史 Analysis、阶段报告、导出和发布入口仍可使用。
 
 ## 扩展方法
 
@@ -173,3 +173,5 @@ SQLite 新增：
 `npm run test:browser:maintenance` 覆盖桌面和窄屏界面，包括填写结构化输入、保存后不自动执行、显式继续、保留旧运行、周期事件历史及工作区清理。`npm run test:browser:navigation` 检查导航并发；`npm run test:native` 使用本地模型夹具和真实 Harness 工具，验证修复、分诊工具限制、补丁绑定的验证证据，以及原生提问暂停、填写后显式继续与独立工作区。真实模型质量和真实 GitHub 写入不包含在这轮本地验证中。
 
 导航夹具需先启动独立预览，并通过 `WORKBENCH_TEST_URL=http://127.0.0.1:<端口>/` 指定实际服务根路径；浏览器可通过 `PLAYWRIGHT_CHROMIUM_PATH` 指定已安装的 Chromium。
+
+2026-10-09 合并版本验证：严格类型检查、287 项行为测试及完整构建通过；真实 Harness 的本地模型夹具验证提问暂停/显式续跑、修复和补丁绑定验证；维护与导航浏览器夹具在 1440px / 390px 通过。上述验证使用模拟 GitHub/模型响应，不包含真实仓库外部发布或模型质量评估。

@@ -183,3 +183,16 @@ test('HTTP preview is read-only and a changed input cannot be confirmed through 
   const rejected = await post('/publish', { id: f.id, action: 'comment', previewStamp: preview.stamp });
   assert.equal(rejected.status, 400); assert.match((await rejected.json()).error, /预览已失效/); assert.equal(f.posts(), 0);
 });
+
+test('edited item reply is previewed and draft changes invalidate confirmation',async t=>{
+ const f=await setup(t);f.store.saveDraft(f.issue.id,{reply:'Maintainer edited reply'});
+ const preview=await f.workbench.previewPublish(f.id,'comment');assert.equal('responseDraft' in preview ? preview.responseDraft:undefined,'Maintainer edited reply');assert.equal(f.posts(),0);
+ f.store.saveDraft(f.issue.id,{reply:'Changed after preview'});
+ await assert.rejects(f.workbench.publish(f.id,'comment',preview.stamp),/预览已失效/);assert.equal(f.posts(),0);
+ const fresh=await f.workbench.previewPublish(f.id,'comment');await f.workbench.publish(f.id,'comment',fresh.stamp);assert.equal(f.posts(),1);
+});
+test('reply edits during the final read cannot reach an external write',async t=>{
+ const f=await setup(t);f.store.saveDraft(f.issue.id,{reply:'First reply'});const preview=await f.workbench.previewPublish(f.id,'comment');
+ f.afterComments(()=>f.store.saveDraft(f.issue.id,{reply:'Concurrent reply'}));
+ await assert.rejects(f.workbench.publish(f.id,'comment',preview.stamp),/内容已变化/);assert.equal(f.posts(),0);
+});

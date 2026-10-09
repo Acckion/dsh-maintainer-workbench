@@ -15,6 +15,7 @@ export class Store {
     this.db = new DatabaseSync(path);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS triage_cache (issueId TEXT NOT NULL, revision TEXT NOT NULL, jobId TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY(issueId,revision));
+      CREATE TABLE IF NOT EXISTS item_drafts (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS repos (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS issues (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, data TEXT NOT NULL);
@@ -226,5 +227,20 @@ export class Store {
   }
   close(): void {
     this.db.close();
+  }
+  draft(id: string): Record<string, unknown> {
+    const row = this.db
+      .prepare("SELECT data FROM item_drafts WHERE id=?")
+      .get(id);
+    return row ? JSON.parse(String(row.data)) : {};
+  }
+  saveDraft(id: string, patch: Record<string, unknown>): void {
+    this.transaction(() => {
+      this.db
+        .prepare(
+          "INSERT INTO item_drafts(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data",
+        )
+        .run(id, JSON.stringify({ ...this.draft(id), ...patch }));
+    });
   }
 }

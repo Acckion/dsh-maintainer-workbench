@@ -1,5 +1,5 @@
-import { CheckCheck, Layers3 } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import { Layers3 } from "lucide-react";
+import React, { useEffect, useRef } from "react";
 export function Modal({
   title,
   busy,
@@ -39,28 +39,6 @@ export function Modal({
     </dialog>
   );
 }
-export function CopyDraft({ text }: { text: string }) {
-  const [feedback, setFeedback] = useState("");
-  useEffect(() => {
-    setFeedback("");
-  }, [text]);
-  return (
-    <button
-      className="mw-text-button"
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(text);
-          setFeedback("已复制");
-        } catch {
-          setFeedback("复制失败，请手动选择文本");
-        }
-      }}
-    >
-      <CheckCheck size={14} />
-      {feedback || "复制草稿"}
-    </button>
-  );
-}
 export function Tag({
   children,
   tone = "",
@@ -76,31 +54,6 @@ export function Empty({ title, text }: { title: string; text: string }) {
       <Layers3 size={30} />
       <h3>{title}</h3>
       <p>{text}</p>
-    </div>
-  );
-}
-export function Stat({
-  label,
-  value,
-  sub,
-  icon,
-}: {
-  label: string;
-  value: number;
-  sub: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="mw-stat">
-      <div>
-        <span>{label}</span>
-        <span className="mw-stat-icon">{icon}</span>
-      </div>
-      <strong>
-        {value}
-        <span>项</span>
-      </strong>
-      <p>{sub}</p>
     </div>
   );
 }

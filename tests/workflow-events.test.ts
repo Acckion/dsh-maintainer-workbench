@@ -484,7 +484,9 @@ test("question analysis routes to repository-backed answer preparation and refus
     w = new Workbench(
       f.store,
       "/tmp/mw-question-answer",
-      async()=>{throw new Error('此测试不执行 Agent');},
+      async () => {
+        throw new Error("此测试不执行 Agent");
+      },
       undefined,
       false,
     );
@@ -601,4 +603,76 @@ test("an incomplete review or a maintainer evidence request routes to further in
   } finally {
     f.store.close();
   }
+});
+
+test("edited published replies never create reporter waits using the old draft questions", async (t) => {
+  const f = fixture(),
+    repo = f.store.repos()[0];
+  const artifact = artifactSchemas.triage.parse({
+    schemaVersion: 1,
+    stage: "triage",
+    summary: "Need information",
+    coverage: "metadata",
+    evidence: [],
+    nextSteps: [],
+    responseDraft: "Which version?",
+    category: "bug",
+    priority: "P2",
+    labels: [],
+    module: "queue",
+    impact: "unknown",
+    missingInfo: ["Which version?"],
+    duplicateOf: null,
+    duplicateReason: "",
+    route: "needs_info",
+    routeReason: "Need version",
+  });
+  const job: Job = {
+    id: "edited-question",
+    caseId: f.issue.processing!.id,
+    repoId: repo.id,
+    issueId: f.issue.id,
+    issueSnapshot: f.issue,
+    revision: revision(f.issue, repo, "triage"),
+    baseSha: repo.headSha,
+    kind: "triage",
+    status: "approved",
+    createdAt: "now",
+    updatedAt: "now",
+    attempt: 1,
+    artifact,
+    result: asAnalysis(artifact),
+    publications: {
+      comment: {
+        status: "published",
+        urls: ["https://github.com/fixture/queue/issues/128#comment"],
+        publishedReply: "Thanks, investigating the problem.",
+        at: "2026-09-26T00:00:00Z",
+      },
+    },
+  };
+  f.store.put("jobs", job);
+  const w = new Workbench(
+    f.store,
+    "/tmp/mw-edited-question",
+    undefined,
+    undefined,
+    false,
+  );
+  t.after(() => w.close());
+  assert.equal(
+    f.store.get<Issue>("issues", f.issue.id)!.informationRequests?.length ?? 0,
+    0,
+  );
+  assert.ok(
+    f.store.get<Job>("jobs", job.id)!.publications!.comment!.followupRecordedAt,
+  );
+  assert.ok(
+    f.store
+      .audits()
+      .some(
+        (entry) =>
+          entry.action === "publication.followup_requires_confirmation",
+      ),
+  );
 });

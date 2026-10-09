@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { Credentials } from "../core/credentials.ts";
 import { detailSections } from "../core/github-details.ts";
+import { issuePlanSchema } from "../core/issue-flow.ts";
 import { organizeModes } from "../core/organize.ts";
 import { kinds, type Job } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
@@ -66,6 +67,12 @@ export function handler(
             page: url.searchParams.get("page") ?? 1,
           });
         send(res, 200, await workbench.itemDetail(p.id, p.section, p.page));
+        return;
+      }
+      if (req.method === "GET" && path === "/item-draft") {
+        const id = z.string().min(1).max(400).parse(url.searchParams.get("id"));
+        if (!workbench.store.get("issues", id)) throw new Error("事项不存在");
+        send(res, 200, workbench.store.draft(id));
         return;
       }
       if (req.method === "GET" && path === "/state") {
@@ -148,6 +155,30 @@ export function handler(
         return;
       }
       const input = await body(req);
+      if (path === "/item-draft") {
+        const p = z
+          .object({
+            id: z.string().min(1).max(400),
+            patch: z
+              .object({
+                view: z.string().max(30).optional(),
+                reply: z.string().max(30000).optional(),
+                instructions: z.string().max(10000).optional(),
+                plan: issuePlanSchema
+                  .extend({
+                    acceptanceCriteria: z.array(z.string().max(1000)).max(20),
+                  })
+                  .optional(),
+              })
+              .strict(),
+          })
+          .parse(input);
+        if (!workbench.store.get("issues", p.id)) throw new Error("事项不存在");
+        workbench.store.saveDraft(p.id, p.patch);
+        send(res, 200, { saved: true });
+        return;
+      }
+
       const version = z
         .object({
           expectedVersion: z.number().int().nonnegative().optional(),
@@ -435,6 +466,11 @@ export function handler(
           .object({ issueId: z.string(), plan: z.unknown() })
           .parse(input);
         workbench.savePlan(p.issueId, p.plan);
+        send(res, 200, {
+          ok: true,
+          version: workbench.store.processing.current(p.issueId)!.version,
+        });
+        return;
       } else if (path === "/information") {
         const p = z
           .object({

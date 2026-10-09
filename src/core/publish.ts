@@ -36,6 +36,27 @@ const previewStamp = (
     .update(JSON.stringify([approvalStamp(job), action, mode]))
     .digest("hex");
 
+function commentText(store: Store, job: Job): string {
+  const reply = job.issueId ? store.draft(job.issueId).reply : undefined;
+  return typeof reply === "string" ? reply : (job.result?.responseDraft ?? "");
+}
+function publicationStamp(
+  store: Store,
+  job: Job,
+  action: PublishAction,
+  mode: "publish" | "reconcile" = "publish",
+): string {
+  return previewStamp(
+    action === "comment" && job.result
+      ? {
+          ...job,
+          result: { ...job.result, responseDraft: commentText(store, job) },
+        }
+      : job,
+    action,
+    mode,
+  );
+}
 async function existingPublication(
   job: Job,
   repo: Repo,
@@ -163,18 +184,18 @@ export async function previewPublication(
     throw new Error("当前工作区未关联唯一 GitHub 远端，可以导出本地补丁");
   if (job.issueSnapshot.origin === "repository" && action !== "pr")
     throw new Error("仓库整理任务仅可发布补丁 PR");
-  if (action === "comment" && !job.result?.responseDraft.trim())
+  if (action === "comment" && !commentText(store, job).trim())
     throw new Error("暂无需要发布的回复内容");
   if (job.status !== "approved" || !job.result)
     throw new Error("请先审核并接受结果");
-  const stamp = previewStamp(job, action);
+  const stamp = publicationStamp(store, job, action);
   const alreadyPublished = await existingPublication(job, repo, action, github);
   if (alreadyPublished)
     return {
       id: job.id,
       revision: job.revision,
       updatedAt: job.updatedAt,
-      stamp: previewStamp(job, action, "reconcile"),
+      stamp: publicationStamp(store, job, action, "reconcile"),
       alreadyPublished,
     };
   const updatedAt = await remoteInputs(store, job, repo, action, github);
@@ -199,13 +220,14 @@ export async function previewPublication(
     throw new Error("已审核差异发生变化，请重新派发并审核");
   assertInputCurrent(store, job, repo);
   const current = store.get<Job>("jobs", job.id);
-  if (!current || previewStamp(current, action) !== stamp)
+  if (!current || publicationStamp(store, current, action) !== stamp)
     throw new Error("审批或产物内容已变化，请重新打开预览");
   return {
     id: job.id,
     revision: job.revision,
     updatedAt: job.updatedAt,
     stamp,
+    ...(action === "comment" ? { responseDraft: commentText(store, job) } : {}),
   };
 }
 
@@ -223,11 +245,12 @@ export async function publish(
     throw new Error("请先审核并接受结果");
   if (repo.mode === "local" && !repo.githubName)
     throw new Error("当前工作区未关联唯一 GitHub 远端，可以导出本地补丁");
-  if (action === "comment" && !job.result.responseDraft.trim())
+  if (action === "comment" && !commentText(store, job).trim())
     throw new Error("暂无需要发布的回复内容");
   if (job.issueSnapshot.origin === "repository" && action !== "pr")
     throw new Error("仓库整理任务仅可发布补丁 PR");
   const approvedContent = approvalStamp(job);
+  const approvedReply = commentText(store, job);
   if (!(await resolveGitHubAuth()).token)
     throw new Error("发布需要有效的 GitHub 登录或令牌（仓库写权限）");
   const prior = job.publications?.[action];
@@ -257,6 +280,7 @@ export async function publish(
           urls: recovered,
           remoteUpdatedAt: live.updated_at,
           startedAt: prior?.startedAt ?? prior?.at,
+          publishedReply: prior?.publishedReply,
           at: new Date().toISOString(),
         },
       },
@@ -269,11 +293,14 @@ export async function publish(
     return recovered;
   }
   const repositoryTask = job.issueSnapshot.origin === "repository";
-  if (expectedPreview === previewStamp(job, action, "reconcile"))
+  if (expectedPreview === publicationStamp(store, job, action, "reconcile"))
     throw new Error(
       "此前找到的发布记录已不存在；本次仅核对回执，不会重新发送，请先在 GitHub 核查",
     );
-  if (expectedPreview && expectedPreview !== previewStamp(job, action))
+  if (
+    expectedPreview &&
+    expectedPreview !== publicationStamp(store, job, action)
+  )
     throw new Error("审批或产物内容已变化，发布预览已失效；请重新打开预览");
   assertInputCurrent(store, job, repo);
   let delivery: DeliveryTarget | undefined;
@@ -293,7 +320,8 @@ export async function publish(
     if (
       !current ||
       current.status !== "approved" ||
-      approvalStamp(current) !== approvedContent
+      approvalStamp(current) !== approvedContent ||
+      (action === "comment" && commentText(store, current) !== approvedReply)
     )
       throw new Error("发布前审批或产物内容已变化，请重新确认");
     assertInputCurrent(store, job, repo);
@@ -334,6 +362,7 @@ export async function publish(
           urls,
           error,
           remoteUpdatedAt,
+          ...(action === "comment" ? { publishedReply: approvedReply } : {}),
           startedAt:
             status === "publishing"
               ? new Date().toISOString()
@@ -418,7 +447,7 @@ export async function publish(
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                body: `${job.result.responseDraft}\n\n${marker}`,
+                body: `${approvedReply}\n\n${marker}`,
               }),
             },
           ),

@@ -117,6 +117,16 @@ export class IssueService extends ServiceBase {
     const issue = this.store.get<Issue>("issues", issueId);
     if (!issue || issue.type !== "issue" || issue.state !== "open")
       throw new Error("只能为开放 Issue 保存类型和验收计划");
+    if (
+      this.store
+        .jobs()
+        .some(
+          (job) =>
+            job.issueId === issueId &&
+            ["queued", "running"].includes(job.status),
+        )
+    )
+      throw new Error("任务运行中，请先停止任务再确认新计划");
     const plan = issuePlanSchema.parse(value);
     this.store.put("issues", {
       ...issue,

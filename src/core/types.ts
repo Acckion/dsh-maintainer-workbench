@@ -318,6 +318,7 @@ export interface Job {
         at: string;
         startedAt?: string;
         followupRecordedAt?: string;
+        publishedReply?: string;
       }
     >
   >;

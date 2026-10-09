@@ -31,7 +31,18 @@ export class PublicationService extends ServiceBase {
     const id = `published:${job.id}`;
     try {
       this.store.transaction(() => {
-        if (!issue.informationRequests?.some((r) => r.id === id))
+        const reply =
+          receipt.publishedReply ?? this.store.draft(issue.id).reply;
+        const edited =
+          typeof reply === "string" &&
+          reply.trim() !== (job.result?.responseDraft ?? "").trim();
+        if (edited)
+          this.store.audit(
+            "publication.followup_requires_confirmation",
+            "已发布编辑后的回复；请核对实际追问并在 Plan 登记，未按旧报告自动创建等待",
+            job.id,
+          );
+        if (!edited && !issue.informationRequests?.some((r) => r.id === id))
           new IssueService(this.deps).askInformation(
             issue.id,
             job.artifact!.stage === "triage" ? job.artifact!.missingInfo : [],

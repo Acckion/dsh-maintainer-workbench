@@ -7,7 +7,6 @@ import {
   Code2,
   FileCheck2,
   FileCode2,
-  Filter,
   GitBranch,
   GitPullRequest,
   Inbox,
@@ -23,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Job, JobKind, Snapshot } from "../core/types.ts";
+import type { JobKind, Snapshot } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { AssistantActions } from "./AssistantActions.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
@@ -38,12 +37,16 @@ import {
 } from "./PublicationConfirm.tsx";
 import { RepositoryDetail } from "./RepositoryDetail.tsx";
 import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
-import { Result } from "./Result.tsx";
+
 import { type DetailTab } from "./ReviewSummary.tsx";
 import { GitHubConnection, SettingsView } from "./SettingsView.tsx";
-import { TaskDetail } from "./TaskDetail.tsx";
-import { WorkflowPanel } from "./WorkflowPanel.tsx";
-import { request } from "./api.ts";
+
+import { API, request } from "./api.ts";
+import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
+import { InboxFilter } from "./InboxFilter.tsx";
+import { IssuePlanning } from "./IssuePlanning.tsx";
+import { flushItemDraft } from "./item-draft.ts";
+import { ItemInstructions } from "./ItemInstructions.tsx";
 import {
   captureOrigin,
   focusDetail,
@@ -57,11 +60,16 @@ import {
   reviewNoteForTask,
 } from "./operation-state.ts";
 import { date, elapsed, type Page } from "./presentation.ts";
+import { RemoteProgress } from "./RemoteProgress.tsx";
+import type { AgentTab } from "./RepositoryDetail.tsx";
 import {
   reviewQueue,
   selectedAnalysis,
   taskStatus,
 } from "./review-evidence.ts";
+import { ReviewActions } from "./ReviewActions.tsx";
+import { ReviewFindingControls } from "./ReviewFindingControls.tsx";
+import { ReviewSummary } from "./ReviewSummary.tsx";
 import { taskGroups, type TaskFilter } from "./task-presentation.ts";
 export function App({
   openSession,
@@ -91,7 +99,13 @@ export function App({
   const [type, setType] = useState("all");
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState("overview");
+  const [readerRequest, setReaderRequest] = useState<{
+    sequence: number;
+    issueId: string;
+    tab: "overview" | "plan" | "work" | "review" | "files";
+    path?: string;
+    line?: number;
+  }>();
   const [busy, setBusy] = useState("");
   const [toast, setToast] = useState<{ text: string; error?: boolean }>();
   const [connect, setConnect] = useState(false);
@@ -312,7 +326,15 @@ export function App({
         navigate("tasks", actionRepoId, true);
         setFocused(undefined);
         setJobFocus(result.delivery.implementationJobId);
-        setDetailTab("overview");
+        setReaderRequest({
+          sequence: Date.now(),
+          issueId:
+            jobs.find((j) => j.id === result.delivery.implementationJobId)
+              ?.issueId ??
+            displayedIssue?.id ??
+            "",
+          tab: "review",
+        });
         setPublishAction(undefined);
         setReviewNote("");
         setToast({
@@ -369,6 +391,31 @@ export function App({
       ? issue
       : (issues.find((i) => i.id === job?.issueId) ?? job?.issueSnapshot);
   const result = selectedAnalysis(page === "inbox" ? issue : undefined, job);
+  useEffect(() => {
+    const id = displayedIssue?.id;
+    if (!id) return;
+    const controller = new AbortController();
+    void flushItemDraft(id)
+      .then(() =>
+        fetch(`${API}/item-draft?id=${encodeURIComponent(id)}`, {
+          signal: controller.signal,
+        }),
+      )
+      .then(async (response) => {
+        if (!response.ok) throw Error("draft");
+        return response.json();
+      })
+      .then((value) => {
+        if (!controller.signal.aborted)
+          setAssistantInstructions((current) => ({
+            ...current,
+            [id]:
+              typeof value.instructions === "string" ? value.instructions : "",
+          }));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [displayedIssue?.id]);
   const openEvidenceJob = (id: string, tab: DetailTab) => {
     if (!jobs.some((item) => item.id === id && item.issueId === job?.issueId))
       return;
@@ -378,7 +425,11 @@ export function App({
     setTaskFilter("all");
     setFocused(undefined);
     setJobFocus(id);
-    setDetailTab(tab);
+    setReaderRequest({
+      sequence: Date.now(),
+      issueId: job!.issueId,
+      tab: tab === "diff" ? "files" : tab === "overview" ? "review" : "work",
+    });
     setPublishAction(undefined);
     if (id !== job?.id) setReviewNote("");
     moveFocusToDetail();
@@ -402,6 +453,14 @@ export function App({
     publishKind: NonNullable<typeof publishAction>,
   ) {
     if (!job || busy) return;
+    if (publishKind === "comment") {
+      try {
+        await flushItemDraft(job.issueId);
+      } catch {
+        setToast({ text: "回复草稿尚未保存，请重试", error: true });
+        return;
+      }
+    }
     const preview = await action(
       "publish-preview",
       "/publish/preview",
@@ -521,6 +580,7 @@ export function App({
                 }
                 className={`${page === n.id || (n.id === "tasks" && page === "reviews") ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
                 onClick={() => {
+                  navigationGeneration.current += 1;
                   navigate(n.id);
                   setFocused(undefined);
                   setJobFocus(undefined);
@@ -553,6 +613,15 @@ export function App({
               />
               同步仓库
             </button>
+            {repo?.syncedAt && (
+              <time
+                className="mw-sync-time"
+                title="最近同步时间"
+                dateTime={repo.syncedAt}
+              >
+                {date(repo.syncedAt)}
+              </time>
+            )}
           </nav>
         </header>
         <main
@@ -622,28 +691,30 @@ export function App({
             </section>
           ) : (
             <>
-              <OperationTracker
-                record={operationRecords[repoId]}
-                jobs={jobs}
-                close={() =>
-                  setOperationRecords((records) => {
-                    const next = { ...records };
-                    delete next[repoId];
-                    return next;
-                  })
-                }
-                open={(id) => {
-                  navigationGeneration.current += 1;
-                  rememberOrigin(id);
-                  navigate("tasks", repoId, true);
-                  setTaskFilter("all");
-                  setFocused(undefined);
-                  setJobFocus(id);
-                  setDetailTab("overview");
-                  setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
-                  moveFocusToDetail();
-                }}
-              />
+              {page === "tasks" && !displayedIssue && (
+                <OperationTracker
+                  record={operationRecords[repoId]}
+                  jobs={jobs}
+                  close={() =>
+                    setOperationRecords((records) => {
+                      const next = { ...records };
+                      delete next[repoId];
+                      return next;
+                    })
+                  }
+                  open={(id) => {
+                    navigationGeneration.current += 1;
+                    rememberOrigin(id);
+                    navigate("tasks", repoId, true);
+                    setTaskFilter("all");
+                    setFocused(undefined);
+                    setJobFocus(id);
+                    setReaderRequest(undefined);
+                    setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
+                    moveFocusToDetail();
+                  }}
+                />
+              )}
               {page === "organize" && (
                 <RepositoryOrganize
                   state={state}
@@ -705,11 +776,6 @@ export function App({
                           Pull Requests
                         </button>
                       </div>
-                      <span className="mw-muted">
-                        {repo?.syncedAt
-                          ? `同步于 ${date(repo.syncedAt)}`
-                          : "尚未同步"}
-                      </span>
                     </div>
                     <div className="mw-toolbar">
                       <label className="mw-search">
@@ -721,20 +787,7 @@ export function App({
                           onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
-                      <label className="mw-filter">
-                        <Filter size={14} />
-                        <select
-                          aria-label="筛选问题"
-                          value={filter}
-                          onChange={(e) => setFilter(e.target.value)}
-                        >
-                          <option value="all">所有开放问题</option>
-                          <option value="untriaged">尚未分诊</option>
-                          <option value="priority">高优先级</option>
-                          <option value="duplicates">疑似重复</option>
-                          <option value="closed">已关闭</option>
-                        </select>
-                      </label>
+                      <InboxFilter value={filter} onChange={setFilter} />
                     </div>
                     <div className="mw-batch">
                       <label>
@@ -847,7 +900,7 @@ export function App({
                                 setFocused(i.id);
                                 setJobFocus(undefined);
                                 setDetailOpen(false);
-                                setDetailTab("overview");
+                                setReaderRequest(undefined);
                                 moveFocusToDetail();
                               }}
                             >
@@ -866,15 +919,24 @@ export function App({
                                 <span>
                                   #{i.number} · {i.author}
                                 </span>
-                                {i.labels.slice(0, 2).map((l) => (
-                                  <Tag key={l}>{l}</Tag>
-                                ))}
+                                {i.labels
+                                  .filter((l) => !/^p[0-3]$/i.test(l))
+                                  .slice(0, 2)
+                                  .map((l) => (
+                                    <Tag key={l}>{l}</Tag>
+                                  ))}
                                 <span className="mw-issue-comments">
                                   {i.comments} 条讨论
                                 </span>
                               </div>
                             </button>
                             <div className="mw-row-status">
+                              {i.type === "issue" &&
+                                (i.plan?.category ?? i.analysis?.category) && (
+                                  <Tag>
+                                    {i.plan?.category ?? i.analysis?.category}
+                                  </Tag>
+                                )}
                               {current ? (
                                 <Tag tone="violet">
                                   <Loader2 size={11} className="mw-spin" />{" "}
@@ -1058,7 +1120,7 @@ export function App({
                             navigationGeneration.current += 1;
                             setJobFocus(j.id);
                             setFocused(undefined);
-                            setDetailTab("overview");
+                            setReaderRequest(undefined);
                             setReviewNote("");
                             moveFocusToDetail();
                           }}
@@ -1332,36 +1394,12 @@ export function App({
           returnToList={
             originRef.current?.repoId === repoId ? returnToOrigin : undefined
           }
+          returnToListVisible={
+            !!readerRequest || originRef.current?.page !== page
+          }
           renderAgentPanel={renderStage}
           renderAgentActions={renderStageActions}
-          agentPanel={
-            <>
-              <WorkflowPanel
-                key={displayedIssue.id}
-                issue={
-                  issues.find((i) => i.id === displayedIssue.id) ??
-                  displayedIssue
-                }
-                job={job}
-                history={jobs.filter((j) => j.issueId === displayedIssue.id)}
-                busy={!!busy}
-                act={(path, data, message) =>
-                  action("workflow", path, data, message)
-                }
-              />
-              {job?.error && <div className="mw-callout red">{job.error}</div>}
-              {result && <Result result={result} />}
-              <button
-                className="mw-button"
-                onClick={() => {
-                  setDetailOpen(false);
-                  setDetailTab("evidence");
-                }}
-              >
-                查看 Agent 证据与审核
-              </button>
-            </>
-          }
+          agentPanel={null}
         />
       )}
       {publishAction && previewJob && (
@@ -1395,7 +1433,8 @@ export function App({
             </p>
             <div className="mw-publish-preview">
               {publishAction === "comment"
-                ? previewJob.result?.responseDraft
+                ? (publishPreview?.responseDraft ??
+                  previewJob.result?.responseDraft)
                 : publishAction === "labels"
                   ? previewJob.result?.labels.join(", ")
                   : publishAction === "review"
@@ -1558,9 +1597,35 @@ export function App({
     if (!displayedIssue) return null;
     return (
       <RepositoryDetail
-        key={`${page}:${displayedIssue.id}:${jobFocus ?? ""}:${displayedIssue.updatedAt}`}
+        key={`${page}:${displayedIssue.id}:${jobFocus ?? ""}`}
         embedded
-        initialTab="assistant"
+        requestedTab={
+          readerRequest?.issueId === displayedIssue.id
+            ? readerRequest
+            : undefined
+        }
+        localPatch={
+          job?.patch
+            ? {
+                patch: job.patch,
+                label: kindNames[job.kind],
+                revision: job.baseSha,
+              }
+            : undefined
+        }
+        responseDraft={result?.responseDraft}
+        onPreviewReply={
+          job?.status === "approved"
+            ? () => void openPublishPreview("comment")
+            : undefined
+        }
+        initialTab={
+          page === "inbox"
+            ? "overview"
+            : job?.kind === "review"
+              ? "review"
+              : "work"
+        }
         issue={displayedIssue}
         repository={
           state?.repos.find((r) => r.id === displayedIssue.repoId)?.fullName ??
@@ -1582,15 +1647,18 @@ export function App({
         returnToList={
           originRef.current?.repoId === repoId ? returnToOrigin : undefined
         }
+        returnToListVisible={
+          !!readerRequest || originRef.current?.page !== page
+        }
         renderAgentPanel={renderStage}
         renderAgentActions={renderStageActions}
-        agentPanel={renderDetail()}
+        agentPanel={null}
       />
     );
   }
 
-  function renderStageActions() {
-    if (!displayedIssue) return null;
+  function renderStageActions(stage: AgentTab) {
+    if (!displayedIssue || stage === "review" || stage === "plan") return null;
     return (
       <AssistantActions
         issue={displayedIssue}
@@ -1598,186 +1666,332 @@ export function App({
         history={jobs.filter((j) => j.issueId === displayedIssue.id)}
         busy={!!busy}
         instructions={assistantInstructions[displayedIssue.id]}
-        act={(path, data, message) => action("workflow", path, data, message)}
+        act={async (path, data, message) => {
+          if (["/jobs", "/classify"].includes(path))
+            await flushItemDraft(displayedIssue.id);
+          return action("workflow", path, data, message);
+        }}
         openEvidence={(id) => openEvidenceJob(id, "log")}
       />
     );
   }
 
-  function renderAssistant(history: Job[]) {
+  function renderStage(stage: AgentTab) {
     if (!displayedIssue) return null;
-    const active = history.find((j) =>
-      ["running", "queued"].includes(j.status),
-    );
-    const selected = job;
-    const quick =
-      !selected ||
-      (["triage", "preflight"].includes(selected.kind) &&
-        detailTab === "overview");
-    const saved = selected?.result ?? displayedIssue.analysis;
-    const category =
-      displayedIssue.plan?.category ?? displayedIssue.analysis?.category;
-    const needsPlan =
-      displayedIssue.type === "issue" &&
-      category === "feature" &&
-      displayedIssue.plan?.decision !== "accepted";
-    return (
-      <section className="mw-assistant" aria-label="Assistant 处理事项">
-        <div className="mw-assistant-status" role="status">
-          <strong>
+    const history = jobs.filter((j) => j.issueId === displayedIssue.id);
+    if (stage === "overview") {
+      const saved =
+        history.find((j) => j.result && j.artifactState !== "stale")?.result ??
+        displayedIssue.analysis;
+      const active = history.find((j) =>
+        ["queued", "running"].includes(j.status),
+      );
+      return (
+        <section className="mw-item-overview">
+          <ProcessingInput
+            issue={displayedIssue}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
+          <h3>
             {active
               ? `${kindNames[active.kind]}中`
-              : selected?.error
-                ? "任务未完成"
-                : selected?.artifactState === "stale"
-                  ? "结果对应旧版本"
-                  : needsPlan
-                    ? "需要确认需求"
-                    : selected?.result
-                      ? "结果已保存"
-                      : "尚未开始处理"}
-          </strong>
-          <span>
-            {active?.waitingReason ??
-              (selected?.status === "approved"
-                ? undefined
-                : selected?.goalPauseReason) ??
-              (selected
-                ? taskStatus(selected).label
-                : displayedIssue.type === "pr"
-                  ? "审查此 PR 后显示具体发现"
-                  : "分析问题后选择处理方向")}
-          </span>
-        </div>
-        <ProcessingInput
-          issue={displayedIssue}
-          busy={!!busy}
-          act={(path, data, message) => action("workflow", path, data, message)}
-        />
-        <ProcessingHistory
-          issue={displayedIssue}
-          busy={!!busy}
-          act={(path, data, message) => action("workflow", path, data, message)}
-        />
-        {quick ? (
-          <>
-            {saved ? (
-              <Result result={saved} classification />
-            ) : (
-              <p className="mw-assistant-intro">
-                {displayedIssue.type === "pr"
-                  ? "查看变更范围、CI 和源码中的问题。"
-                  : "确认问题类型、影响和缺少的信息。"}
-              </p>
+              : saved
+                ? "当前结论"
+                : "尚未分析"}
+          </h3>
+          {saved ? (
+            <>
+              <p>{saved.summary}</p>
+              <div className="mw-tags">
+                <span className="mw-tag">{saved.category}</span>
+                <span className="mw-tag">{saved.priority}</span>
+              </div>
+              {saved.missingInfo.length > 0 && (
+                <details>
+                  <summary>需要补充的信息 · {saved.missingInfo.length}</summary>
+                  <ul>
+                    {saved.missingInfo.map((text) => (
+                      <li key={text}>{text}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </>
+          ) : (
+            <p>选择上方操作开始分析。</p>
+          )}
+          {job?.error && (
+            <p role="alert">
+              最近一次任务失败：{job.error}。已保存的结论仍可查看。
+            </p>
+          )}
+          {displayedIssue.type === "issue" &&
+            displayedIssue.analysis?.category === "question" && (
+              <button
+                className="mw-text-button"
+                onClick={() =>
+                  setReaderRequest({
+                    sequence: Date.now(),
+                    issueId: displayedIssue.id,
+                    tab: "plan",
+                  })
+                }
+              >
+                调整事项类型
+              </button>
             )}
-            <WorkflowPanel
-              compact
-              hideSummary
-              issue={displayedIssue}
-              job={selected}
+          {job && (
+            <button
+              className="mw-text-button"
+              onClick={() => openEvidenceJob(job.id, "log")}
+            >
+              查看执行记录
+            </button>
+          )}
+        </section>
+      );
+    }
+    if (stage === "plan")
+      return (
+        <IssuePlanning
+          start={(kind, expectedVersion) =>
+            action(
+              "workflow",
+              "/jobs",
+              {
+                issueIds: [displayedIssue.id],
+                kind,
+                expectedVersion,
+                goal: "resolve",
+                instructions: assistantInstructions[displayedIssue.id],
+              },
+              "已按确认计划开始实施",
+            )
+          }
+          issue={displayedIssue}
+          job={job}
+          busy={
+            !!busy ||
+            history.some((j) => ["running", "queued"].includes(j.status))
+          }
+          act={(path, data, message) => action("workflow", path, data, message)}
+        />
+      );
+    if (stage === "work")
+      return (
+        <section className="mw-item-work">
+          <ProcessingInput
+            issue={displayedIssue}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
+          <ProcessingHistory
+            issue={displayedIssue}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
+          <OperationTracker
+            record={operationRecords[repoId]}
+            jobs={jobs}
+            close={() =>
+              setOperationRecords((records) => {
+                const next = { ...records };
+                delete next[repoId];
+                return next;
+              })
+            }
+            open={(id) => {
+              navigationGeneration.current += 1;
+              rememberOrigin(id);
+              navigate("tasks", repoId, true);
+              setTaskFilter("all");
+              setFocused(undefined);
+              setJobFocus(id);
+              setReaderRequest(undefined);
+              setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
+              moveFocusToDetail();
+            }}
+          />
+          {job ? (
+            <>
+              <h3>
+                {kindNames[job.kind]} · {taskStatus(job).label}
+              </h3>
+              {job.error && <p role="alert">{job.error}</p>}
+              {job.result && <p>{job.result.summary}</p>}
+              {job.sessionId && openSession && (
+                <button
+                  className="mw-button"
+                  onClick={() => openSession(job.sessionId!)}
+                >
+                  打开 Harness 会话
+                </button>
+              )}
+              {job.evidenceGate && !job.evidenceGate.allowed && (
+                <p className="mw-callout red">
+                  证据待补齐：{job.evidenceGate.reasons.join("；")}
+                </p>
+              )}
+              <details>
+                <summary>分析依据 · {job.result?.evidence.length ?? 0}</summary>
+                {job.result?.evidence.map((item, index) => (
+                  <article className="mw-evidence" key={index}>
+                    <strong>{item.source}</strong>
+                    <p>{item.detail}</p>
+                  </article>
+                ))}
+              </details>
+              {job.toolDiagnostics && (
+                <details>
+                  <summary>工具与执行环境</summary>
+                  <p>
+                    {job.toolDiagnostics.provider}/{job.toolDiagnostics.model} ·{" "}
+                    {job.toolDiagnostics.preset} ·{" "}
+                    {job.toolDiagnostics.permission}
+                  </p>
+                  <p>挂载工具：{job.toolDiagnostics.mountedTools.join(", ")}</p>
+                  <p>
+                    请求 {job.toolDiagnostics.requests.length} · 调用{" "}
+                    {job.toolDiagnostics.calls} · 宿主结果{" "}
+                    {job.toolDiagnostics.canonicalResults} · 错误{" "}
+                    {job.toolDiagnostics.errors}
+                  </p>
+                  <p>
+                    基线 {job.baseSha} · 输入版本 {job.revision} · Token{" "}
+                    {job.tokens ?? "未采集"}
+                  </p>
+                </details>
+              )}
+              {job.rawOutput && !job.result && (
+                <details>
+                  <summary>未解析的原始输出</summary>
+                  <pre>{job.rawOutput}</pre>
+                </details>
+              )}
+              {job.executionRecords?.map((record) => (
+                <ExecutionEvidence key={record.id} job={job} record={record} />
+              ))}
+              <details>
+                <summary>运行记录</summary>
+                {state?.audit
+                  .filter((a) => a.jobId === job.id)
+                  .slice()
+                  .reverse()
+                  .map((a) => (
+                    <div className="mw-job-log" key={a.id}>
+                      <time>{date(a.at)}</time>
+                      <p>{a.detail}</p>
+                    </div>
+                  ))}
+              </details>
+            </>
+          ) : (
+            <p>暂无执行任务。</p>
+          )}
+          <ItemInstructions
+            issueId={displayedIssue.id}
+            onChange={(value) =>
+              setAssistantInstructions((current) => ({
+                ...current,
+                [displayedIssue.id]: value,
+              }))
+            }
+          />
+          <details>
+            <summary>处理历史 · {history.length}</summary>
+            {history.map((j) => (
+              <button
+                className="mw-task-row"
+                key={j.id}
+                onClick={() => openEvidenceJob(j.id, "evidence")}
+              >
+                {kindNames[j.kind]} · {taskStatus(j).label} ·{" "}
+                {date(j.createdAt)}
+              </button>
+            ))}
+          </details>
+        </section>
+      );
+    if (stage === "review")
+      return job &&
+        !["triage", "preflight"].includes(job.kind) &&
+        (job.result || job.patch) &&
+        ![
+          "failed",
+          "cancelled",
+          "running",
+          "queued",
+          "waiting_input",
+          "waiting_environment",
+        ].includes(job.status) ? (
+        <>
+          <ReviewSummary
+            compact
+            job={job}
+            jobs={jobs}
+            issue={displayedIssue}
+            audit={state?.audit ?? []}
+            native={!!state?.capabilities.harness}
+            open={openEvidenceJob}
+            openSession={openSession}
+            openLocation={(path, line) =>
+              setReaderRequest({
+                sequence: Date.now(),
+                issueId: displayedIssue.id,
+                tab: "files",
+                path,
+                line,
+              })
+            }
+            deliveryActions={renderReviewActions()}
+          />
+          {job.kind === "review" && (
+            <ReviewFindingControls
+              job={job}
               history={history}
               busy={!!busy}
               act={(path, data, message) =>
                 action("workflow", path, data, message)
               }
             />
-          </>
-        ) : (
-          renderDetail(true)
-        )}
-        {selected?.error && quick && (
-          <p className="mw-callout red">{selected.error}</p>
-        )}
-        {quick && (
+          )}
           <details>
-            <summary>验证与执行详情</summary>
-            {selected?.result?.evidence.map((e, i) => (
-              <p key={i}>{e.detail}</p>
-            ))}
-            {selected?.sessionId && openSession && (
-              <button
-                className="mw-button"
-                onClick={() => openSession(selected.sessionId!)}
-              >
-                打开 Harness 会话
-              </button>
-            )}
-          </details>
-        )}
-        <details className="mw-assistant-instructions">
-          <summary>补充本次要求</summary>
-          <label>
-            给 Agent 的补充要求
-            <textarea
-              rows={3}
-              value={assistantInstructions[displayedIssue.id] ?? ""}
-              onChange={(e) =>
-                setAssistantInstructions((values) => ({
-                  ...values,
-                  [displayedIssue.id]: e.target.value,
-                }))
+            <summary>远端 PR 与 CI</summary>
+            <RemoteProgress
+              issue={displayedIssue}
+              busy={!!busy}
+              act={(path, data, message) =>
+                action("workflow", path, data, message)
               }
-              placeholder="已有调查与验收条件会自动传递，无需重复填写"
             />
-          </label>
-        </details>
-        <details className="mw-assistant-history">
-          <summary>处理历史 · {history.length}</summary>
-          {history.map((j) => (
-            <button
-              className="mw-task-row"
-              key={j.id}
-              onClick={() => openEvidenceJob(j.id, "overview")}
-            >
-              <div>
-                <strong>
-                  {kindNames[j.kind]} · {taskStatus(j).label}
-                </strong>
-                <small>
-                  {date(j.createdAt)}
-                  {j.artifactState === "stale" ? " · 旧版本" : ""}
-                </small>
-              </div>
-            </button>
-          ))}
-        </details>
-      </section>
-    );
+          </details>
+        </>
+      ) : (
+        <p>尚无可审核的产物。执行失败或未生成结果时，请在 Work 查看并重试。</p>
+      );
+
+    return null;
   }
 
-  function renderStage() {
-    if (!displayedIssue) return null;
-    return renderAssistant(jobs.filter((j) => j.issueId === displayedIssue.id));
-  }
-  function renderDetail(composed = false) {
+  function renderReviewActions() {
     return (
-      <TaskDetail
-        composed={composed}
-        {...{
-          displayedIssue,
-          job,
-          jobs,
-          reviewNote,
-          setReviewNote,
-          busy,
-          action,
-          state,
-          openPublishPreview,
-          openSession,
-          originRef,
-          returnToOrigin,
-          setDetailOpen,
-          navigationGeneration,
-          setFocused,
-          setJobFocus,
-          page,
-          enqueue,
-          detailTab,
-          setDetailTab,
-          issues,
-          openEvidenceJob,
-          result,
-        }}
+      <ReviewActions
+        job={job}
+        jobs={jobs}
+        native={!!state?.capabilities.harness}
+        busy={!!busy}
+        reviewNote={reviewNote}
+        setReviewNote={setReviewNote}
+        action={action}
+        openPublishPreview={openPublishPreview}
+        openSession={openSession}
       />
     );
   }
