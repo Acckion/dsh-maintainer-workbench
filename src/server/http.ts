@@ -230,6 +230,7 @@ export function handler(
             sourceJobId: z.string().optional(),
             instructions: z.string().max(8000).optional(),
             forceNew: z.boolean().optional(),
+            goal: z.enum(["resolve"]).optional(),
           })
           .parse(input);
         send(
@@ -239,6 +240,7 @@ export function handler(
             sourceJobId: p.sourceJobId,
             instructions: p.instructions,
             forceNew: p.forceNew,
+            goal: p.goal,
           }),
         );
         return;
