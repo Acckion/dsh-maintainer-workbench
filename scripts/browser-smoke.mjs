@@ -9,8 +9,8 @@ const browser = await chromium.launch({
 try {
   const page = await browser.newPage({ viewport: { width: 1512, height: 982 } });
   await page.goto(process.env.WORKBENCH_TEST_URL ?? 'http://127.0.0.1:4317');
-  await page.getByRole('heading', { name: '连接你的第一个仓库' }).waitFor();
-  await page.getByRole('button', { name: '连接 GitHub 仓库', exact: true }).click();
+  await page.getByRole('heading', { name: '自动发现 Harness 工作区' }).waitFor();
+  await page.getByRole('button', { name: '添加其他远程仓库', exact: true }).click();
   await page.getByPlaceholder('owner/repository').waitFor();
   assert.equal(await page.getByPlaceholder('owner/repository').inputValue(), '');
   await page.getByRole('button', {name:'关闭'}).click();

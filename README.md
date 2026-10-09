@@ -23,6 +23,8 @@ npm start
 
 独立预览使用 `.data/`，与原生运行的数据隔离。首次启动为空工作区，连接仓库后支持真实 GitHub 资料的分诊、调查与 PR 分析；代码修改必须在原生 Harness 中运行。`npm run dev` 只监视服务端代码，前端修改后运行 `npm run build`。
 
+`npm start` / `npm run dev` / `npm run harness` 默认启用 `--use-system-ca`（Harness 启动器通过 `NODE_OPTIONS` 传给宿主进程），以便在安装了拦截 HTTPS 根证书（企业代理或安全工具）的机器上连接 GitHub；若改用其他方式启动 Harness（例如已安装的 Harness 桌面版）后导入仓库提示「证书验证失败」，请用 `NODE_OPTIONS=--use-system-ca` 启动，或改用错误提示中的 `NODE_EXTRA_CA_CERTS` 方案。
+
 ## 从零完成一次真实维护
 
 1. **配置模型**：先在 Harness「设置 → 模型」配置提供方与凭据，再在「设置 → 维护工作台 → 模型」选择插件默认模型。菜单直接读取 Harness 模型目录，按提供方分组；高级设置可为分诊、预检、调查、实施、审查、文档、验证和 CI 单独选择模型与推理等级。优先级为阶段选择 → 插件默认 → Harness 默认；已启动任务保留原模型，已有结果不会自动重跑。模型被移除时明确报错，重新选择后才能运行，不自动切换提供方。单个聊天的临时模型选择不改变本插件设置。独立预览保留自己的兼容 API 配置。
@@ -157,5 +159,7 @@ Issue 详情现支持类型化目标与验收计划、已提出的问题和等�
 
 本轮验证使用本机浏览器、合成仓库和模拟模型，没有产生真实 GitHub 写操作或收费模型调用。详见 [详情面板验收记录](docs/product/ITEM-PANELS.md)。
 
+### 后续工作流编排计划
 
+后续改造按 [工作流编排计划](docs/product/WORKFLOW-ORCHESTRATION-PLAN.md) 推进：系统整理带来源的计划草稿，确认后自动衔接实施、验证与审查，界面集中呈现计划确认、异常决定和最终审核；交付区分新建 PR、更新已有 PR 与补丁导出。首版已接入计划草稿、事项编排与对应界面，操作与验证范围见 [编排实现记录](docs/product/ORCHESTRATION-IMPLEMENTATION.md)。自动修复审查发现暂留后续。
 模型目录复用 Harness 官方 `buildModelCatalog(ctx)`，与宿主对话选择器使用同一来源；菜单是插件自身的紧凑界面，不读取宿主私有 React 状态。模型 ID 与阶段覆盖存入既有 SQLite 设置行，两处设置入口共享版本冲突保护。推理等级仅使用所选模型声明的值，切换模型后恢复该模型默认。公开接口说明：[Harness model selection](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-model-selection/README.md)。

@@ -9,6 +9,7 @@ export function nextGoalStep(
 ): { next?: JobKind; pause?: string } {
   if (
     !job.goal ||
+    !!job.workflowRunId ||
     ["queued", "running", "waiting_input", "waiting_environment"].includes(
       job.status,
     )
