@@ -51,7 +51,7 @@ test('automatic managed clone can create an isolated task worktree, reuse clone 
   const repo: Repo = { id:'fixture/generic', fullName:'fixture/generic', localPath:'', defaultBranch:'main', headSha:sha, description:'', mode:'github', syncedAt:null, syncWarning:null };
   const transport: typeof git = async (cwd,args,auth,signal,timeout) => {
     if (args[0] !== 'clone') return git(cwd,args,auth,signal,timeout);
-    clones++; assert.equal(args.at(-2),'https://github.com/fixture/generic.git'); const result = await git(cwd,['clone','--no-checkout','--',source,args.at(-1)!]);
+    clones++; assert.ok(args.includes('--depth=64'));assert.ok(args.includes('--single-branch'));assert.ok(args.includes('--no-tags')); assert.equal(args.at(-2),'https://github.com/fixture/generic.git'); const result = await git(cwd,['clone','--no-checkout','--',source,args.at(-1)!]);
     await git(args.at(-1)!,['remote','set-url','origin','https://github.com/fixture/generic.git']); return result;
   };
   repo.localPath = await prepareManagedCheckout(repo,root,undefined,transport);

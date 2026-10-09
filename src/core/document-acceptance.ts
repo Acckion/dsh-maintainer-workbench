@@ -1,10 +1,13 @@
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { Artifact } from './artifacts.ts';
 import type { Job, ExecutionRecord } from './types.ts';
 import { linkedExecution } from './execution-links.ts';
 const quote=(text:string)=>"'"+text.replace(/'/g,"'\\''")+"'";
 export function documentCheckCommand(job: Pick<Job,'worktree'|'baseSha'>): string {
- return [process.execPath, resolve(process.cwd(),'scripts/verify-document-patch.mjs'), job.worktree!, job.baseSha].map(quote).join(' ');
+ const script=[new URL('../scripts/verify-document-patch.mjs',import.meta.url),new URL('../../scripts/verify-document-patch.mjs',import.meta.url)].find(url=>existsSync(url));
+ if(!script) throw new Error('插件安装不完整：缺少文档检查脚本');
+ return [process.execPath, fileURLToPath(script), job.worktree!, job.baseSha].map(quote).join(' ');
 }
 function isDocumentCheckCommand(command: string | undefined, job: Pick<Job,'worktree'|'baseSha'>): boolean {
  const expected=documentCheckCommand(job), actual=command?.trim();

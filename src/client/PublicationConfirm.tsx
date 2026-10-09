@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Job } from '../core/types.ts';
 
-export interface PublicationPreview { id: string; revision: string; updatedAt: string; stamp: string; alreadyPublished?: string[] }
+export interface PublicationPreview { id: string; revision: string; updatedAt: string; stamp: string; responseDraft?: string; alreadyPublished?: string[] }
 
 export function publicationPreviewCurrent(preview: PublicationPreview | undefined, job: Job | undefined): boolean {
   return !!preview && !!job && job.id === preview.id && job.status === 'approved' && !!job.result

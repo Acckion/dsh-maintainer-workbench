@@ -1,80 +1,83 @@
-import { taskWorkspaceTitle } from "./task-workspaces.ts";
+import type { Context } from "@deepseek-ai/cordis";
+import type {} from "@deepseek-ai/dsh-agent";
+import type {} from "@deepseek-ai/dsh-agent-default-model";
+import type {} from "@deepseek-ai/dsh-agent-preset-registry";
+import type {} from "@deepseek-ai/dsh-compaction";
+import type {} from "@deepseek-ai/dsh-compaction-tool-result-pruner";
+import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import type {} from "@deepseek-ai/dsh-permission-presets";
+import type { SessionId } from "@deepseek-ai/dsh-session";
+import type {} from "@deepseek-ai/dsh-tools";
+import type {} from "@deepseek-ai/dsh-user-approval";
+import type {} from "@deepseek-ai/dsh-workspace";
+import { createHash } from "node:crypto";
 import {
-  triageInput,
-  triageBudgetPrompt,
-  preflightInput,
-  preflightBudgetPrompt,
-} from "../core/triage-input.ts";
+  artifactPrompt,
+  artifactSchemas,
+  asAnalysis,
+  lightweight,
+  withoutExecutedTests,
+} from "../core/artifacts.ts";
+import {
+  budgetBlockedStream,
+  documentReadBlocker,
+  documentTools,
+  requestBudget,
+} from "../core/context-budget.ts";
+import { recoverContextBudget } from "../core/context-recovery.ts";
 import {
   documentCheckCommand,
   needsDocumentCheckExecution,
 } from "../core/document-acceptance.ts";
 import {
-  documentValidationRanges,
   documentInspectionPolicy,
+  documentValidationRanges,
 } from "../core/document-validation.ts";
-import {
-  implementationReportEvidence,
-  documentVerificationGuidance,
-} from "../core/implementation-report.ts";
-import { recoverContextBudget } from "../core/context-recovery.ts";
-import type {} from "@deepseek-ai/dsh-compaction";
-import type {} from "@deepseek-ai/dsh-compaction-tool-result-pruner";
-import {
-  requestBudget,
-  documentTools,
-  documentReadBlocker,
-  budgetBlockedStream,
-} from "../core/context-budget.ts";
-import {
-  validationPromptHandoff,
-  nativeValidationGuidance,
-  validationTools,
-  validationCommandBlocker,
-} from "../core/validation-context.ts";
+import { ArtifactFormatError } from "../core/execution-errors.ts";
+import { executionRecord } from "../core/execution-evidence.ts";
+import { collectPatch } from "../core/git.ts";
+import { GitHub } from "../core/github.ts";
 import {
   implementationPromptHandoff,
   nativeImplementationGuidance,
   needsImplementationCompletion,
 } from "../core/implementation-context.ts";
-import { reviewEvidenceGate } from "../core/review-evidence.ts";
+import {
+  documentVerificationGuidance,
+  implementationReportEvidence,
+} from "../core/implementation-report.ts";
+import { parseObject } from "../core/intelligence.ts";
+import { issuePromptContext, issueTaskGuidance } from "../core/issue-flow.ts";
+import { ciGuidance, ciPromptEvidence } from "../core/remote-progress.ts";
+import { repositoryPromptProfile } from "../core/repository-context.ts";
 import {
   nativeReviewGuidance,
   reviewPromptHandoff,
 } from "../core/review-context.ts";
-import { ciGuidance, ciPromptEvidence } from "../core/remote-progress.ts";
-import type {} from "@deepseek-ai/dsh-user-approval";
-import type {} from "@deepseek-ai/dsh-tools";
+import { reviewEvidenceGate } from "../core/review-evidence.ts";
 import {
-  artifactSchemas,
-  artifactPrompt,
-  asAnalysis,
-  lightweight,
-  withoutExecutedTests,
-} from "../core/artifacts.ts";
-import type { Context } from "@deepseek-ai/cordis";
-import type {} from "@deepseek-ai/dsh-agent";
-import type {} from "@deepseek-ai/dsh-agent-default-model";
-import type {} from "@deepseek-ai/dsh-agent-preset-registry";
-import type {} from "@deepseek-ai/dsh-permission-presets";
-import type {} from "@deepseek-ai/dsh-workspace";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
-import type { SessionId } from "@deepseek-ai/dsh-session";
-import { taskPrompt } from "../core/workflows.ts";
-import { parseObject } from "../core/intelligence.ts";
-import { GitHub } from "../core/github.ts";
-import { ArtifactFormatError } from "../core/execution-errors.ts";
-import { issuePromptContext, issueTaskGuidance } from "../core/issue-flow.ts";
-import { executionRecord } from "../core/execution-evidence.ts";
-import { collectPatch } from "../core/git.ts";
-import { repositoryPromptProfile } from "../core/repository-context.ts";
-import { createHash } from "node:crypto";
+  preflightBudgetPrompt,
+  preflightInput,
+  triageBudgetPrompt,
+  triageInput,
+} from "../core/triage-input.ts";
 import type {
-  Runner,
-  HostStatus,
-  ToolDiagnostics,
   ExecutionRecord,
+  HostStatus,
+  Runner,
+  ToolDiagnostics,
 } from "../core/types.ts";
+import {
+  nativeValidationGuidance,
+  validationCommandBlocker,
+  validationPromptHandoff,
+  validationTools,
+} from "../core/validation-context.ts";
+import { taskPrompt } from "../core/workflows.ts";
+import type { InputRequest } from "../domain/input.ts";
+import { stagePolicies } from "../workflow/stages.ts";
+import { inputTool } from "./input-tool.ts";
+import { taskWorkspaceTitle } from "./task-workspaces.ts";
 
 export function hostStatus(ctx: Context): HostStatus {
   const selection = ctx.agentDefaultModel.currentSelection();
@@ -106,6 +109,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
     recordExecution,
     recordDiagnostics,
   }) => {
+    let pendingInput: InputRequest | undefined;
     const compactStage = ["docs", "validate"].includes(job.kind);
     const cwd = job.worktree ?? job.analysisPath;
     if (!cwd) throw new Error("Harness 任务缺少工作区");
@@ -147,7 +151,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
     const permission =
       !(issue.organizeMode === "audit" && job.kind === "investigate") &&
       !job.formatOnly &&
-      ["fix", "docs", "investigate", "validate"].includes(job.kind)
+      stagePolicies[job.kind].permission === "inherit"
         ? settings.permissionPreset === "inherit"
           ? ctx.permissionPresets.defaultPreset
           : settings.permissionPreset
@@ -298,17 +302,29 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
             );
           } else {
             await ctx.agentPresets.mount(agentCtx, preset.id);
+            agentCtx.tools.register(
+              inputTool((input) => {
+                pendingInput = input;
+              }),
+            );
+            agentCtx.tools.guard(() =>
+              pendingInput ? "此运行已请求输入，请等待维护者回答" : undefined,
+            );
             if (issue.organizeMode === "audit" && job.kind === "investigate") {
               agentCtx.tools.restrict({ allow: ["read", "grep", "glob"] });
             }
             if (job.kind === "docs") {
-              agentCtx.tools.restrict({ allow: documentTools });
+              agentCtx.tools.restrict({
+                allow: [...documentTools, "ask_user_question"],
+              });
               agentCtx.tools.guard((execution) =>
                 documentReadBlocker(execution.name, execution.arguments),
               );
             }
             if (job.kind === "validate") {
-              agentCtx.tools.restrict({ allow: validationTools });
+              agentCtx.tools.restrict({
+                allow: [...validationTools, "ask_user_question"],
+              });
               agentCtx.tools.guard(
                 (execution) =>
                   validationCommandBlocker(
@@ -367,7 +383,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
     const abort = () => handle.agent.cancel({ kind: "user" });
     try {
       await workspace?.attachSession(sessionId);
-      const titles = Reflect.get(ctx, "sessionTitle") as
+      const titles = ctx.get?.("sessionTitle") as
         | { rename: (session: unknown, title: string) => unknown }
         | undefined;
       titles?.rename(handle.agent.session, taskWorkspaceTitle(repo, job));
@@ -380,6 +396,25 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
       let finalText = "";
       let permissionDenied = false;
       const toolEvidence: { source: string; detail: string }[] = [];
+      const pausedOutput = () => ({
+        inputRequest: pendingInput,
+        result: {
+          summary: pendingInput!.reason,
+          category:
+            issue.plan?.category ?? issue.analysis?.category ?? "maintenance",
+          priority: issue.analysis?.priority ?? "P2",
+          confidence: 0,
+          labels: [],
+          missingInfo: pendingInput!.fields.map((f) => f.question),
+          duplicateOf: null,
+          duplicateReason: "",
+          evidence: toolEvidence.slice(-8),
+          nextSteps: ["维护者回答后显式继续"],
+          responseDraft: "",
+          tests: [],
+        },
+        engine: `Harness / ${selection.provider}/${selection.model}`,
+      });
       const observedRecords: ExecutionRecord[] = [];
       const calls = new Map<string, { name: string; arguments: string }>();
       const canonical = new Map<string, unknown>();
@@ -532,8 +567,13 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
       await done;
       // turn/end is emitted before the host driver retires; wait before queuing another turn.
       await handle.agent.whenIdle();
+      if (pendingInput) {
+        signal.throwIfAborted();
+        return pausedOutput();
+      }
       signal.throwIfAborted();
       recordOutput?.(finalText);
+
       if (implementation) {
         const denied = () =>
           permissionDenied ||
@@ -572,6 +612,10 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           );
           await completionDone;
           await handle.agent.whenIdle();
+          if (pendingInput) {
+            signal.throwIfAborted();
+            return pausedOutput();
+          }
           signal.throwIfAborted();
           recordOutput?.(finalText);
         }
@@ -602,6 +646,10 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           );
           await checksDone;
           await handle.agent.whenIdle();
+          if (pendingInput) {
+            signal.throwIfAborted();
+            return pausedOutput();
+          }
           signal.throwIfAborted();
           recordOutput?.(finalText);
         }
@@ -627,6 +675,10 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
         );
         await reportDone;
         await handle.agent.whenIdle();
+        if (pendingInput) {
+          signal.throwIfAborted();
+          return pausedOutput();
+        }
         signal.throwIfAborted();
         recordOutput?.(finalText);
       }
@@ -678,6 +730,10 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           );
           await checkDone;
           await handle.agent.whenIdle();
+          if (pendingInput) {
+            signal.throwIfAborted();
+            return pausedOutput();
+          }
           signal.throwIfAborted();
           recordOutput?.(finalText);
         }
@@ -700,6 +756,10 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
         );
         await reportDone;
         await handle.agent.whenIdle();
+        if (pendingInput) {
+          signal.throwIfAborted();
+          return pausedOutput();
+        }
         signal.throwIfAborted();
         recordOutput?.(finalText);
       }
@@ -749,7 +809,12 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
         ].slice(-30);
         return recovered;
       }
-      if (job.kind === "review" && job.worktree && !job.formatOnly) {
+      if (
+        job.kind === "review" &&
+        job.worktree &&
+        !job.formatOnly &&
+        !artifact.inputRequest
+      ) {
         const gate = await reviewEvidenceGate(
           {
             ...job,

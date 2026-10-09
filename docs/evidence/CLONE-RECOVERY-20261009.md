@@ -1,0 +1,9 @@
+# macOS managed clone recovery — 0.3.8
+
+On 2026-10-09, four persisted native clone failures ended approximately 240 seconds after starting. The previous implementation downloaded all branches/history with a fixed 240-second deadline. Terminal `ls-remote HEAD` success only demonstrates small Git metadata transfer. Live inspection found the same Git executable in the terminal and Harness, with no proxy environment variable difference.
+
+A public OpenClaw clone using `--no-checkout --depth=64 --single-branch --no-tags` completed in 73.389 seconds on this Mac (167.36 MiB packed objects). A second shallow clone using HTTP/1.1 completed in 37.629 seconds; timing is not a controlled protocol comparison, and the plugin does not force HTTP/1.1. Fetching the saved snapshot and creating a detached worktree completed in another 11.948 seconds. The pinned commit was `77cecb5449650c8efd3c261fecb4be08f82e7eed`, with 52,596 tracked source paths and a readable package manifest.
+
+0.3.8 downloads full source blobs with bounded initial history, retrieves missing pinned commits on demand, and reuses the managed cache. Full existing checkouts are not converted into shallow repositories. PR fetching extends shallow ancestry as needed and refuses a review range without a common ancestor. Clone deadline is 360 seconds; timeouts now identify the operation and deadline, while credential-bearing errors are redacted and cancellation remains cancellation.
+
+Validation: 291 tests, type checking and full build passed. A further 21 focused checks passed after the version bump, including isolated worktrees, fork PR ref pinning, ancestry deepening, interrupted operations, credential redaction, source preservation and durable drafts. Native installation preserves existing task/analysis data and keeps a local rollback backup. No paid model request or remote GitHub mutation was used to diagnose or test this repair. Model task success is a separate verification step.

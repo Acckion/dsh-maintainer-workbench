@@ -1,10 +1,12 @@
-import { detailSections } from "../core/github-details.ts";
-import { organizeModes } from "../core/organize.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { Credentials } from "../core/credentials.ts";
+import { detailSections } from "../core/github-details.ts";
+import { issuePlanSchema } from "../core/issue-flow.ts";
+import { organizeModes } from "../core/organize.ts";
 import { kinds, type Job } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
+import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 export const API = "/maintainer/api";
 export function send(
   res: ServerResponse,
@@ -67,8 +69,39 @@ export function handler(
         send(res, 200, await workbench.itemDetail(p.id, p.section, p.page));
         return;
       }
+      if (req.method === "GET" && path === "/item-draft") {
+        const id = z.string().min(1).max(400).parse(url.searchParams.get("id"));
+        if (!workbench.store.get("issues", id)) throw new Error("事项不存在");
+        send(res, 200, workbench.store.draft(id));
+        return;
+      }
       if (req.method === "GET" && path === "/state") {
         send(res, 200, workbench.snapshot());
+        return;
+      }
+      if (req.method === "GET" && path === "/workspaces") {
+        send(res, 200, workbench.workspaces.list());
+        return;
+      }
+      if (req.method === "GET" && path === "/workspaces/inspect") {
+        send(
+          res,
+          200,
+          await workbench.workspaces.inspect(
+            z.string().min(1).parse(url.searchParams.get("id")),
+          ),
+        );
+        return;
+      }
+      if (req.method === "GET" && path === "/processing") {
+        send(
+          res,
+          200,
+          workbench.processing.history(
+            z.string().min(1).parse(url.searchParams.get("issueId")),
+            url.searchParams.get("caseId") ?? undefined,
+          ),
+        );
         return;
       }
       if (req.method === "GET" && path === "/actions/log") {
@@ -122,26 +155,132 @@ export function handler(
         return;
       }
       const input = await body(req);
-      if (path === "/workflow/analyze") {
-        const p = z.object({ issueIds: z.array(z.string()).min(1).max(workbench.store.settings().maxJobsPerBatch), refresh:z.boolean().optional() }).parse(input);
-        send(res, 200, workbench.orchestration.analyze(p.issueIds,p.refresh)); return;
+      if (path === "/item-draft") {
+        const p = z
+          .object({
+            id: z.string().min(1).max(400),
+            patch: z
+              .object({
+                view: z.string().max(30).optional(),
+                systemPlanInputKey: z.string().max(64).optional(),
+                reply: z.string().max(30000).optional(),
+                instructions: z.string().max(10000).optional(),
+                plan: issuePlanSchema
+                  .extend({
+                    acceptanceCriteria: z.array(z.string().max(1000)).max(20),
+                  })
+                  .optional(),
+              })
+              .strict(),
+          })
+          .parse(input);
+        if (!workbench.store.get("issues", p.id)) throw new Error("事项不存在");
+        workbench.store.saveDraft(p.id, p.patch);
+        send(res, 200, { saved: true });
+        return;
       }
-      if (path === "/workflow/start-batch") {
-        const p = z.object({ items: z.array(z.object({ issueId: z.string(), inputKey: z.string(), plan: z.unknown() })).min(1).max(workbench.store.settings().maxJobsPerBatch) }).parse(input);
-        send(res, 200, workbench.orchestration.startBatch(p.items)); return;
+
+      const version = z
+        .object({
+          expectedVersion: z.number().int().nonnegative().optional(),
+          issueId: z.string().optional(),
+          issueIds: z.array(z.string()).optional(),
+          id: z.string().optional(),
+        })
+        .passthrough()
+        .parse(input);
+      if (version.expectedVersion !== undefined) {
+        const itemId =
+          version.issueId ??
+          (version.issueIds?.length === 1 ? version.issueIds[0] : undefined) ??
+          (version.id
+            ? workbench.store.get<Job>("jobs", version.id)?.issueId
+            : undefined);
+        if (!itemId) throw new Error("版本校验需要明确的事项标识");
+        workbench.processing.assertVersion(itemId, version.expectedVersion);
       }
-      if (path === "/workflow/wait-author") {
-        workbench.orchestration.waitAuthor(z.object({ id: z.string() }).parse(input).id);
-        send(res, 200, { ok: true }); return;
+      if (path === "/workspaces/cleanup" || path === "/workspaces/recover") {
+        const p = z
+          .object({
+            id: z.string(),
+            stamp: z.string(),
+            confirmedStopped: z.boolean().optional(),
+          })
+          .parse(input);
+        if (path === "/workspaces/cleanup")
+          await workbench.workspaces.cleanup(p.id, p.stamp);
+        else
+          await workbench.workspaces.recover(
+            p.id,
+            p.stamp,
+            !!p.confirmedStopped,
+          );
+        send(res, 200, { ok: true });
+        return;
       }
-      if (path === "/workflow/start") {
-        const p = z.object({ issueId: z.string(), inputKey: z.string(), plan: z.unknown(), route: z.enum(kinds).optional(), sourceJobId: z.string().optional(), feedback: z.string().max(4000).optional() }).parse(input);
-        send(res, 200, workbench.orchestration.start(p.issueId, p.inputKey, p.plan, p.route, p.sourceJobId, p.feedback)); return;
+      if (path === "/processing/wait/cancel") {
+        const p = z
+          .object({
+            issueId: z.string(),
+            waitId: z.string(),
+            reason: z.string().trim().min(1).max(2000),
+            expectedVersion: z.number().int().nonnegative(),
+          })
+          .parse(input);
+        workbench.processing.cancelWait(
+          p.issueId,
+          p.waitId,
+          p.reason,
+          p.expectedVersion,
+        );
+        send(res, 200, { ok: true });
+        return;
       }
-      if (["/workflow/pause", "/workflow/cancel", "/workflow/resume", "/workflow/retry"].includes(path)) {
-        const p = z.object({ issueId: z.string() }).parse(input);
-        const result = path.endsWith("retry") ? workbench.orchestration.retry(p.issueId) : path.endsWith("resume") ? workbench.orchestration.resume(p.issueId) : workbench.orchestration.pause(p.issueId, path.endsWith("cancel"));
-        send(res, 200, result ?? { ok: true }); return;
+      if (path === "/processing/input/request") {
+        const p = z
+          .object({
+            issueId: z.string(),
+            request: z.unknown(),
+            expectedVersion: z.number().int().nonnegative(),
+          })
+          .parse(input);
+        send(res, 200, {
+          wait: workbench.processing.requestInput(
+            p.issueId,
+            p.request,
+            undefined,
+            p.expectedVersion,
+          ),
+        });
+        return;
+      }
+      if (path === "/processing/input") {
+        const p = z
+          .object({
+            issueId: z.string(),
+            waitId: z.string(),
+            values: z.record(z.string()),
+            expectedVersion: z.number().int().nonnegative(),
+          })
+          .parse(input);
+        workbench.processing.submitInput(
+          p.issueId,
+          p.waitId,
+          p.values,
+          p.expectedVersion,
+        );
+        send(res, 200, { ok: true });
+        return;
+      }
+      if (path === "/processing/resume") {
+        const p = z
+          .object({
+            id: z.string(),
+            expectedVersion: z.number().int().nonnegative(),
+          })
+          .parse(input);
+        send(res, 200, workbench.resume(p.id));
+        return;
       }
       if (path === "/sync-all") {
         const names = [
@@ -175,6 +314,86 @@ export function handler(
               .parse(input).names,
           ),
         );
+        return;
+      }
+      if (path === "/workflow/analyze") {
+        const p = z
+          .object({
+            issueIds: z
+              .array(z.string())
+              .min(1)
+              .max(workbench.store.settings().maxJobsPerBatch),
+            refresh: z.boolean().optional(),
+          })
+          .parse(input);
+        send(res, 200, workbench.orchestration.analyze(p.issueIds, p.refresh));
+        return;
+      }
+      if (path === "/workflow/start-batch") {
+        const p = z
+          .object({
+            items: z
+              .array(
+                z.object({
+                  issueId: z.string(),
+                  inputKey: z.string(),
+                  plan: z.unknown(),
+                }),
+              )
+              .min(1)
+              .max(workbench.store.settings().maxJobsPerBatch),
+          })
+          .parse(input);
+        send(res, 200, workbench.orchestration.startBatch(p.items));
+        return;
+      }
+      if (path === "/workflow/wait-author") {
+        workbench.orchestration.waitAuthor(
+          z.object({ id: z.string() }).parse(input).id,
+        );
+        send(res, 200, { ok: true });
+        return;
+      }
+      if (path === "/workflow/start") {
+        const p = z
+          .object({
+            issueId: z.string(),
+            inputKey: z.string(),
+            plan: z.unknown(),
+            route: z.enum(kinds).optional(),
+            sourceJobId: z.string().optional(),
+            feedback: z.string().max(4000).optional(),
+          })
+          .parse(input);
+        send(
+          res,
+          200,
+          workbench.orchestration.start(
+            p.issueId,
+            p.inputKey,
+            p.plan,
+            p.route,
+            p.sourceJobId,
+            p.feedback,
+          ),
+        );
+        return;
+      }
+      if (
+        [
+          "/workflow/pause",
+          "/workflow/cancel",
+          "/workflow/resume",
+          "/workflow/retry",
+        ].includes(path)
+      ) {
+        const p = z.object({ issueId: z.string() }).parse(input);
+        const result = path.endsWith("retry")
+          ? workbench.orchestration.retry(p.issueId)
+          : path.endsWith("resume")
+            ? workbench.orchestration.resume(p.issueId)
+            : workbench.orchestration.pause(p.issueId, path.endsWith("cancel"));
+        send(res, 200, result ?? { ok: true });
         return;
       }
       if (path === "/sync")
@@ -251,6 +470,7 @@ export function handler(
             sourceJobId: z.string().optional(),
             instructions: z.string().max(8000).optional(),
             forceNew: z.boolean().optional(),
+            goal: z.enum(["resolve"]).optional(),
           })
           .parse(input);
         send(
@@ -260,6 +480,7 @@ export function handler(
             sourceJobId: p.sourceJobId,
             instructions: p.instructions,
             forceNew: p.forceNew,
+            goal: p.goal,
           }),
         );
         return;
@@ -326,6 +547,11 @@ export function handler(
           .object({ issueId: z.string(), plan: z.unknown() })
           .parse(input);
         workbench.savePlan(p.issueId, p.plan);
+        send(res, 200, {
+          ok: true,
+          version: workbench.store.processing.current(p.issueId)!.version,
+        });
+        return;
       } else if (path === "/information") {
         const p = z
           .object({
@@ -459,7 +685,11 @@ export function handler(
       }
       send(res, 200, { ok: true });
     } catch (error) {
-      send(res, 400, {
+      send(res, error instanceof ProcessingConflictError ? 409 : 400, {
+        code:
+          error instanceof ProcessingConflictError
+            ? error.code
+            : "INVALID_REQUEST",
         error:
           error instanceof z.ZodError
             ? `输入格式错误：${error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`

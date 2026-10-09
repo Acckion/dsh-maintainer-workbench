@@ -29,7 +29,7 @@ export function BatchWorkflow({
     (i) =>
       i.orchestration?.draft &&
       !["running", "stale", "waiting", "deferred"].includes(
-        i.processing?.status ?? "",
+        i.processingSuggestion?.status ?? "",
       ),
   );
   return (

@@ -1,9 +1,12 @@
-import { z } from "zod";
 import { draftSchema, planningGuidance } from "./change-plan.ts";
+import { z } from "zod";
+import { inputRequestSchema } from "../domain/input.ts";
+import { stagePolicies } from "../workflow/stages.ts";
 import type { Analysis, JobKind } from "./types.ts";
 const text = z.string().max(6000);
 const list = z.array(text).max(30);
 const common = {
+  inputRequest: inputRequestSchema.optional(),
   schemaVersion: z.literal(1),
   summary: text.min(1),
   coverage: text,
@@ -190,7 +193,9 @@ export function withoutExecutedTests(artifact: Artifact): Artifact {
     : artifact;
 }
 export function artifactPrompt(kind: JobKind): string {
-  const planning = ["triage", "preflight", "investigate"].includes(kind) ? planningGuidance : "";
+  const planning = ["triage", "preflight", "investigate"].includes(kind)
+    ? planningGuidance
+    : "";
   const shapes: Record<JobKind, string> = {
     triage:
       "category:bug|feature|docs|question|maintenance, priority:P0|P1|P2|P3, labels:string[], module:string, impact:string, missingInfo:string[], duplicateOf:number|null, duplicateReason:string, route:needs_info|decision|investigate|implement|answer|track, routeReason:string",
@@ -206,7 +211,7 @@ export function artifactPrompt(kind: JobKind): string {
       "environment:string, tests:[{command:string,status:passed|failed|not_run,output:string,executionId?:string}], blockers:string[]",
     ci: "classification:regression|baseline|flaky|environment|unknown, facts:string[], hypotheses:string[], proposedChanges:string[], blockers:string[]",
   };
-  return `Return ONLY one JSON object with schemaVersion:1, stage:"${kind}", summary:string, coverage:string, evidence:[{source:string,detail:string}], nextSteps:string[], responseDraft:string, ${shapes[kind]}. ${kind === "review" ? "For code review, read the pinned source with tools and cite the exact tool call ID (or host session:seq ID) in inspectedSources and each finding.sourceEvidence; quote the exact source line and use its actual one-based line number. Each finding needs a concrete input, expected and actual behavior; mark static reasoning as reasoned. Executed reproduction additionally requires its own host process record with exact command and outputQuote copied from its output (a failing regression may have a nonzero exit code), never infer execution from text. If tools or evidence are unavailable return verdict incomplete with blockers." : ""} OUTPUT RESPONSIBILITIES:
+  return `Return ONLY one JSON object with schemaVersion:1, stage:"${kind}", summary:string, coverage:string, evidence:[{source:string,detail:string}], nextSteps:string[], responseDraft:string, ${shapes[kind]}. ${kind === "review" ? "For code review, read the pinned source with tools and cite the exact tool call ID (or host session:seq ID) in inspectedSources and each finding.sourceEvidence; quote the exact source line and use its actual one-based line number. Each finding needs a concrete input, expected and actual behavior; mark static reasoning as reasoned. Executed reproduction additionally requires its own host process record with exact command and outputQuote copied from its output (a failing regression may have a nonzero exit code), never infer execution from text. If tools or evidence are unavailable return verdict incomplete with blockers." : ""} If a concrete maintainer decision or missing information prevents progress, optionally include inputRequest:{reason:string,fields:[{id:string,question:string}]}; ask only necessary questions, report incomplete/not_run honestly, and do not invent changes. OUTPUT RESPONSIBILITIES:
 - summary: lead with the useful conclusion and what can proceed. No routine permission or merge disclaimers.
 - coverage: state relevant scope and evidence gaps ONCE, briefly. Unknown CI is not failed CI; lack of local tests in metadata stages is expected.
 - nextSteps: 0–3 prioritized, concrete actions matched to this change. Prefer available workbench stages (review, validate, investigate, fix/docs, ci) over asking the maintainer to perform the same work manually. Name the exact behavior or invariant to inspect, not generic checklists. A human decision is needed only for a real scope/tradeoff/authorization blocker. Do not imply an action has already run or new permissions have been granted. Omit irrelevant steps; do not fill a quota.
@@ -232,5 +237,4 @@ export function asAnalysis(a: Artifact): Analysis {
     tests: "tests" in a ? a.tests : [],
   };
 }
-export const lightweight = (kind: JobKind) =>
-  kind === "triage" || kind === "preflight";
+export const lightweight = (kind: JobKind) => stagePolicies[kind].metadataOnly;

@@ -121,6 +121,120 @@ test("reanalyzing a stopped plan archives its authorization and requires a fresh
   }
 });
 
+test("plan confirmation preserves master input waits and does not grant a new authorization", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    const wait = wb.processing.requestInput(issue.id, {
+      reason: "Need expected behavior",
+      fields: [{ id: "expected", question: "Expected behavior?" }],
+    });
+    assert.throws(
+      () =>
+        wb.orchestration.start(
+          issue.id,
+          issue.orchestration!.draft!.inputKey,
+          accept,
+        ),
+      /当前输入/,
+    );
+    assert.equal(
+      store.processing.current(issue.id)!.waits.find((w) => w.id === wait.id)
+        ?.state,
+      "open",
+    );
+    assert.equal(store.issues()[0].plan, undefined);
+    assert.equal(store.jobs().length, 0);
+  } finally {
+    await wb.close();
+  }
+});
+
+test("master input resume keeps the authorized chain without treating the waiting result as completed", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    wb.orchestration.start(
+      issue.id,
+      issue.orchestration!.draft!.inputKey,
+      accept,
+    );
+    const job = store.jobs()[0];
+    const waiting = {
+      ...job,
+      status: "waiting_input" as const,
+      result: fixtureAnalysis(issue, "docs"),
+    };
+    store.put("jobs", waiting);
+    const wait = wb.processing.requestInput(
+      issue.id,
+      {
+        reason: "Need precise edit",
+        fields: [{ id: "edit", question: "Which paragraph?" }],
+      },
+      job.id,
+    );
+    wb.orchestration.completed(waiting);
+    assert.equal(store.jobs().length, 1);
+    assert.equal(
+      store.issues()[0].orchestration?.run?.completedJobIds.length,
+      0,
+    );
+    wb.processing.submitInput(
+      issue.id,
+      wait.id,
+      { edit: "Existing usage paragraph" },
+      store.processing.current(issue.id)!.version,
+    );
+    const resumed = wb.resume(job.id).created[0];
+    assert.ok(resumed);
+    assert.equal(
+      store.get<Job>("jobs", resumed)?.workflowRunId,
+      job.workflowRunId,
+    );
+    assert.equal(store.issues()[0].orchestration?.run?.currentJobId, resumed);
+    assert.equal(store.issues()[0].orchestration?.run?.status, "running");
+    assert.equal(store.get<Job>("jobs", job.id)?.status, "waiting_input");
+  } finally {
+    await wb.close();
+  }
+});
+
+test("an old processing cycle cannot advance a reopened item", async () => {
+  const { store, wb, issue, repo } = setup();
+  try {
+    wb.orchestration.start(
+      issue.id,
+      issue.orchestration!.draft!.inputKey,
+      accept,
+    );
+    const job = store.jobs()[0];
+    store.put("issues", { ...store.issues()[0], state: "closed" });
+    store.put("issues", { ...store.issues()[0], state: "open" });
+    assert.notEqual(store.processing.current(issue.id)!.id, job.caseId);
+    const completed = {
+      ...job,
+      status: "completed" as const,
+      result: fixtureAnalysis(issue, "docs"),
+      patch: "old patch",
+    };
+    store.put("jobs", completed);
+    wb.orchestration.completed(completed);
+    wb.orchestration.synced(repo.id);
+    assert.equal(store.jobs().length, 1);
+    assert.equal(store.issues()[0].orchestration?.run?.status, "blocked");
+    assert.throws(
+      () =>
+        wb.orchestration.start(
+          issue.id,
+          issue.orchestration!.draft!.inputKey,
+          accept,
+        ),
+      /变化/,
+    );
+  } finally {
+    await wb.close();
+  }
+});
+
 test("confirmation is idempotent and changed plans cannot overwrite a running authorization", async () => {
   const { store, wb, issue } = setup();
   try {
@@ -167,7 +281,7 @@ test("stale materials reject confirmation and queued checkpoints never count as 
         ),
       /变化/,
     );
-    assert.equal(wb.snapshot().issues[0].processing?.status, "stale");
+    assert.equal(wb.snapshot().issues[0].processingSuggestion?.status, "stale");
   } finally {
     await wb.close();
   }

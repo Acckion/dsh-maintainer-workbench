@@ -31,7 +31,7 @@ function TestReport({ job, own = false, role, open }: { job: Job; own?: boolean;
 }
 
 /** Display aggregation with existing guarded controls; authorization stays in the backend. */
-export function ReviewSummary({ job, jobs, audit, native, open, openSession, issue, deliveryActions }: { job: Job; jobs: Job[]; audit: Audit[]; native: boolean; open: OpenJob; openSession?: (id: string) => void; issue?: Issue; deliveryActions?: React.ReactNode }) {
+export function ReviewSummary({ job, jobs, audit, native, open, openSession, issue, deliveryActions, openLocation, compact=false }: { job: Job; jobs: Job[]; audit: Audit[]; native: boolean; open: OpenJob; openSession?: (id: string) => void; issue?: Issue; deliveryActions?: React.ReactNode;openLocation?:(path:string,line?:number)=>void;compact?:boolean }) {
   const evidence = reviewEvidence(job, jobs), execution = executionExplanation(job, native, audit);
   const acceptance = acceptanceEligibility(job, jobs);
   const artifact = job.artifact, implementation = evidence.implementation, review = evidence.review;
@@ -51,21 +51,22 @@ export function ReviewSummary({ job, jobs, audit, native, open, openSession, iss
   const criteria = plan?.acceptanceCriteria ?? (implementation?.artifact && 'acceptanceCriteria' in implementation.artifact ? implementation.artifact.acceptanceCriteria : []);
   const planChanged = !!issue && JSON.stringify(issue.plan ?? null) !== JSON.stringify(plan ?? null);
   const currentReview = reviewArtifact && review?.artifactState !== 'stale' && job.artifactState !== 'stale';
+  const incoming = compact && job.issueSnapshot.type === 'pr' && !implementation;
   const codeTask = ['fix', 'docs', 'validate', 'review'].includes(job.kind);
   return <section className="mw-review-summary" aria-label="审阅摘要">
-    <h3>{['fix', 'docs', 'validate', 'review'].includes(job.kind) ? '最终审核' : '审阅摘要'}</h3>
-    {codeTask && <nav className="mw-final-review-nav" aria-label="最终审核导航">{['目标完成情况', '验证证据', '未解决发现', '修订记录', '交付操作'].filter(name => name !== '交付操作' || deliveryActions).map(name => <button type="button" className="mw-text-button" key={name} onClick={event => event.currentTarget.closest('.mw-review-summary')?.querySelector(`[data-review-section="${name}"]`)?.scrollIntoView({ block: 'start' })}>{name}</button>)}</nav>}
+    <h3>{incoming ? 'PR 审查' : ['fix', 'docs', 'validate', 'review'].includes(job.kind) ? '改动验收' : '审阅摘要'}</h3>
+
     <p className="mw-review-state"><strong>{kindNames[job.kind]} · {execution.label}</strong>{job.artifactState === 'stale' && <span className="mw-tag amber">旧版本</span>}</p>
     {execution.waitingReason && <p>等待原因：{execution.waitingReason}</p>}
     <p>{artifact?.summary ?? job.result?.summary ?? '尚无通过格式校验的产物，请查看执行状态与记录。'}</p>
     {artifact && <p>当前产物覆盖范围：{artifact.coverage || '未说明，需进一步核对'}</p>}
     <p className="mw-muted">任务 <code>{job.id.slice(0, 8)}</code> · 基线 <code title={job.baseSha}>{job.baseSha.slice(0, 12)}</code> · 第 {job.attempt} 次尝试</p>
-    {execution.latest && <p className="mw-review-latest">最近记录：{execution.latest.detail}</p>}
-    <p className="mw-review-next">下一步：{execution.next}</p>
+    {!compact && execution.latest && <p className="mw-review-latest">最近记录：{execution.latest.detail}</p>}
+    {!compact && <p className="mw-review-next">下一步：{execution.next}</p>}
     {!acceptance.allowed && ['awaiting_review', 'completed'].includes(job.status) && <p className="mw-callout amber">待审核已暂停：{acceptance.reason} 历史接受记录不会被改写。</p>}
     <div className="mw-review-links"><button type="button" className="mw-text-button" onClick={() => open(job.id, 'log')}>查看执行记录</button>{job.sessionId && openSession && <button type="button" className="mw-text-button" onClick={() => openSession(job.sessionId!)}>打开对应 Harness 会话 / 审批</button>}</div>
     {artifact?.stage === 'triage' && <section><h4>分诊依据与缺口</h4><p>影响范围：{artifact.module || '模块待核实'} · {artifact.impact || '影响尚待核实'}</p><p>{artifact.routeReason}</p>{artifact.missingInfo.length > 0 && <ul>{artifact.missingInfo.map((text, index) => <li key={index}>{text}</li>)}</ul>}<p className="mw-muted">轻量分诊不执行代码测试；影响判断仍需后续证据核实。</p><button type="button" className="mw-text-button" onClick={() => open(job.id, 'evidence')}>查看分诊证据</button></section>}
-    {codeTask && <section aria-label="目标完成情况" data-review-section="目标完成情况"><h4>目标完成情况</h4>
+    {codeTask && !incoming && <section aria-label="目标完成情况" data-review-section="目标完成情况"><h4>目标完成情况</h4>
       <p>{plan?.goal || implementation?.instructions || job.instructions || job.issueSnapshot.title}</p>
       {!plan?.goal && <p className="mw-muted">以上引用本次任务说明或原事项标题，未保存单独的维护目标。</p>}
       {plan?.scope && <p>约定范围：{plan.scope}</p>}
@@ -74,24 +75,24 @@ export function ReviewSummary({ job, jobs, audit, native, open, openSession, iss
       <p className="mw-muted">{currentReview ? `审查判断：${reviewVerdicts[reviewArtifact.verdict]}。` : '尚无可引用的独立审查判断。'}验收条件仍需逐项核对，测试通过不自动表示目标全部完成。</p>
       {criteria.length ? <ul>{criteria.map((text, index) => <li key={index}><span className="mw-tag">待核对</span> {text}</li>)}</ul> : <p className="mw-review-unknown">尚未记录验收条件。</p>}
     </section>}
-    {codeTask && <section aria-label="验证证据" data-review-section="验证证据"><h4>验证证据</h4><p>{patchScope(job.patch)}</p>{job.patch && <button type="button" className="mw-text-button" onClick={() => open(job.id, 'diff')}>查看此任务的完整补丁</button>}
+    {codeTask && (!incoming || evidence.validations.length > 0 || job.patch) && <section aria-label="验证证据" data-review-section="验证证据"><h4>验证证据</h4><p>{patchScope(job.patch)}</p>{job.patch && <button type="button" className="mw-text-button" onClick={() => open(job.id, 'diff')}>查看此任务的完整补丁</button>}
 
       {evidence.validations.length ? evidence.validations.map(report => <TestReport key={report.id} job={report} role={review ? evidence.reviewSourceValidationIds.includes(report.id) ? '本次审查引用的验证报告' : '其他同补丁验证报告' : undefined} open={open} />) : <p className="mw-review-unknown">尚无可引用的同一补丁独立验证报告。</p>}
       {implementation && <TestReport job={implementation} own open={open} />}
     </section>}
     {codeTask && <section aria-label="未解决发现" data-review-section="未解决发现"><h4>未解决发现</h4>
       {reviewArtifact ? <><p>{reviewVerdicts[reviewArtifact.verdict]}</p><p>{review?.status === 'approved' ? '本地已接受此审查' : '此审查尚未被本地接受'} · {unresolved.length} 项当前发现仍需处理</p>
-        {unresolved.map(finding => <article className="mw-finding" key={finding.id}><strong>{finding.severity} · {finding.title}</strong><code>{finding.path}{finding.line ? `:${finding.line}` : ''}</code><p>触发条件：{finding.trigger}</p><p>依据：{finding.evidence}</p><p>建议：{finding.recommendation}</p><p className="mw-muted">处置：{({ accepted: '已接受，等待修订', needs_evidence: '需要更多证据' } as Record<string, string>)[review?.findingDecisions?.[finding.id] ?? ''] ?? '尚未决定'}</p></article>)}
+        {unresolved.map(finding => <article className="mw-finding" key={finding.id}><strong>{finding.severity} · {finding.title}</strong><button className="mw-text-button" disabled={!openLocation} onClick={()=>openLocation?.(finding.path,finding.line ?? undefined)}>{finding.path}{finding.line ? `:${finding.line}` : ''}</button><p>触发条件：{finding.trigger}</p><p>依据：{finding.evidence}</p><p>建议：{finding.recommendation}</p><p className="mw-muted">处置：{({ accepted: '已接受，等待修订', needs_evidence: '需要更多证据' } as Record<string, string>)[review?.findingDecisions?.[finding.id] ?? ''] ?? '尚未决定'}</p></article>)}
         {!unresolved.length && <p>本次审查没有尚待处置的当前发现；仍需核对审查覆盖与历史发现。</p>}
         {review?.findingFollowups?.filter(item => item.status !== 'resolved').map(item => <article className="mw-finding" key={`${item.sourceJobId}:${item.findingId}`}><strong>历史发现 {item.findingId} · {item.status === 'still_present' ? '仍存在' : '无法确认已解决'}</strong><p>{item.evidence}</p><p className="mw-muted">来源 {item.sourceJobId.slice(0, 8)}</p></article>)}
         <p>审查覆盖：{reviewArtifact.coverage || '未说明'}</p><button type="button" className="mw-text-button" onClick={() => open(review!.id, 'overview')}>打开对应审查与逐项处置</button>
       </> : <p className="mw-review-unknown">未关联可引用的独立审查结论，不能判断发现是否已处理。</p>}
     </section>}
-    {codeTask && <section aria-label="修订记录" data-review-section="修订记录"><h4>修订记录</h4><p className="mw-muted">仅展示明确来源链；历史失败和旧补丁保留供追溯，不作为当前验证证据。</p>
+    {codeTask && <details aria-label="修订记录" data-review-section="修订记录"><summary>修订记录</summary><p className="mw-muted">仅展示明确来源链；历史失败和旧补丁保留供追溯，不作为当前验证证据。</p>
       <ol className="mw-revision-history">{history.records.map(record => <li key={record.id}><strong>{kindNames[record.kind]} · {taskStatus(record).label}</strong><p>{record.artifact?.summary ?? record.result?.summary ?? record.error ?? '尚无报告'}</p><p className="mw-muted">{record.createdAt} · 第 {record.attempt} 次尝试 · {record.id === job.id ? '当前选择' : samePatch(job, record) ? '同版本同补丁记录' : '历史来源，非当前补丁证据'}</p>{record.reviewNote && <p>维护者意见：{record.reviewNote}</p>}<button type="button" className="mw-text-button" onClick={() => open(record.id, 'overview')}>查看记录 {record.id.slice(0, 8)}</button></li>)}</ol>
       {history.warnings.map(text => <p className="mw-review-unknown" key={text}>{text}</p>)}
-    </section>}
-    <section><h4>风险与限制</h4>{uniqueRisks.length ? <ul>{uniqueRisks.map((text, index) => <li key={index}>{text}</li>)}</ul> : <p>当前记录未列出额外限制；这不表示没有风险。</p>}</section>
+    </details>}
+    <details><summary>风险与限制</summary>{uniqueRisks.length ? <ul>{uniqueRisks.map((text, index) => <li key={index}>{text}</li>)}</ul> : <p>当前记录未列出额外限制；这不表示没有风险。</p>}</details>
     <div className="mw-review-links">{[implementation, ...evidence.validations, review].filter((source, index, rows): source is Job => !!source && rows.findIndex(other => other?.id === source.id) === index).map(source => <button type="button" className="mw-text-button" key={source.id} onClick={() => open(source.id, 'overview')}>{kindNames[source.kind]}记录 {source.id.slice(0, 8)}</button>)}</div>
     {deliveryActions && <section aria-label="交付操作" data-review-section="交付操作"><h4>交付操作</h4>
       {review && implementation && implementation.id !== job.id && <p><button type="button" className="mw-text-button" onClick={() => open(implementation.id, 'overview')}>查看对应实施产物与交付状态</button></p>}

@@ -11,7 +11,8 @@ test('plugin declares shared host peers aligned with the development runtime', a
   assert.equal(lock.packages['node_modules/@deepseek-ai/cordis'].version, '4.0.5-alpha.1');
   assert.equal(manifest.devDependencies['@deepseek-ai/dsh'], '0.2.1-alpha.1');
   for (const peer of ['@deepseek-ai/dsh-home-paths', '@deepseek-ai/dsh-llm']) {
-    assert.equal(manifest.peerDependencies[peer], '^0.2.1-alpha.1');
+    // Desktop 0.2.0-rc.2 exposes the same shared functions; preserve the development runtime too.
+    assert.equal(manifest.peerDependencies[peer], '0.2.0-rc.2 || ^0.2.1-alpha.1');
     assert.equal(manifest.dependencies[peer], undefined);
     assert.equal(manifest.devDependencies[peer], '0.2.1-alpha.1');
     assert.equal(lock.packages[''].peerDependencies[peer], manifest.peerDependencies[peer]);

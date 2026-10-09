@@ -65,7 +65,7 @@ export interface InformationRequest {
   state: "asked" | "reply_received" | "fulfilled" | "dismissed";
   askedAt: string;
   baselineComments: number;
-  source: "maintainer_record";
+  source: "maintainer_record" | "published_comment";
   replies: {
     id: number;
     author: string;
@@ -170,8 +170,8 @@ export interface Repo {
   policy?: Pick<
     Settings,
     | "syncLimit"
-    | "autoReview"
     | "autoPreflight"
+    | "autoReview"
     | "autoTriage"
     | "syncIntervalMinutes"
     | "timeoutMs"
@@ -206,7 +206,9 @@ export interface PRContext {
 }
 export interface Issue {
   orchestration?: import("./orchestration.ts").WorkflowState;
-  processing?: { status: "plan" | "running" | "blocked" | "review" | "waiting" | "stale" | "deferred"; reason: string };
+  processingSuggestion?: import("./orchestration.ts").WorkflowProgress;
+  processing?: import("../domain/processing.ts").ProcessingCase;
+  actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
   remotePRs?: import("./remote-progress.ts").RemotePR[];
   actions?: import("./remote-progress.ts").ActionsSnapshot;
   remoteWarning?: string;
@@ -217,7 +219,6 @@ export interface Issue {
   merged?: boolean;
   linkedPullRequests?: string[];
   prBaseSha?: string;
-  workflow?: { stage: string; reason: string; updatedAt: string };
   id: string;
   repoId: string;
   number: number;
@@ -235,6 +236,8 @@ export interface Issue {
   analysisRevision?: string;
 }
 export type JobStatus =
+  | "waiting_environment"
+  | "waiting_input"
   | "completed"
   | "queued"
   | "running"
@@ -245,6 +248,11 @@ export type JobStatus =
   | "cancelled";
 export interface Job {
   workflowRunId?: string;
+  caseId?: string;
+  actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
+  goal?: "resolve";
+  goalId?: string;
+  goalPauseReason?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
   evidenceGate?: { allowed: boolean; reasons: string[] };
@@ -312,6 +320,9 @@ export interface Job {
         error?: string;
         remoteUpdatedAt?: string;
         at: string;
+        startedAt?: string;
+        followupRecordedAt?: string;
+        publishedReply?: string;
       }
     >
   >;
@@ -324,9 +335,9 @@ export interface Audit {
   detail: string;
 }
 export interface Settings {
+  autoReview?: boolean;
   syncLimit?: number;
   autoPreflight?: boolean;
-  autoReview?: boolean;
   triageMaxTokens?: number;
   concurrency: number;
   maxJobsPerBatch: number;
@@ -384,6 +395,7 @@ export type Runner = (input: {
   recordOutput?: (text: string) => void;
   recordExecution?: (record: ExecutionRecord, raw: string) => void;
 }) => Promise<{
+  inputRequest?: import("../domain/input.ts").InputRequest;
   artifact?: import("./artifacts.ts").Artifact;
   result: Analysis;
   engine: string;

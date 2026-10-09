@@ -70,7 +70,7 @@ test('native metadata-only recovery normalizes the authoritative artifact before
     workspaceRegistry: { create: async (path: string) => ({ path, attachSession: async () => {} }) },
     on: (_: string, fn: typeof listener) => { listener = fn; return () => {}; },
     agents: { create: async (options: any) => {
-      await options.setup({ tools: { schemas: () => [], restrict: () => {}, guard: () => {} } });
+      await options.setup({ tools: { register: () => () => {}, schemas: () => [], restrict: () => {}, guard: () => {} } });
       return { dispose: async () => {}, agent: { session: {}, cancel: () => {}, whenIdle: async () => {}, followup: () => queueMicrotask(() => {
         listener({ id: options.sessionId }, { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: JSON.stringify(claimedValidation()) }] } } });
         listener({ id: options.sessionId }, { type: 'turn/end', data: { reason: { kind: 'completed' } } });

@@ -34,6 +34,7 @@ export function planInputKey(issue: Issue, repo: Repo): string {
   return createHash("sha256")
     .update(
       JSON.stringify([
+        issue.processing?.id,
         issue.title,
         issue.body,
         issue.updatedAt,

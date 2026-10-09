@@ -1,16 +1,15 @@
-import { WorkflowCard } from "./WorkflowCard.tsx";
-import { validationInstructions } from "../core/validation-scope.ts";
-import { RemoteProgress } from "./RemoteProgress.tsx";
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { organizeActions } from "../core/organize.ts";
+import { validationInstructions } from "../core/validation-scope.ts";
+import { availableActions } from "../workflow/actions.ts";
+import { RemoteProgress } from "./RemoteProgress.tsx";
 
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
-import { reviewVerdicts } from "./review-evidence.ts";
 import { IssuePlanning } from "./IssuePlanning.tsx";
+import { reviewVerdicts } from "./review-evidence.ts";
 import { ReviewFindingControls } from "./ReviewFindingControls.tsx";
-import { nextIssueStage, planBlocker } from "../core/issue-flow.ts";
 const stages: Record<string, string> = {
   answered: "答复已记录，本地处理结束",
   needs_info: "等待补充信息",
@@ -37,12 +36,14 @@ export function WorkflowPanel({
   busy,
   act,
   hideSummary = false,
+  compact = false,
 }: {
   issue: Issue;
   job?: Job;
   history: Job[];
   busy: boolean;
   hideSummary?: boolean;
+  compact?: boolean;
   act: (path: string, data: unknown, message: string) => Promise<unknown>;
 }) {
   const [instructions, setInstructions] = useState("");
@@ -51,84 +52,21 @@ export function WorkflowPanel({
   }, [job?.id]);
   const a = job?.artifact;
   const validation = validationState(a);
-  const complete =
-    job?.artifactState !== "stale" &&
-    job &&
-    !!job.result &&
-    !["running", "queued", "failed", "cancelled", "rejected"].includes(
-      job.status,
-    );
-  let primary: JobKind | undefined =
-    job && ["failed", "cancelled", "rejected"].includes(job.status)
-      ? undefined
-      : job?.artifactState === "stale"
-        ? issue.origin === "repository"
-          ? "investigate"
-          : issue.type === "pr"
-            ? "preflight"
-            : "triage"
-        : !a
-          ? issue.origin === "repository"
-            ? undefined
-            : issue.type === "pr"
-              ? "preflight"
-              : "triage"
-          : a.stage === "triage"
-            ? a.route === "implement"
-              ? a.category === "docs"
-                ? "docs"
-                : "fix"
-              : a.route === "investigate"
-                ? "investigate"
-                : undefined
-            : a.stage === "preflight"
-              ? a.readiness === "blocked"
-                ? undefined
-                : "review"
-              : a.stage === "investigate"
-                ? issue.origin === "repository"
-                  ? a.proposedChanges.length
-                    ? "docs"
-                    : undefined
-                  : "fix"
-                : ["fix", "docs"].includes(a.stage)
-                  ? job?.patch
-                    ? "validate"
-                    : undefined
-                  : a.stage === "validate"
-                    ? validation?.state === "passed"
-                      ? "review"
-                      : validation?.state === "failed"
-                        ? "fix"
-                        : "validate"
-                    : a.stage === "review" &&
-                        (Object.values(job?.findingDecisions ?? {}).includes(
-                          "accepted",
-                        ) ||
-                          job?.findingFollowups?.some(
-                            (f) => f.status === "still_present",
-                          ))
-                      ? "fix"
-                      : a.stage === "ci"
-                        ? "investigate"
-                        : undefined;
-  if (issue.type === "issue") {
-    const typed = nextIssueStage(issue, job);
-    if (typed) primary = typed;
-    if (
-      ["answered", "deferred"].includes(issue.workflow?.stage ?? "") ||
-      issue.informationRequests?.some((r) => r.state === "asked")
-    )
-      primary = undefined;
-  }
-  const blocker = primary ? planBlocker(issue, primary) : undefined;
+  const actions =
+    job?.actionsAvailable ??
+    issue.actionsAvailable ??
+    availableActions(issue, job, history);
+  const primary = actions.primary?.kind;
+  const blocker = actions.primary?.blockedReasons.join("；") || undefined;
   const next = async (kind: JobKind) =>
     act(
       "/jobs",
       {
         issueIds: [issue.id],
+        expectedVersion: actions.expectedVersion,
         kind,
-        sourceJobId: complete ? job.id : undefined,
+        sourceJobId: actions.stages.find((action) => action.kind === kind)
+          ?.sourceJobId,
         instructions:
           kind === "validate"
             ? validationInstructions(instructions, job?.kind)
@@ -138,24 +76,81 @@ export function WorkflowPanel({
       },
       "已派发下一阶段，自动交接现有证据",
     );
+  if (compact)
+    return (
+      <section className="mw-triage-followup">
+        {!issue.origin && issue.type === "issue" && issue.state === "open" && (
+          <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
+        )}
+        {a?.stage === "preflight" && a.risks.length > 0 && (
+          <section>
+            <h4>需核对事项</h4>
+            <ul>
+              {a.risks.map((risk, index) => (
+                <li key={index}>{risk}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {job?.prContext && (
+          <details>
+            <summary>判断依据 · PR 版本与 CI</summary>
+            <p>
+              HEAD {job.prContext.headSha} · BASE {job.prContext.baseSha}
+            </p>
+            {job.prContext.warnings.map((w) => (
+              <p key={w}>{w}</p>
+            ))}
+            <pre>
+              {JSON.stringify(
+                {
+                  checks: job.prContext.checks,
+                  reviews: job.prContext.reviews,
+                },
+                null,
+                2,
+              )}
+            </pre>
+          </details>
+        )}
+      </section>
+    );
   return (
-    <section className="mw-workflow">
-      <div className="mw-section-title">
-        处理流程{" "}
-        <span className="mw-tag">
-          {issue.state === "closed"
-            ? issue.merged
-              ? "GitHub 已合并"
-              : "GitHub 已关闭"
-            : (stages[issue.workflow?.stage ?? ""] ??
-              (issue.origin === "repository"
-                ? "仓库整理任务"
-                : issue.type === "pr"
-                  ? "待预检"
-                  : "待分诊"))}
-        </span>
-      </div>
-      <WorkflowCard issue={issue} history={history} busy={busy} act={act} />
+    <section className={compact ? "mw-triage-followup" : "mw-workflow"}>
+      {compact && (
+        <p className="mw-muted">
+          {job?.status === "completed" ? "分析报告已保存" : "尚未完成分析"}
+          {issue.type === "pr" && (
+            <>
+              {" "}
+              ·{" "}
+              {history.some((j) => j.kind === "review")
+                ? "已创建代码审查任务，可在 Execution 查看"
+                : "尚未启动代码审查"}
+            </>
+          )}
+        </p>
+      )}
+      {!compact && (
+        <div className="mw-section-title">
+          处理流程{" "}
+          <span className="mw-tag">
+            {issue.state === "closed"
+              ? issue.merged
+                ? "GitHub 已合并"
+                : "GitHub 已关闭"
+              : (stages[issue.processing?.phase ?? ""] ??
+                (issue.origin === "repository"
+                  ? "仓库整理任务"
+                  : issue.type === "pr"
+                    ? "待预检"
+                    : "待分诊"))}
+          </span>
+        </div>
+      )}
+      {!issue.origin && issue.type === "issue" && issue.state === "open" && (
+        <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
+      )}
       {job?.deliveryReviewId && (
         <p className="mw-callout">
           此产物保存了审查关联；当前有效性与限制请核对审阅摘要，发布时仍会再次检查。
@@ -169,11 +164,13 @@ export function WorkflowPanel({
       {!hideSummary && (
         <p className="mw-muted">
           {a?.summary ??
-            issue.workflow?.reason ??
+            issue.processing?.reason ??
             "先判断处理方向，再按需要调查、实施和验证。"}
         </p>
       )}
-      <RemoteProgress key={issue.id} issue={issue} busy={busy} act={act} />
+      {!compact && (
+        <RemoteProgress key={issue.id} issue={issue} busy={busy} act={act} />
+      )}
       {validation && validation.state !== "passed" && (
         <div className="mw-callout amber">
           <strong>{validation.reason}</strong>
@@ -219,7 +216,7 @@ export function WorkflowPanel({
           )}
           {a.stage === "preflight" && a.risks.length > 0 && (
             <>
-              <h4>本次审查重点</h4>
+              <h4>需核对事项</h4>
               <ul>
                 {a.risks.map((s, i) => (
                   <li key={i}>{s}</li>
@@ -368,65 +365,64 @@ export function WorkflowPanel({
           </pre>
         </details>
       )}
-      {blocker && !issue.orchestration && <p className="mw-callout amber">{blocker}</p>}
+      {blocker && <p className="mw-callout amber">{blocker}</p>}
       {issue.state === "open" && (
         <>
-          <details><summary>高级操作</summary>
-          {!issue.origin && issue.type === "issue" && <IssuePlanning issue={issue} job={job} busy={busy} act={act} />}
-          <label>
-            补充说明或修订意见（可选）
-            <textarea
-              rows={3}
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="可选。已有调查、验收条件和处置记录将自动传递。"
-            />
-          </label>
-          <div className="mw-workflow-actions">
-            {primary && (
-              <button
-                className="mw-button primary"
-                disabled={
-                  busy ||
-                  !!blocker ||
-                  history.some((j) => ["running", "queued"].includes(j.status))
-                }
-                onClick={() => void next(primary)}
-              >
-                下一步：{kindNames[primary]}
-              </button>
-            )}
-          </div>
-          <div>
-            <h4>单独运行指定阶段</h4>
+          <details>
+            <summary>补充要求与下一步操作</summary>
+            <label>
+              给下一次 Agent 任务补充要求
+              <textarea
+                rows={3}
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="可选。已有调查、验收条件和处置记录将自动传递。"
+              />
+            </label>
             <div className="mw-workflow-actions">
-              {(issue.type === "pr"
-                ? ["preflight", "review", "ci", "fix", "validate"]
-                : [
-                    "triage",
-                    "investigate",
-                    "fix",
-                    "docs",
-                    ...(job?.patch ? ["validate", "review"] : []),
-                  ]
-              ).map((k) => (
+              {primary && (
                 <button
-                  className="mw-button"
-                  key={k}
+                  className="mw-button primary"
                   disabled={
                     busy ||
-                    !!planBlocker(issue, k as JobKind) ||
+                    !!blocker ||
                     history.some((j) =>
                       ["running", "queued"].includes(j.status),
                     )
                   }
-                  onClick={() => void next(k as JobKind)}
+                  onClick={() => void next(primary)}
                 >
-                  {kindNames[k as JobKind]}
+                  下一步：{kindNames[primary]}
                 </button>
-              ))}
+              )}
             </div>
-          </div>
+          </details>
+          {!compact && (
+            <details>
+              <summary>其他阶段与快捷操作</summary>
+              <div className="mw-workflow-actions">
+                {actions.stages.map((action) => {
+                  const k = action.kind;
+                  return (
+                    <button
+                      className="mw-button"
+                      key={k}
+                      disabled={
+                        busy ||
+                        !action.enabled ||
+                        history.some((j) =>
+                          ["running", "queued"].includes(j.status),
+                        )
+                      }
+                      onClick={() => void next(k as JobKind)}
+                    >
+                      {kindNames[k as JobKind]}
+                    </button>
+                  );
+                })}
+              </div>
+            </details>
+          )}
           {issue.type === "issue" && (
             <div className="mw-workflow-actions">
               {[
@@ -451,7 +447,6 @@ export function WorkflowPanel({
               ))}
             </div>
           )}
-          </details>
         </>
       )}
       <details>

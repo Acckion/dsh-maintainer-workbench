@@ -18,9 +18,31 @@ export function Attention({
           issue: i,
           job: state.jobs.find((j) => j.issueId === i.id),
         }));
-        const needs = latest.filter(({ issue, job }) => issue.processing?.status
-          ? ['plan','blocked','review','stale'].includes(issue.processing.status) && (!!issue.orchestration?.draft || !!issue.orchestration?.run || ['failed','awaiting_review'].includes(job?.status ?? '') || (job?.kind === 'validate' && validationState(job.artifact)?.state !== 'passed') || issue.informationRequests?.some(r=>r.state==='reply_received'))
-          : ['needs_info','decision','blocked','review'].includes(issue.workflow?.stage ?? '') || ['failed','awaiting_review'].includes(job?.status ?? ''));
+        const needs = latest.filter(({ issue, job }) =>
+          issue.processingSuggestion?.status
+            ? ["plan", "blocked", "review", "stale"].includes(
+                issue.processingSuggestion.status,
+              ) &&
+              (["decision", "blocked", "review"].includes(
+                issue.processing?.phase ?? "",
+              ) ||
+                issue.processing?.waits.some(
+                  (w) =>
+                    w.state === "open" &&
+                    ["user_input", "environment_ready"].includes(w.type),
+                ) ||
+                !!issue.orchestration?.draft ||
+                !!issue.orchestration?.run ||
+                ["failed", "awaiting_review"].includes(job?.status ?? "") ||
+                (job?.kind === "validate" &&
+                  validationState(job.artifact)?.state !== "passed") ||
+                issue.informationRequests?.some(
+                  (r) => r.state === "reply_received",
+                ))
+            : ["needs_info", "decision", "blocked", "review"].includes(
+                issue.processing?.phase ?? "",
+              ) || ["failed", "awaiting_review"].includes(job?.status ?? ""),
+        );
         return (
           <section className="mw-settings-card" key={repo.id}>
             <div className="mw-section-title">{repo.fullName}</div>
@@ -29,10 +51,24 @@ export function Attention({
             </p>
             {needs.slice(0, 8).map(({ issue, job }) => (
               <div className="mw-stage-event" key={issue.id}>
-                <button className="mw-text-button" onClick={()=>open(repo.id,issue.id)}>#{issue.number} {issue.title}</button>
-                <strong>{issue.processing?.status === "plan" ? "待确认计划" : issue.processing?.status === "review" ? "待最终审核" : "需要补充或解除阻塞"}</strong>
+                <button
+                  className="mw-text-button"
+                  onClick={() => open(repo.id, issue.id)}
+                >
+                  #{issue.number} {issue.title}
+                </button>
+                <strong>
+                  {issue.processingSuggestion?.status === "plan"
+                    ? "待确认计划"
+                    : issue.processingSuggestion?.status === "review"
+                      ? "待最终审核"
+                      : "需要补充或解除阻塞"}
+                </strong>
                 <p>
-                  {issue.processing?.reason ?? job?.error ?? issue.workflow?.reason ?? "变更产物等待审核"}
+                  {issue.processingSuggestion?.reason ??
+                    job?.error ??
+                    issue.processing?.reason ??
+                    "变更产物等待审核"}
                 </p>
               </div>
             ))}
@@ -99,7 +135,14 @@ export function RepositoryPolicy({
         />{" "}
         自动整理新增或更新 PR 的预检与审查建议
       </label>
-      <label><input type="checkbox" checked={value.autoReview} onChange={e=>setValue({...value,autoReview:e.target.checked})} /> 自动审查预检已就绪的 PR（只读，不自动修订或发布）</label>
+      <label>
+        <input
+          type="checkbox"
+          checked={value.autoReview}
+          onChange={(e) => setValue({ ...value, autoReview: e.target.checked })}
+        />{" "}
+        自动审查预检已就绪的 PR（只读，不自动修订或发布）
+      </label>
       <label>
         同步记录上限（0 表示无上限）
         <input

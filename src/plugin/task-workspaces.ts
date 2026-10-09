@@ -5,7 +5,19 @@ import {kindNames,type Job,type Repo} from '../core/types.ts';
 import {lightweight} from '../core/artifacts.ts';
 import {DatabaseSync} from 'node:sqlite';
 import {basename,dirname,join} from 'node:path';
-import {existsSync} from 'node:fs';
+import {statSync} from 'node:fs';
+
+/** Optional historical metadata must not hydrate cloud placeholders on the host thread. */
+export function taskDatabaseAvailable(path:string):boolean {
+ try {
+  const file=statSync(path);if(!file.isFile() || file.size===0 || file.blocks===0)return false;
+  for(const suffix of ['-wal','-shm']) {
+   try {const companion=statSync(path+suffix);if(!companion.isFile() || companion.size>0 && companion.blocks===0)return false;}
+   catch(error) {if((error as NodeJS.ErrnoException).code!=='ENOENT')return false;}
+  }
+  return true;
+ } catch {return false;}
+}
 
 export function taskWorkspaceTitle(repo:Pick<Repo,'fullName'|'githubName'>,job:Job):string {
  const issue=job.issueSnapshot;
@@ -17,7 +29,7 @@ export async function organizeTaskWorkspaces(ctx:Context,jobs:Job[],repos:Repo[]
   let job=jobs.find(j=>j.worktree===workspace.path || j.analysisPath===workspace.path);
   if(!job && ['analysis','worktrees'].includes(basename(dirname(workspace.path)))) {
    const dbPath=join(dirname(dirname(workspace.path)),'workbench.sqlite');
-   if(existsSync(dbPath)) {
+   if(taskDatabaseAvailable(dbPath)) {
     let db:DatabaseSync|undefined;
     try {db=new DatabaseSync(dbPath,{readOnly:true});const row=db.prepare("SELECT data FROM jobs WHERE id=?").get(basename(workspace.path));
      const candidate=row ? JSON.parse(String(row.data)) as Job : undefined;

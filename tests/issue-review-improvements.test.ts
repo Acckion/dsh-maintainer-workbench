@@ -10,7 +10,8 @@ import { Workbench, revision } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
 import { seedFixture, fixtureRunner, fixtureAnalysis } from './support/fixtures.ts';
 import type { FindingFollowup, Issue, IssuePlan, Job, ReviewThread, ThreadSnapshot } from '../src/core/types.ts';
-import { defaultPlan, nextIssueStage, planBlocker, receiveReplies } from '../src/core/issue-flow.ts';
+import { availableActions } from '../src/workflow/actions.ts';
+import { defaultPlan, planBlocker, receiveReplies } from '../src/core/issue-flow.ts';
 import { reviewFollowups } from '../src/core/finding-followup.ts';
 import { executionRecord, saveExecutionLog, readExecutionLog } from '../src/core/execution-evidence.ts';
 import { linkedExecution, reconcileTestExecutions } from '../src/core/execution-links.ts';
@@ -69,8 +70,8 @@ test('sync keeps plans and asked questions across versions, signals fresh replie
     fail = false; await workbench.sync(repo.fullName);
     assert.equal(store.issues()[0].informationRequests?.[0].id, id);
     assert.equal(store.issues()[0].informationRequests?.[0].state, 'reply_received');
-    assert.equal(store.issues()[0].workflow?.stage, 'decision');
-    assert.equal(nextIssueStage(store.issues()[0]), 'triage');
+    assert.equal(store.issues()[0].processing?.phase, 'decision');
+    assert.equal(availableActions(store.issues()[0]).primary?.kind, 'triage');
   } finally { await workbench.close(); }
 });
 
@@ -82,15 +83,15 @@ test('type-specific acceptance enforces feature decisions and reproduction; docs
     assert.throws(() => workbench.enqueue([issue.id], 'fix'), /接受/);
     const accepted = { ...plan, decision: 'accepted' as const }; workbench.savePlan(issue.id, accepted);
     assert.equal(planBlocker(store.issues()[0], 'fix'), undefined);
-    assert.equal(nextIssueStage(store.issues()[0]), 'fix');
+    assert.equal(availableActions(store.issues()[0]).primary?.kind, 'fix');
     assert.notEqual(revision(issue, repo), revision(store.issues()[0], repo));
     assert.match(planBlocker({ ...issue, plan: { ...accepted, category: 'bug' } }, 'fix')!, /复现/);
     const doc = { ...issue, plan: { ...accepted, category: 'docs' as const } };
-    assert.equal(nextIssueStage(doc), 'docs'); assert.match(planBlocker(doc, 'fix')!, /文档/);
+    assert.equal(availableActions(doc).primary?.kind, 'docs'); assert.match(planBlocker(doc, 'fix')!, /文档/);
     workbench.savePlan(issue.id, { ...accepted, category: 'question' });
     assert.throws(() => workbench.enqueue([issue.id], 'fix'), /使用提问/);
     workbench.decide(issue.id, 'answered', 'Answered with documentation link');
-    assert.equal(store.issues()[0].state, 'open'); assert.equal(nextIssueStage(store.issues()[0]), undefined);
+    assert.equal(store.issues()[0].state, 'open'); assert.equal(availableActions(store.issues()[0]).primary?.kind, undefined);
   } finally { await workbench.close(); }
 });
 
