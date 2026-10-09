@@ -161,6 +161,28 @@ test("interrupted workspace ownership cannot be reclaimed for formatting recover
   );
 });
 
+test("format recovery accepts an aliased data root but rejects a substituted worktree leaf", async (t) => {
+  const f = await fixture(t, async ({ job, issue }) => ({
+    result: fixtureAnalysis(issue, job.kind), engine: "fixture",
+  }));
+  const alias = f.dir + "-alias";
+  await symlink(f.dir, alias, "dir");
+  t.after(() => rm(alias, { force: true }));
+  const manager = new WorkspaceManager(f.store, alias), issue = f.store.issues()[0];
+  const job = { id: "alias-run", kind: "fix", issueId: issue.id,
+    repoId: issue.repoId, issueSnapshot: issue, baseSha: f.store.repos()[0].headSha } as Job;
+  const workspace = await manager.prepare(f.store.repos()[0], job);
+  manager.release(job);
+  const retry = { ...job, id: "alias-retry", worktree: workspace.path };
+  await manager.acquireFormatRecovery(retry);
+  assert.equal(manager.records()[0].ownerRunId, retry.id);
+  manager.release(retry);
+  await rename(workspace.path, workspace.path + ".original");
+  await symlink(f.path, workspace.path, "dir");
+  await assert.rejects(manager.acquireFormatRecovery(retry), /所有权|管理范围/);
+  assert.equal(await readFile(join(f.path, "value.txt"), "utf8"), "baseline\n");
+});
+
 test("legacy workspace migration registers only task directories managed by this data directory", async (t) => {
   const f = await fixture(t, async ({ job, issue }) => ({
     result: fixtureAnalysis(issue, job.kind),

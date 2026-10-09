@@ -110,7 +110,13 @@ export class WorkspaceManager {
   async acquireFormatRecovery(job: Job): Promise<void> {
     if (!job.worktree) return;
     const canonical = await realpath(job.worktree);
-    const record = this.records().find((r) => resolve(r.path) === canonical);
+    // Canonicalize the managed parent (macOS /var is an alias of /private/var),
+    // but never follow a substituted worktree leaf into a foreign checkout.
+    const managedParent = await realpath(resolve(this.dataDir, "worktrees"));
+    const record = this.records().find((r) =>
+      resolve(r.path) === resolve(this.dataDir, "worktrees", r.id) &&
+      join(managedParent, r.id) === canonical,
+    );
     if (!record) throw new Error("输出恢复工作区缺少所有权记录，请重新派发");
     if (record.status !== "retained")
       throw new Error("输出恢复工作区仍被占用或执行状态不明确");
