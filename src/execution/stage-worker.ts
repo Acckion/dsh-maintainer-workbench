@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { planningInputRequest } from "../core/change-plan.ts";
 import { ProcessingService } from "../application/processing.ts";
 import {
   ServiceBase,
@@ -410,7 +411,13 @@ export class StageWorker extends ServiceBase {
         throw new Error(
           "分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付",
         );
-      const inputRequest = output.inputRequest ?? output.artifact?.inputRequest;
+      const requestedInput = output.inputRequest ?? output.artifact?.inputRequest;
+      const inputRequest = planningInputRequest(output.artifact, requestedInput);
+      if (requestedInput && inputRequest !== requestedInput) {
+        output = { ...output, inputRequest,
+          artifact: output.artifact ? { ...output.artifact, inputRequest } : undefined };
+        this.store.audit("workflow.plan_confirmation_routed", "计划确认交由界面处理；未授予实施权限，真实补充问题保留", job.id);
+      }
       if (inputRequest) {
         const currentIssue = this.store.get<Issue>("issues", job.issueId)!;
         if (

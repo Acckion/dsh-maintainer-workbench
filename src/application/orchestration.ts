@@ -4,6 +4,7 @@ import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
 import {
   draftFromJob,
+  planningInputRequest,
   planInputKey,
   type PlanDraft,
 } from "../core/change-plan.ts";
@@ -285,7 +286,7 @@ export class Orchestration {
       return { created: [], reused: [] };
     }
   }
-  completed(job: Job): void {
+  completed(job: Job, allowAutoReview = true): void {
     const issue = this.wb.store.get<Issue>("issues", job.issueId);
     if (!issue || ["queued", "running"].includes(job.status)) return;
     if (job.caseId && job.caseId !== issue.processing?.id) return;
@@ -323,6 +324,7 @@ export class Orchestration {
           : {}),
       });
       if (
+        allowAutoReview &&
         job.kind === "preflight" &&
         job.artifact?.stage === "preflight" &&
         job.artifact.readiness === "review" &&
@@ -802,7 +804,40 @@ export class Orchestration {
         : "请开始整理现有材料与处理建议",
     };
   }
+  /** Restore an analysis wrongly paused for plan authorization; no execution is scheduled. */
+  recoverPlanConfirmation(jobId: string): boolean {
+    const job = this.wb.store.get<Job>("jobs", jobId);
+    if (!job || job.status !== "waiting_input" || job.workflowRunId || !job.result ||
+        !["triage", "preflight", "investigate"].includes(job.kind) || job.kind !== job.artifact?.stage ||
+        !job.artifact?.inputRequest || planningInputRequest(job.artifact, job.artifact.inputRequest)) return false;
+    const issue = this.wb.store.get<Issue>("issues", job.issueId);
+    const repo = this.wb.store.get<import("../core/types.ts").Repo>("repos", job.repoId);
+    if (!issue || !repo || !issue.processing || issue.state !== "open" || job.caseId !== issue.processing.id ||
+        job.revision !== importRevision(issue, repo, job.kind) ||
+        this.wb.store.jobs().some(j => j.issueId === issue.id && ["queued", "running"].includes(j.status))) return false;
+    const waits = issue.processing.waits.filter(w => w.state === "open" && w.type === "user_input" &&
+      w.requestedByRunId === job.id && w.targetFingerprint === issue.processing!.sourceFingerprint &&
+      JSON.stringify(w.requiredFields) === JSON.stringify(job.artifact!.inputRequest!.fields.map(f => f.id)));
+    if (!waits.length) return false;
+    this.wb.store.transaction(() => {
+      for (const wait of waits) this.wb.store.processing.dispatch(issue.id,
+        { type: "wait.cancelled", waitId: wait.id, reason: "此请求仅为计划确认，已转交计划草稿界面；未授权实施" },
+        "system", `plan-confirmation:${job.id}:${wait.id}`);
+      const artifact = { ...job.artifact!, inputRequest: undefined };
+      this.wb.saveJob({ ...job, artifact, status: "completed", waitingReason: undefined });
+      if (job.kind === "triage") {
+        this.wb.store.saveTriage(issue.id, job.revision, job.id, job.result!);
+        this.wb.store.put("issues", { ...this.wb.store.get<Issue>("issues", issue.id)!,
+          analysis: job.result, analysisRevision: job.revision });
+      }
+      this.completed(this.wb.store.get<Job>("jobs", job.id)!, false);
+      this.wb.store.audit("workflow.plan_confirmation_recovered", "已恢复计划草稿，等待维护者确认；原请求及报告保留在历史", job.id);
+    });
+    return true;
+  }
   reconcile(): void {
+    for (const job of this.wb.store.jobs())
+      if (job.status === "waiting_input") this.recoverPlanConfirmation(job.id);
     for (const issue of this.wb.store.issues()) {
       const run = issue.orchestration?.run;
       if (!run || run.status !== "running") continue;

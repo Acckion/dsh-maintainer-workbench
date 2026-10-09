@@ -175,6 +175,22 @@ export const artifactSchemas = {
 export type Artifact = z.infer<
   (typeof artifactSchemas)[keyof typeof artifactSchemas]
 >;
+/** Recover only an unambiguous textual checklist map; never convert test evidence. */
+export function parseArtifact(kind: JobKind, value: unknown, repaired?: () => void): Artifact {
+  if (["fix", "docs", "investigate"].includes(kind) && value && typeof value === "object" && !Array.isArray(value)) {
+    const artifact = value as Record<string, unknown>;
+    const criteria = artifact.acceptanceCriteria;
+    if (criteria && typeof criteria === "object" && !Array.isArray(criteria)) {
+      const entries = Object.entries(criteria);
+      if (entries.length > 0 && entries.every(([key, detail]) => key.trim() && (typeof detail === "string" || detail === null))) {
+        const parsed = artifactSchemas[kind].parse({ ...artifact, acceptanceCriteria: entries.map(([key, detail]) => detail === null || detail === "" ? key : `${key}：${detail}`) });
+        repaired?.();
+        return parsed;
+      }
+    }
+  }
+  return artifactSchemas[kind].parse(value);
+}
 export type FindingDecision =
   | "accepted"
   | "needs_evidence"
@@ -209,7 +225,7 @@ export function artifactPrompt(kind: JobKind): string {
       "environment:string, tests:[{command:string,status:passed|failed|not_run,output:string,executionId?:string}], blockers:string[]",
     ci: "classification:regression|baseline|flaky|environment|unknown, facts:string[], hypotheses:string[], proposedChanges:string[], blockers:string[]",
   };
-  return `Return ONLY one JSON object with schemaVersion:1, stage:"${kind}", summary:string, coverage:string, evidence:[{source:string,detail:string}], nextSteps:string[], responseDraft:string, ${shapes[kind]}. ${kind === "review" ? "For code review, read the pinned source with tools and cite the exact tool call ID (or host session:seq ID) in inspectedSources and each finding.sourceEvidence; quote the exact source line and use its actual one-based line number. Each finding needs a concrete input, expected and actual behavior; mark static reasoning as reasoned. Executed reproduction additionally requires its own host process record with exact command and outputQuote copied from its output (a failing regression may have a nonzero exit code), never infer execution from text. If tools or evidence are unavailable return verdict incomplete with blockers." : ""} If a concrete maintainer decision or missing information prevents progress, optionally include inputRequest:{reason:string,fields:[{id:string,question:string}]}; ask only necessary questions, report incomplete/not_run honestly, and do not invent changes. OUTPUT RESPONSIBILITIES:
+  return `Return ONLY one JSON object with schemaVersion:1, stage:"${kind}", summary:string, coverage:string, evidence:[{source:string,detail:string}], nextSteps:string[], responseDraft:string, ${shapes[kind]}. ${kind === "review" ? "For code review, read the pinned source with tools and cite the exact tool call ID (or host session:seq ID) in inspectedSources and each finding.sourceEvidence; quote the exact source line and use its actual one-based line number. Each finding needs a concrete input, expected and actual behavior; mark static reasoning as reasoned. Executed reproduction additionally requires its own host process record with exact command and outputQuote copied from its output (a failing regression may have a nonzero exit code), never infer execution from text. If tools or evidence are unavailable return verdict incomplete with blockers." : ""} If a concrete maintainer decision or missing information prevents progress, optionally include inputRequest:{reason:string,fields:[{id:string,question:string,purpose:information|decision}]}; ask only necessary questions, report incomplete/not_run honestly, and do not invent changes. acceptanceCriteria must be a JSON string array, e.g. ["目标文件包含所需要点", "相对链接指向现有文件"], never a key/value object or keyed array; report execution evidence only in tests. OUTPUT RESPONSIBILITIES:
 - summary: lead with the useful conclusion and what can proceed. No routine permission or merge disclaimers.
 - coverage: state relevant scope and evidence gaps ONCE, briefly. Unknown CI is not failed CI; lack of local tests in metadata stages is expected.
 - nextSteps: 0–3 prioritized, concrete actions matched to this change. Prefer available workbench stages (review, validate, investigate, fix/docs, ci) over asking the maintainer to perform the same work manually. Name the exact behavior or invariant to inspect, not generic checklists. A human decision is needed only for a real scope/tradeoff/authorization blocker. Do not imply an action has already run or new permissions have been granted. Omit irrelevant steps; do not fill a quota.
