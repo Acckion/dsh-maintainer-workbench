@@ -31,3 +31,10 @@ test('checker exit-code echo retains current-session evidence without accepting 
  const failed=documentAcceptance(artifact(),{...job,executionRecords:[record,failure]});
  if(failed.stage==='validate'){assert.equal(failed.tests[0].status,'failed');assert.equal(failed.tests[0].executionId,failure.id);assert.ok(failed.blockers.some(b=>b.includes('whitespace')));}
 });
+
+ test('document checker resolves from plugin location, independent of cwd and ships in package',async()=>{
+  const before=process.cwd();const {tmpdir}=await import('node:os');const {readFileSync}=await import('node:fs');
+  const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+  assert.ok(pkg.files.includes('scripts/verify-document-patch.mjs'));
+  try{process.chdir(tmpdir());const command=documentCheckCommand({worktree:'/tmp/worktree',baseSha:'a'.repeat(40)});assert.ok(command.includes('scripts/verify-document-patch.mjs'));assert.ok(!command.includes("'/tmp/scripts/"));}finally{process.chdir(before);}
+ });

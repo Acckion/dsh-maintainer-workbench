@@ -23,7 +23,8 @@
     "docs/ACCEPTANCE.md",
     "docs/evidence",
     "docs/product",
-    "docs/EVALUATION.md"
+    "docs/EVALUATION.md",
+    "scripts/verify-document-patch.mjs"
   ],
   "dsh": {
     "bundle": {

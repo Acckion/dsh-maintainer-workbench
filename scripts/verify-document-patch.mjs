@@ -17,7 +17,7 @@ for(const line of patch.split('\n')){
 }
 let files=true,anchors=true;const details=[];
 for(const link of links){
- const [target,anchor]=link.url.split('#');const path=resolve(root,dirname(link.file),target||link.file);
+ const [target,anchor]=link.url.split('#');const path=target ? resolve(root,dirname(link.file),target) : resolve(root,link.file);
  let text='';try{const canonical=realpathSync(path),rel=relative(root,canonical);if(rel.startsWith('..')||isAbsolute(rel))throw Error('outside worktree');text=readFileSync(canonical,'utf8');}catch{files=false;anchors=false;details.push({...link,status:'missing_or_outside'});continue;}
  const headings=text.split('\n').filter(l=>/^#+\s/.test(l)).map(l=>l.replace(/^#+\s*/,'').toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu,'').trim().replace(/\s+/g,'-'));
  const matched=!anchor||headings.includes(anchor);if(!matched)anchors=false;details.push({...link,status:matched?'resolved':'anchor_missing'});
