@@ -36,7 +36,7 @@ GitHub Release 默认开启，不需要 npm 凭据。npm 默认关闭。若希�
 2. 在仓库 Settings → Secrets and variables → Actions 中设置变量 `PUBLISH_NPM_MASTER=true`。
 3. 二选一配置 npm 权限：在 npm 的包设置中添加 GitHub trusted publisher（账号 `Acckion`、仓库 `dsh-maintainer-workbench`、文件名 `distribution.yml`），允许 publish 与 dist-tag 操作；或者配置仓库 secret `NPM_TOKEN`，使用具备该包发布权限的 granular token。
 
-参考 [npm trusted publishing 官方说明](https://docs.npmjs.com/trusted-publishers/)。工作流使用 GitHub-hosted runner、npm 11.21.0 以及 `id-token: write`；该 npm 版本支持通过 OIDC 管理 dist-tag，发布附带 provenance。没有配置 trusted publisher 时，需要有效的 NPM_TOKEN；仅开启变量并不能获得 npm 包权限。
+参考 [npm trusted publishing 官方说明](https://docs.npmjs.com/trusted-publishers/)。工作流使用 GitHub-hosted runner、npm 11.21.0 以及 `id-token: write`；该 npm 版本支持通过 OIDC 管理 dist-tag。公开源码仓库发布附带 provenance；私有源码仓库使用 OIDC 发布，但关闭 npm 不支持的 provenance。工作流通过 GitHub API 查询仓库可见性，查询失败则停止发布。没有配置 trusted publisher 时，需要有效的 NPM_TOKEN；仅开启变量并不能获得 npm 包权限。
 
 npm 发布与 GitHub Release 使用同一个已验证的 tarball。提交对应 `commit-<完整提交>` dist-tag，另有串行步骤仅为当前 master 更新 `master` 标签，因此较旧的并行构建不会覆盖较新的包。稳定版 latest 不变。安装可选择具体版本，或在支持 npm 包名的入口使用 `dsh-maintainer-workbench@master`。
 
