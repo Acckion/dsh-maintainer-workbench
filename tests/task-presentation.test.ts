@@ -19,6 +19,16 @@ test('a later failure is visible even when an earlier step passed', () => {
   assert.equal(groups[0].state,'failed');assert.equal(groups[0].latest.id,'validation');
 });
 
+test('workflow retries share a row while separate confirmed plans retain their own history', () => {
+  const first = { ...job('first', 'docs', 'failed'), workflowRunId: 'plan-one' };
+  const retry = { ...job('retry', 'docs', 'awaiting_review'), workflowRunId: 'plan-one' };
+  const other = { ...job('other', 'docs', 'completed'), workflowRunId: 'plan-two' };
+  const groups = taskGroups([first, retry, other]);
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.find(group => group.id === 'plan-one')!.members.map(job => job.id).sort(), ['first', 'retry']);
+  assert.equal(groups.find(group => group.id === 'plan-two')!.members.length, 1);
+});
+
 test('equal timestamps retain the later source step and unresolved approvals remain visible', () => {
  const fix=job('fix','fix','awaiting_review'),check={...job('check','validate','completed','fix'),createdAt:fix.createdAt};
  const group=taskGroups([fix,check])[0];assert.equal(group.latest.id,'check');assert.equal(group.state,'attention');

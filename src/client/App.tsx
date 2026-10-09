@@ -26,6 +26,8 @@ import type { JobKind, Snapshot } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { AssistantActions } from "./AssistantActions.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
+import { BatchWorkflow } from "./BatchWorkflow.tsx";
+import { WorkflowCard } from "./WorkflowCard.tsx";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
 import { Empty, Modal, Tag } from "./Primitives.tsx";
 import { ProcessingHistory } from "./ProcessingHistory.tsx";
@@ -40,6 +42,7 @@ import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 
 import { ReviewSummary, type DetailTab } from "./ReviewSummary.tsx";
 import { GitHubConnection, SettingsView } from "./SettingsView.tsx";
+import { GlobalSettings } from "./GlobalSettings.tsx";
 
 import { API, request } from "./api.ts";
 import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
@@ -370,7 +373,11 @@ export function App({
   const repo = state?.repos.find((r) => r.id === repoId);
   const issues = state?.issues.filter((i) => i.repoId === repoId) ?? [];
   const jobs = state?.jobs.filter((j) => j.repoId === repoId) ?? [];
-  const pending = reviewQueue(jobs);
+  const pending = reviewQueue(jobs).filter((job) => {
+    const run = issues.find((issue) => issue.id === job.issueId)?.orchestration
+      ?.run;
+    return !run || (run.status === "review" && run.currentJobId === job.id);
+  });
   const running = jobs.filter((j) => ["running", "queued"].includes(j.status));
   const open = issues.filter((i) => i.state === "open" && !i.origin);
   const triaged = open.filter((i) => i.type === "issue" && i.analysis);
@@ -574,6 +581,11 @@ export function App({
             <button
               className={`mw-button ${page === "settings" ? "active" : ""}`}
               aria-label="全局设置"
+              title={
+                host
+                  ? "全局设置 · 也可从 Harness 设置 → 维护工作台进入"
+                  : "全局设置"
+              }
               onClick={() => navigate("settings")}
             >
               <Settings2 size={16} />
@@ -648,26 +660,6 @@ export function App({
                 连接中断：{loadError}。正在重试，当前显示上次成功读取的数据。
               </span>
             </div>
-          )}
-          {repo?.discovered && (
-            <details className="mw-workspace-notice">
-              <summary>工作区 · {repo.localPath}</summary>
-              <div>
-                <strong>自动发现 · {repo.localPath}</strong>
-                <p>
-                  {repo.localKind === "folder"
-                    ? "普通文件夹：可执行只读仓库检查。"
-                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：可只读检查；隔离修改暂需提交后执行" : "工作区干净，可执行隔离任务"}`}
-                </p>
-                <p>
-                  {repo.githubName
-                    ? `GitHub：${repo.githubName}，同步时复用已有登录`
-                    : repo.remoteCandidates?.length
-                      ? "存在多个 GitHub 远端，暂不自动选择协作目标。"
-                      : "本地模式，无需 GitHub 登录。"}
-                </p>
-              </div>
-            </details>
           )}
           {repo?.syncWarning && (
             <details className="mw-compact-notice">
@@ -753,8 +745,15 @@ export function App({
               {page === "attention" && (
                 <Attention
                   state={state}
-                  open={(id) => {
+                  open={(id, issueId) => {
                     navigate("inbox", id);
+                    setFocused(issueId);
+                    setReaderRequest(
+                      issueId
+                        ? { sequence: Date.now(), issueId, tab: "overview" }
+                        : undefined,
+                    );
+                    if (issueId) moveFocusToDetail();
                   }}
                 />
               )}
@@ -837,44 +836,56 @@ export function App({
                         </span>
                       </label>
                       <div>
-                        <button
-                          disabled={!selected.length || !!busy}
-                          onClick={() => void enqueue("triage")}
-                        >
-                          <Sparkles size={14} />
-                          分诊 / 预检
-                        </button>
-                        <button
-                          disabled={!selected.length || !!busy}
-                          onClick={() => void enqueue("investigate")}
-                        >
-                          <Search size={14} />
-                          调查
-                        </button>
-                        <select
-                          aria-label="更多批量操作"
-                          value=""
-                          disabled={!selected.length || !!busy}
-                          onChange={(e) =>
-                            e.target.value &&
-                            void enqueue(
-                              e.target.value.replace("rerun:", "") as JobKind,
-                              selected,
-                              e.target.value.startsWith("rerun:"),
-                            )
+                        <BatchWorkflow
+                          issues={issues.filter((issue) =>
+                            selected.includes(issue.id),
+                          )}
+                          busy={!!busy}
+                          act={(path, data, message) =>
+                            action("workflow-batch", path, data, message)
                           }
-                        >
-                          <option value="">更多操作</option>
-                          <option value="fix">修复与验证</option>
-                          <option value="preflight">PR 预检</option>
-                          <option value="review">PR 审查</option>
-                          <option value="rerun:review">
-                            重新运行 PR 审查（原始 PR）
-                          </option>
-                          <option value="validate">验证变更</option>
-                          <option value="ci">诊断 CI</option>
-                          <option value="docs">文档维护</option>
-                        </select>
+                        />
+                        <details>
+                          <summary>高级操作</summary>
+                          <button
+                            disabled={!selected.length || !!busy}
+                            onClick={() => void enqueue("triage")}
+                          >
+                            <Sparkles size={14} />
+                            分诊 / 预检
+                          </button>
+                          <button
+                            disabled={!selected.length || !!busy}
+                            onClick={() => void enqueue("investigate")}
+                          >
+                            <Search size={14} />
+                            调查
+                          </button>
+                          <select
+                            aria-label="更多批量操作"
+                            value=""
+                            disabled={!selected.length || !!busy}
+                            onChange={(e) =>
+                              e.target.value &&
+                              void enqueue(
+                                e.target.value.replace("rerun:", "") as JobKind,
+                                selected,
+                                e.target.value.startsWith("rerun:"),
+                              )
+                            }
+                          >
+                            <option value="">更多操作</option>
+                            <option value="fix">修复与验证</option>
+                            <option value="preflight">PR 预检</option>
+                            <option value="review">PR 审查</option>
+                            <option value="rerun:review">
+                              重新运行 PR 审查（原始 PR）
+                            </option>
+                            <option value="validate">验证变更</option>
+                            <option value="ci">诊断 CI</option>
+                            <option value="docs">文档维护</option>
+                          </select>
+                        </details>
                       </div>
                     </div>
                     <div className="mw-issues" id="mw-inbox-items">
@@ -1246,12 +1257,11 @@ export function App({
                   }
                 />
               )}
-              {(page === "settings" || page === "repository-settings") && (
+              {page === "settings" && <GlobalSettings native={host} />}
+              {page === "repository-settings" && (
                 <SettingsView
                   key={page}
-                  scope={
-                    page === "repository-settings" ? "repository" : "global"
-                  }
+                  scope="repository"
                   state={state}
                   repoId={repoId}
                   busy={!!busy}
@@ -1321,7 +1331,12 @@ export function App({
                       if (r) {
                         setConnectionResults(r.results);
                         setRepoInput(
-                          state.repos.map((r) => r.fullName).join("\n"),
+                          state.repos
+                            .map((r) =>
+                              r.mode === "github" ? r.fullName : r.githubName,
+                            )
+                            .filter((n): n is string => !!n)
+                            .join("\n"),
                         );
                         setConnect(true);
                       }
@@ -1508,23 +1523,35 @@ export function App({
             onClick={(e) => e.stopPropagation()}
             onSubmit={async (e) => {
               e.preventDefault();
-              const r = await action(
-                "connect",
-                "/sync-many",
-                {
-                  names: repoInput
-                    .split(/[\n,，]+/)
-                    .map((n) => n.trim())
-                    .filter(Boolean),
-                },
-                "仓库连接检查完成",
-              );
-              if (r) {
-                setConnectionResults(r.results);
-                const connected = r.results.find(
-                  (item: { repoId?: string }) => item.repoId,
-                );
+              const names = repoInput
+                .split(/[\n,，]+/)
+                .map((n) => n.trim())
+                .filter(Boolean);
+              if (busy || !names.length) return;
+              setBusy("connect");
+              try {
+                const results: {
+                  fullName: string;
+                  repoId?: string;
+                  error?: string;
+                }[] = [];
+                for (let i = 0; i < names.length; i += 20)
+                  results.push(
+                    ...(
+                      await request("/sync-many", {
+                        names: names.slice(i, i + 20),
+                      })
+                    ).results,
+                  );
+                await refresh();
+                setConnectionResults(results);
+                setToast({ text: "仓库连接检查完成" });
+                const connected = results.find((item) => item.repoId);
                 if (connected) navigate(page, connected.repoId);
+              } catch (e) {
+                setToast({ text: (e as Error).message, error: true });
+              } finally {
+                setBusy("");
               }
             }}
           >
@@ -1679,6 +1706,7 @@ export function App({
         render={renderStage}
         track={renderTrack}
         evidence={renderLinkedEvidence}
+        context={renderProcessingAdvice}
         actions={renderWorkflowActions}
       />
     );
@@ -1723,29 +1751,37 @@ export function App({
           。当前计划请返回当前阶段查看。
         </p>
       ) : (
-        <IssuePlanning
-          start={(kind, expectedVersion) =>
-            action(
-              "workflow",
-              "/jobs",
-              {
-                issueIds: [displayedIssue.id],
-                kind,
-                expectedVersion,
-                goal: "resolve",
-                instructions: assistantInstructions[displayedIssue.id],
-              },
-              "已按确认计划开始实施",
-            )
-          }
-          issue={displayedIssue}
-          job={job}
-          busy={
-            !!busy ||
-            history.some((j) => ["running", "queued"].includes(j.status))
-          }
-          act={(path, data, message) => action("workflow", path, data, message)}
-        />
+        <>
+          {renderProcessingAdvice(true)}
+          <details open={!displayedIssue.orchestration?.draft}>
+            <summary>高级操作</summary>
+            <IssuePlanning
+              start={(kind, expectedVersion) =>
+                action(
+                  "workflow",
+                  "/jobs",
+                  {
+                    issueIds: [displayedIssue.id],
+                    kind,
+                    expectedVersion,
+                    goal: "resolve",
+                    instructions: assistantInstructions[displayedIssue.id],
+                  },
+                  "已按确认计划开始实施",
+                )
+              }
+              issue={displayedIssue}
+              job={job}
+              busy={
+                !!busy ||
+                history.some((j) => ["running", "queued"].includes(j.status))
+              }
+              act={(path, data, message) =>
+                action("workflow", path, data, message)
+              }
+            />
+          </details>
+        </>
       );
     if (stage === "work")
       return (
@@ -1943,6 +1979,26 @@ export function App({
       );
 
     return null;
+  }
+
+  function renderProcessingAdvice(full = false) {
+    if (!displayedIssue) return null;
+    const card = (
+      <WorkflowCard
+        issue={displayedIssue}
+        history={jobs.filter((j) => j.issueId === displayedIssue.id)}
+        busy={!!busy}
+        act={(path, data, message) => action("workflow", path, data, message)}
+      />
+    );
+    return full || displayedIssue.orchestration ? (
+      card
+    ) : (
+      <details>
+        <summary>处理建议与进度</summary>
+        {card}
+      </details>
+    );
   }
 
   function renderLinkedEvidence(selectedJob?: typeof job) {

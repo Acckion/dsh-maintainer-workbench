@@ -8,6 +8,7 @@ import { kinds, type Job } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { processingTimeline } from "../application/timeline.ts";
+import { SettingsConflictError } from "../application/tasks.ts";
 export const API = "/maintainer/api";
 export function send(
   res: ServerResponse,
@@ -51,6 +52,14 @@ export function handler(
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.slice(API.length);
     try {
+      if (req.method === "GET" && path === "/models") {
+        send(res, 200, await workbench.models());
+        return;
+      }
+      if (req.method === "GET" && path === "/settings/global") {
+        send(res, 200, workbench.globalSettings());
+        return;
+      }
       if (req.method === "GET" && path === "/github/connection") {
         send(res, 200, await workbench.githubConnection());
         return;
@@ -168,6 +177,13 @@ export function handler(
         return;
       }
       const input = await body(req);
+      if (path === "/settings/global") {
+        const p = z.object({ settings: z.unknown(), revision: z.string().length(64) }).parse(input);
+        await workbench.validateModelSettings(p.settings);
+        workbench.updateSettings(p.settings, p.revision);
+        send(res, 200, workbench.globalSettings());
+        return;
+      }
       if (path === "/item-draft") {
         const p = z
           .object({
@@ -210,6 +226,33 @@ export function handler(
             : undefined);
         if (!itemId) throw new Error("版本校验需要明确的事项标识");
         workbench.processing.assertVersion(itemId, version.expectedVersion);
+      }
+      if (path === "/workflow/analyze") {
+        const p = z.object({ issueIds: z.array(z.string()).min(1).max(workbench.store.settings().maxJobsPerBatch), refresh: z.boolean().optional() }).parse(input);
+        send(res, 200, workbench.orchestration.analyze(p.issueIds, p.refresh));
+        return;
+      }
+      if (path === "/workflow/start-batch") {
+        const p = z.object({ items: z.array(z.object({ issueId: z.string(), inputKey: z.string(), plan: z.unknown(), expectedVersion: z.number().int().nonnegative().optional() })).min(1).max(workbench.store.settings().maxJobsPerBatch) }).parse(input);
+        send(res, 200, workbench.orchestration.startBatch(p.items));
+        return;
+      }
+      if (path === "/workflow/wait-author") {
+        workbench.orchestration.waitAuthor(z.object({ id: z.string() }).parse(input).id);
+        send(res, 200, { ok: true });
+        return;
+      }
+      if (path === "/workflow/start") {
+        const p = z.object({ issueId: z.string(), inputKey: z.string(), plan: z.unknown(), route: z.enum(kinds).optional(), sourceJobId: z.string().optional(), feedback: z.string().max(4000).optional() }).parse(input);
+        const result = workbench.orchestration.start(p.issueId, p.inputKey, p.plan, p.route, p.sourceJobId, p.feedback);
+        send(res, "error" in result && result.error ? 400 : 200, result);
+        return;
+      }
+      if (["/workflow/pause", "/workflow/cancel", "/workflow/resume", "/workflow/retry"].includes(path)) {
+        const p = z.object({ issueId: z.string() }).parse(input);
+        const result = path.endsWith("retry") ? workbench.orchestration.retry(p.issueId) : path.endsWith("resume") ? workbench.orchestration.resume(p.issueId) : workbench.orchestration.pause(p.issueId, path.endsWith("cancel"));
+        send(res, 200, result ?? { ok: true });
+        return;
       }
       if (path === "/workspaces/cleanup" || path === "/workspaces/recover") {
         const p = z
@@ -322,7 +365,17 @@ export function handler(
           200,
           await workbench.syncMany(
             z
-              .object({ names: z.array(z.string().max(250)).min(1).max(20) })
+              .object({
+                names: z
+                  .array(
+                    z
+                      .string()
+                      .max(250, "单个仓库地址不能超过 250 个字符")
+                      .min(1, "仓库地址不能为空"),
+                  )
+                  .min(1, "请至少输入 1 个仓库")
+                  .max(20, "一次最多 20 个仓库，请分批连接"),
+              })
               .parse(input).names,
           ),
         );
@@ -610,18 +663,18 @@ export function handler(
           .object({ repoId: z.string(), policy: z.unknown() })
           .parse(input);
         workbench.updatePolicy(p.repoId, p.policy);
-      } else if (path === "/settings") workbench.updateSettings(input);
+      } else if (path === "/settings") { await workbench.validateModelSettings(input); workbench.updateSettings(input); }
       else {
         send(res, 404, { error: "接口不存在" });
         return;
       }
       send(res, 200, { ok: true });
     } catch (error) {
-      send(res, error instanceof ProcessingConflictError ? 409 : 400, {
+      send(res, error instanceof ProcessingConflictError || error instanceof SettingsConflictError ? 409 : 400, {
         code:
           error instanceof ProcessingConflictError
             ? error.code
-            : "INVALID_REQUEST",
+            : error instanceof SettingsConflictError ? "SETTINGS_CONFLICT" : "INVALID_REQUEST",
         error:
           error instanceof z.ZodError
             ? `输入格式错误：${error.issues.map((i) => i.path.join(".") + " " + i.message).join("; ")}`

@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
   ServiceBase,
   type Enqueue,
+  type EnqueueOptions,
   type ServiceDependencies,
 } from "../application/service.ts";
 import { lightweight, type FindingDecision } from "../core/artifacts.ts";
@@ -21,9 +22,16 @@ import {
 import { validationAcceptance } from "../core/validation-acceptance.ts";
 import { validationInstructions } from "../core/validation-context.ts";
 import { stageBlocker } from "../workflow/actions.ts";
-const settingsSchema = z.object({
+const modelChoiceSchema = z.object({
+  provider: z.string().min(1).max(200), model: z.string().min(1).max(500),
+  reasoningEffort: z.string().min(1).max(100).optional(),
+}).strict();
+export const settingsSchema = z.object({
+  nativeDefaultModel: modelChoiceSchema.optional(),
+  stageModels: z.record(z.enum(kinds), modelChoiceSchema).default({}),
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
   autoPreflight: z.boolean().default(false),
+  autoReview: z.boolean().default(false),
   triageMaxTokens: z.number().int().min(500).max(8000).default(1800),
   concurrency: z.number().int().min(1).max(4),
   maxJobsPerBatch: z.number().int().min(1).max(50),
@@ -57,14 +65,7 @@ export class TaskService extends ServiceBase {
   enqueue(
     issueIds: string[],
     kind: JobKind,
-    options: {
-      sourceJobId?: string;
-      instructions?: string;
-      forceNew?: boolean;
-      goal?: "resolve";
-      goalId?: string;
-      resumeInput?: boolean;
-    } = {},
+    options: EnqueueOptions = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
     const ids = [
@@ -87,15 +88,8 @@ export class TaskService extends ServiceBase {
         !(issue.organizeMode === "audit" && kind === "investigate")
       )
         throw new Error("无 Git 提交的目录当前仅支持只读仓库检查");
-      if (
-        !lightweight(kind) &&
-        repo.mode === "local" &&
-        repo.dirty &&
-        !(issue.organizeMode === "audit" && kind === "investigate")
-      )
-        throw new Error(
-          "当前工作区有未提交修改；隔离修改任务需先提交，只读检查仍可使用",
-        );
+      // Code tasks run in a fresh worktree pinned to baseSha. The source
+      // checkout's index and uncommitted files are never task input.
       if (
         (["preflight", "ci"].includes(kind) ||
           (kind === "review" && !options.sourceJobId)) &&
@@ -137,6 +131,11 @@ export class TaskService extends ServiceBase {
           "awaiting_review",
           "approved",
           ...(options.resumeInput ? ["waiting_input"] : []),
+          ...(options.workflowRunId &&
+          source.kind === "review" &&
+          ["fix", "docs"].includes(kind)
+            ? ["rejected"]
+            : []),
         ].includes(source.status)
       )
         throw new Error("交接来源必须是同一事项的已完成产物");
@@ -145,7 +144,7 @@ export class TaskService extends ServiceBase {
           revision(candidates[0].issue, candidates[0].repo, source.kind) &&
         !(
           source.kind === "review" &&
-          ["review", "fix", "investigate", "ci"].includes(kind)
+          ["review", "fix", "docs", "investigate", "ci"].includes(kind)
         )
       )
         throw new Error("来源产物已过期，请先重新分析");
@@ -168,6 +167,7 @@ export class TaskService extends ServiceBase {
           .find(
             (j) =>
               (!j.caseId || j.caseId === issue.processing?.id) &&
+              j.workflowRunId === options.workflowRunId &&
               j.sourceJobId === options.sourceJobId &&
               (j.instructions ?? "") === (options.instructions ?? "") &&
               ![
@@ -240,6 +240,7 @@ export class TaskService extends ServiceBase {
         }
         const id = randomUUID();
         const job: Job = {
+          workflowRunId: options.workflowRunId,
           goal: options.goal,
           goalId: options.goal ? (options.goalId ?? id) : undefined,
           handoff,
@@ -316,6 +317,7 @@ export class TaskService extends ServiceBase {
       instructions: job.instructions,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
       forceNew: true,
     });
     for (const created of result.created)
@@ -372,6 +374,7 @@ export class TaskService extends ServiceBase {
       instructions: job.instructions,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
     });
   }
   resume(id: string): { created: string[]; reused: string[] } {
@@ -391,6 +394,7 @@ export class TaskService extends ServiceBase {
         instructions: job.instructions,
         goal: job.goal,
         goalId: job.goalId,
+        workflowRunId: job.workflowRunId,
       });
     }
     if (
@@ -418,6 +422,7 @@ export class TaskService extends ServiceBase {
         JSON.stringify(responses.map((r) => r.values)),
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
     });
   }
   async review(
@@ -587,10 +592,21 @@ export class TaskService extends ServiceBase {
     });
     this.store.audit("finding.decision", `${ids.join(", ")}: ${decision}`, id);
   }
-  updateSettings(input: unknown): void {
+  settingsRevision(): string {
+    return createHash("sha256")
+      .update(JSON.stringify(settingsSchema.parse(this.store.settings())))
+      .digest("hex");
+  }
+  updateSettings(input: unknown, expectedRevision?: string): void {
     const settings = settingsSchema.parse(input);
+    if (expectedRevision !== undefined && expectedRevision !== this.settingsRevision())
+      throw new SettingsConflictError();
     this.store.put("settings", { ...settings, id: "main" });
     this.store.audit("settings.updated", "更新并发、批量上限和模型配置");
     if (this.autoStart) this.pump();
   }
+}
+
+export class SettingsConflictError extends Error {
+  constructor() { super("全局设置已在另一处修改。请重新加载最新设置后再保存；当前草稿仍保留。"); }
 }

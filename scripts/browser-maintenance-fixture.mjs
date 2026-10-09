@@ -11,6 +11,7 @@ import {git} from '../src/core/git.ts';
 import { Store } from '../src/core/store.ts';
 import { Workbench, revision } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
+import { planInputKey } from '../src/core/change-plan.ts';
 import { handler, localRejection } from '../src/server/http.ts';
 import { seedFixture, fixtureRunner, fixtureAnalysis } from '../tests/support/fixtures.ts';
 import { executionRecord, saveExecutionLog } from '../src/core/execution-evidence.ts';
@@ -22,6 +23,8 @@ try {
     const longTitleItem=store.issues()[0];store.put('issues',{...longTitleItem,url:'https://github.com/fixture/queue/issues/128'});
     const github = new GitHub('', async () => { throw Error('Unexpected external request'); });
     const w = new Workbench(store, dir, fixtureRunner, github, false), repo = store.repos()[0];
+    const planned = {...store.issues()[0],id:`${repo.id}#140`,number:140,title:'Workflow fixture',url:'https://github.com/fixture/queue/issues/140'};
+    store.put('issues',{...planned,orchestration:{draft:{category:'feature',goal:'Fixture orchestrated sync',scope:'Sync only',reproduction:'',expected:'',actual:'',acceptanceCriteria:['Offline operation queues'],route:'fix',missingInfo:[],sources:[{field:'goal',source:planned.url,detail:'Fixture issue requirement'}],inputKey:planInputKey(planned,repo),generatedAt:new Date().toISOString()}}});
     const pr = { ...store.issues()[3], type: 'pr', headSha: 'b'.repeat(40), prBaseSha: repo.headSha }; store.put('issues', pr);
     const artifact = { schemaVersion: 1, stage: 'review', summary: 'Fixture review', coverage: 'Fixture only', evidence: [], nextSteps: [], responseDraft: '', verdict: 'changes_requested', blockers: [], findings: [{ id: 'f1', title: 'Fixture regression', severity: 'P1', path: 'sum.ts', line: 1, trigger: 'addition', evidence: 'wrong result', recommendation: 'fix addition' }] };
     const job = { id: 'review-current', repoId: repo.id, issueId: pr.id, issueSnapshot: pr, kind: 'review', status: 'awaiting_review', revision: revision(pr, repo, 'review'), baseSha: pr.headSha, artifact, result: fixtureAnalysis(pr, 'review'), attempt: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), prContext: { headSha: pr.headSha, baseSha: pr.prBaseSha, headRef: 'feature', baseRef: 'main', headRepo: repo.fullName, draft: false, merged: false, mergeable: true, checks: [], reviews: [], warnings: [] }, handoff: [{ id: 'review-old', kind: 'review', revision: 'old', artifact }], findingFollowups: [{ sourceJobId: 'review-old', findingId: 'f1', status: 'unverified', evidence: 'Old finding needs current-version evidence' }] };
@@ -120,8 +123,24 @@ try {
       await page.getByText('已按确认计划开始实施',{exact:true}).waitFor();
       assert.equal(store.jobs().find(item => item.kind === 'fix')?.issueSnapshot.plan?.goal, 'Fixture offline sync');
 
+      await openIssue('fixture/queue#140');
+      await selectPanel('Plan');
+      const planCard = page.getByRole('region',{name:'处理建议与进度',exact:true});
+      await planCard.getByText('Fixture orchestrated sync',{exact:true}).waitFor();
+      assert.equal(await planCard.getByRole('textbox').count(),0);
+      await planCard.screenshot({path:join(dir,`workflow-plan-${width}.png`)});
+      await planCard.getByRole('button',{name:'确认并开始',exact:true}).click();
+      await page.getByText('已确认计划，系统将连续执行并整理最终审核',{exact:true}).waitFor();
+      assert.equal(store.get('issues',planned.id).orchestration.run.status,'running');
+      assert.equal(store.jobs().find(item=>item.issueId===planned.id).issueSnapshot.plan.goal,'Fixture orchestrated sync');
+      await planCard.getByRole('button',{name:'取消',exact:true}).click();
+      await page.getByText('已取消执行，产物保留',{exact:true}).waitFor();
+      assert.equal(store.get('issues',planned.id).orchestration.run.status,'cancelled');
+
       await openIssue('fixture/queue#131');
       await selectPanel('Plan');
+      const advanced=page.getByText('高级操作',{exact:true}).last();
+      if (!await advanced.locator('..').evaluate(el=>el.open)) await advanced.click();
       await page.getByText(/补充信息与追问记录/).click();
       await page.getByLabel('已提出的问题（每行一项）', { exact: true }).fill('Which version?\nReproduction steps?');
       await page.getByRole('button', { name: '记录已提出的追问', exact: true }).click();
@@ -130,10 +149,11 @@ try {
       await page.getByRole('button', { name: '记录已提出的追问', exact: true }).click();
       await page.getByLabel('已提出的问题（每行一项）', { exact: true }).evaluate(element => element.blur());
       await page.getByRole('button', { name: '同步仓库', exact: true }).click();
-      await page.getByText(/有新回复，待重新评估/).waitFor();
+      await page.getByRole('heading',{name:'有新回复，待重新评估',exact:true}).waitFor();
       assert.equal(store.get('issues', 'fixture/queue#131').informationRequests.length, 1);
-      await page.getByRole('button', { name: '信息已足够', exact: true }).click();
-      await page.getByText('维护者确认信息已足够', { exact: false }).waitFor();
+      await page.getByRole('region',{name:'处理建议与进度',exact:true}).getByRole('button', { name: '信息已足够', exact: true }).click();
+      await page.getByText('已开始重新评估补充信息', { exact: true }).waitFor();
+      assert.equal(store.get('issues','fixture/queue#131').informationRequests[0].state,'fulfilled');
 
       await openIssue('fixture/queue#132');
       const resume=page.getByRole('button',{name:'等待填写补充信息',exact:true});
@@ -211,6 +231,7 @@ try {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.screenshot({ path: join(dir, `maintenance-${width}.png`), fullPage: true });
       await page.getByRole('button',{name:'全局设置',exact:true}).click();
+      await page.getByRole('button',{name:'工作区',exact:true}).click();
       await page.getByRole('heading',{name:'任务工作区',exact:true}).waitFor();
       await page.getByRole('button',{name:'检查与预览',exact:true}).click();
       await page.getByLabel('工作区处置预览',{exact:true}).waitFor();

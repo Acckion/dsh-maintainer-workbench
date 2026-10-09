@@ -25,6 +25,16 @@ test('persistent transport errors redact secrets and explain network rather than
   });
 });
 
+test('certificate interception failures name the actionable system CA workarounds', async () => {
+  await assert.rejects(githubRequest((async () => { throw new TypeError('fetch failed', { cause: { code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' } }); }) as typeof fetch, 'https://api.github.com/user', {}), error => {
+    assert.equal((error as { kind: string }).kind, 'network');
+    assert.match((error as Error).message, /证书验证失败/);
+    assert.match((error as Error).message, /NODE_OPTIONS=--use-system-ca/);
+    assert.match((error as Error).message, /NODE_EXTRA_CA_CERTS/);
+    return true;
+  });
+});
+
 test('writes and cancelled reads are not retried', async () => {
   for (const init of [{ method: 'POST' }, { signal: AbortSignal.abort() }]) {
     let calls = 0;

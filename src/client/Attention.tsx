@@ -6,7 +6,7 @@ export function Attention({
   open,
 }: {
   state: Snapshot;
-  open: (repoId: string) => void;
+  open: (repoId: string, issueId?: string) => void;
 }) {
   return (
     <div className="mw-attention-grid">
@@ -18,18 +18,15 @@ export function Attention({
           issue: i,
           job: state.jobs.find((j) => j.issueId === i.id),
         }));
-        const needs = latest.filter(
-          ({ issue, job }) =>
-            issue.informationRequests?.some(
-              (r) => r.state === "reply_received",
-            ) ||
-            ["needs_info", "decision", "blocked", "review"].includes(
-              issue.processing?.phase ?? "",
-            ) ||
-            ["failed", "awaiting_review"].includes(job?.status ?? "") ||
-            (validationState(job?.artifact)?.state !== undefined &&
-              validationState(job?.artifact)?.state !== "passed"),
-        );
+        const needs = latest.filter(({ issue, job }) => {
+          const status = issue.orchestrationView?.status;
+          if (status && ["running", "waiting", "deferred"].includes(status)) return false;
+          return !!issue.orchestration?.draft || !!issue.orchestration?.run ||
+            issue.informationRequests?.some((r) => r.state === "reply_received") ||
+            ["needs_info", "decision", "blocked", "review"].includes(issue.processing?.phase ?? "") ||
+            ["failed", "awaiting_review", "waiting_input", "waiting_environment"].includes(job?.status ?? "") ||
+            (job?.kind === "validate" && validationState(job.artifact)?.state !== "passed");
+        });
         return (
           <section className="mw-settings-card" key={repo.id}>
             <div className="mw-section-title">{repo.fullName}</div>
@@ -38,11 +35,10 @@ export function Attention({
             </p>
             {needs.slice(0, 8).map(({ issue, job }) => (
               <div className="mw-stage-event" key={issue.id}>
-                <strong>
-                  #{issue.number} {issue.title}
-                </strong>
+                <button className="mw-text-button" onClick={() => open(repo.id, issue.id)}>#{issue.number} {issue.title}</button>
+                <strong>{issue.orchestrationView?.status === "plan" ? "待确认计划" : issue.orchestrationView?.status === "review" ? "待最终审核" : "需要补充或解除阻塞"}</strong>
                 <p>
-                  {job?.error ?? issue.processing?.reason ?? "变更产物等待审核"}
+                  {issue.orchestrationView?.reason ?? job?.error ?? issue.processing?.reason ?? "变更产物等待审核"}
                 </p>
               </div>
             ))}
@@ -78,6 +74,7 @@ export function RepositoryPolicy({
     autoPreflight:
       defaults.autoPreflight ?? state.settings.autoPreflight ?? false,
     autoTriage: defaults.autoTriage,
+    autoReview: defaults.autoReview ?? false,
     syncIntervalMinutes: defaults.syncIntervalMinutes,
     timeoutMs: defaults.timeoutMs,
     maxTokens: defaults.maxTokens,
@@ -96,7 +93,7 @@ export function RepositoryPolicy({
           checked={value.autoTriage}
           onChange={(e) => setValue({ ...value, autoTriage: e.target.checked })}
         />{" "}
-        自动分诊新增或更新的 Issue
+        自动整理新增或更新 Issue 的处理建议与计划草稿
       </label>
       <label>
         <input
@@ -106,8 +103,9 @@ export function RepositoryPolicy({
             setValue({ ...value, autoPreflight: e.target.checked })
           }
         />{" "}
-        自动快速预检新增或更新的 PR
+        自动整理新增或更新 PR 的预检与审查建议
       </label>
+      <label><input type="checkbox" checked={value.autoReview} onChange={e=>setValue({...value,autoReview:e.target.checked})} /> 自动审查预检已就绪的 PR（只读，不自动修订或发布）</label>
       <label>
         同步记录上限（0 表示无上限）
         <input

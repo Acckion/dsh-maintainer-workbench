@@ -170,6 +170,7 @@ export interface Repo {
   policy?: Pick<
     Settings,
     | "syncLimit"
+    | "autoReview"
     | "autoPreflight"
     | "autoTriage"
     | "syncIntervalMinutes"
@@ -181,6 +182,7 @@ export interface Repo {
   fullName: string;
   description: string;
   defaultBranch: string;
+  localBranch?: string;
   headSha: string;
   localPath: string;
   mode: "github" | "local";
@@ -207,6 +209,11 @@ export interface Issue {
   draft?: boolean;
   processing?: import("../domain/processing.ts").ProcessingCase;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
+  orchestration?: import("./orchestration.ts").WorkflowState;
+  orchestrationView?: {
+    status: "plan" | "running" | "blocked" | "review" | "waiting" | "stale" | "deferred";
+    reason: string;
+  };
   remotePRs?: import("./remote-progress.ts").RemotePR[];
   actions?: import("./remote-progress.ts").ActionsSnapshot;
   remoteWarning?: string;
@@ -250,6 +257,7 @@ export interface Job {
   goal?: "resolve";
   goalId?: string;
   goalPauseReason?: string;
+  workflowRunId?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
   evidenceGate?: { allowed: boolean; reasons: string[] };
@@ -332,8 +340,11 @@ export interface Audit {
   detail: string;
 }
 export interface Settings {
+  nativeDefaultModel?: ModelChoice;
+  stageModels?: Partial<Record<JobKind, ModelChoice>>;
   syncLimit?: number;
   autoPreflight?: boolean;
+  autoReview?: boolean;
   triageMaxTokens?: number;
   concurrency: number;
   maxJobsPerBatch: number;
@@ -346,7 +357,26 @@ export interface Settings {
   syncIntervalMinutes: number;
   autoTriage: boolean;
 }
+export interface ModelChoice {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+/** Credential-free catalog projected by the same Harness API as its composer. */
+export interface HostModelCatalog {
+  default: ModelChoice;
+  groups: readonly {
+    id: string;
+    name: string;
+    models: readonly { id: string; name: string; reasoning?: {
+      efforts: readonly { id: string; name: string; description?: string }[];
+      defaultEffort?: string;
+    } }[];
+  }[];
+  failures: readonly { id: string; name: string; message: string }[];
+}
 export interface HostStatus {
+  providers?: readonly { id: string; name: string }[];
   contextServices?: {
     tokenMeter: boolean;
     pruner: boolean;
@@ -374,6 +404,12 @@ export interface Snapshot {
     host?: HostStatus;
   };
   version: string;
+}
+/** Small settings projection: excludes repository contents, jobs and credentials. */
+export interface GlobalSettingsSnapshot {
+  settings: Settings;
+  capabilities: Snapshot["capabilities"];
+  revision: string;
 }
 export type Runner = (input: {
   repo: Repo;

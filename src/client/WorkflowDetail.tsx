@@ -25,6 +25,7 @@ interface Props {
   ) => ReactNode;
   actions: (job?: Job, actions?: ProcessingTimeline["actions"]) => ReactNode;
   evidence: (job?: Job) => ReactNode;
+  context: () => ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
 }
 type Selection = StageSelection;
@@ -62,6 +63,7 @@ export function WorkflowDetail({
   render,
   actions,
   evidence,
+  context,
   track,
 }: Props) {
   const history = jobs.filter((j) => j.issueId === issue.id);
@@ -287,6 +289,7 @@ export function WorkflowDetail({
                   render={render}
                   track={track}
                   evidence={evidence}
+                  context={context}
                   progress={progress}
                   actions={
                     !timeline.historical &&

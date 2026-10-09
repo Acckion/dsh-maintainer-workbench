@@ -29,6 +29,7 @@ interface Props {
   ) => ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
   evidence?: (job?: Job) => ReactNode;
+  context?: () => ReactNode;
   progress?: string;
   actions?: ReactNode;
 }
@@ -46,6 +47,7 @@ export function StagePanel({
   render,
   track,
   evidence,
+  context,
   progress,
   actions,
 }: Props) {
@@ -143,6 +145,13 @@ export function StagePanel({
           {progress}
         </p>
       )}
+      {!viewingHistory &&
+        !(
+          selected.stage === "decision" &&
+          issue.type === "issue" &&
+          timeline.profile.category !== "question"
+        ) &&
+        context?.()}
       {selected.status === "future" && !attempt ? (
         <>
           <p>此阶段尚未执行；点击节点不会启动任务。</p>

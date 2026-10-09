@@ -13,7 +13,7 @@ export interface TaskGroup {
   state: TaskFilter;
 }
 const lightweight = (job: Job) => ["triage", "preflight"].includes(job.kind);
-/** Group only persisted source chains, never unrelated runs on the same Issue. */
+/** Group explicit workflows/goals and persisted source chains, preserving independent attempts. */
 export function taskGroups(jobs: Job[], includeQuick = false): TaskGroup[] {
   const byId = new Map(jobs.map((job) => [job.id, job]));
   const root = (job: Job): string => {
@@ -49,7 +49,7 @@ export function taskGroups(jobs: Job[], includeQuick = false): TaskGroup[] {
   const groups = new Map<string, Job[]>();
   for (const job of jobs) {
     if (!includeQuick && lightweight(job)) continue;
-    const id = job.goalId ?? root(job);
+    const id = job.workflowRunId ?? job.goalId ?? root(job);
     groups.set(id, [...(groups.get(id) ?? []), job]);
   }
   return [...groups]

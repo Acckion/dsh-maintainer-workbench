@@ -176,6 +176,7 @@ export class Store {
   }
   settings(): Settings {
     return {
+      stageModels: {},
       syncLimit: 1000,
       autoPreflight: false,
       triageMaxTokens: 1800,

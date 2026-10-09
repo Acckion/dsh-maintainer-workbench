@@ -30,7 +30,11 @@ test('batch connection deduplicates names, isolates identical issue numbers and 
     assert.deepEqual(new Set(store.jobs().map(j => j.repoId)), new Set(['Team/one', 'Team/two']));
     await workbench.syncMany(['team/one']);
     assert.equal(store.issues().length, 2);
-    await assert.rejects(workbench.syncMany(['team/one', 'invalid']), /有效/);
-    assert.equal(calls.length, 4);
+    const mixed = await workbench.syncMany(['team/one', 'invalid']);
+    assert.equal(mixed.results.length, 2);
+    assert.equal(mixed.results[0].error, undefined);
+    assert.equal(mixed.results[1].fullName, 'invalid');
+    assert.match(mixed.results[1].error!, /不是有效的/);
+    assert.equal(calls.at(-1), 'team/one');
   } finally { source.close(); await workbench.close(); }
 });
