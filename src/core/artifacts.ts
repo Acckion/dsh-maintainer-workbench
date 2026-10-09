@@ -1,7 +1,7 @@
-import { draftSchema, planningGuidance } from "./change-plan.ts";
 import { z } from "zod";
 import { inputRequestSchema } from "../domain/input.ts";
 import { stagePolicies } from "../workflow/stages.ts";
+import { draftSchema, planningGuidance } from "./change-plan.ts";
 import type { Analysis, JobKind } from "./types.ts";
 const text = z.string().max(6000);
 const list = z.array(text).max(30);
@@ -193,9 +193,7 @@ export function withoutExecutedTests(artifact: Artifact): Artifact {
     : artifact;
 }
 export function artifactPrompt(kind: JobKind): string {
-  const planning = ["triage", "preflight", "investigate"].includes(kind)
-    ? planningGuidance
-    : "";
+  const planning = ["triage", "preflight", "investigate"].includes(kind) ? planningGuidance : "";
   const shapes: Record<JobKind, string> = {
     triage:
       "category:bug|feature|docs|question|maintenance, priority:P0|P1|P2|P3, labels:string[], module:string, impact:string, missingInfo:string[], duplicateOf:number|null, duplicateReason:string, route:needs_info|decision|investigate|implement|answer|track, routeReason:string",

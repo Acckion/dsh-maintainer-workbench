@@ -17,7 +17,7 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   const calls: any[] = []; let listener: any; const texts: string[] = []; const permissions: string[] = [];
   const ctx = {
     agentDefaultModel: { currentSelection: () => ({ ...selection }) },
-    llm: { listProviders: () => [{ id: selection.provider }] },
+    llm: { listProviders: () => [{ id: selection.provider }, {id:'configured'}], listModels:async()=>[{id:'cheap'},{id:'advanced'}], resolveModelInfo:async()=>({reasoning:{defaultEffort:'medium',efforts:[{id:'medium'},{id:'high'}]}}) },
     agentPresets: { defaultId: 'host-standard', resolve: async (id?: string) => ({ id: id ?? 'host-standard' }), mount: async (_: unknown, id: string) => { calls.at(-1).preset = id; } },
     permissionPresets: { resolve: (p: string) => permissions.push(p), set: () => {} },
     workspaceRegistry: { archiveSession:async(id:string)=>{calls.at(-1).archived=id;}, create: async (path: string) => ({ path, attachSession: async () => {} }) },
@@ -42,7 +42,13 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   w.enqueue([store.issues()[1].id], 'triage'); w.pump(); await w.drain();
   assert.deepEqual(calls[1].agentOptions, { ...selection, maxTokens: 1800 });
   assert.ok(texts.every(t => t.includes('Metadata routing only') && t.includes('sourceCodeRead')));
-  assert.deepEqual(permissions, ['read-only', 'read-only']);
+  w.updateSettings({...store.settings(),nativeDefaultModel:{provider:'configured',model:'cheap'},stageModels:{}});
+  w.enqueue([issue.id],'triage',{forceNew:true}); w.pump();await w.drain();
+  assert.deepEqual(calls[2].agentOptions,{provider:'configured',model:'cheap',reasoningEffort:'medium',maxTokens:1800});
+  w.updateSettings({...store.settings(),stageModels:{triage:{provider:'configured',model:'advanced',reasoningEffort:'high'}}});
+  w.enqueue([issue.id],'triage',{forceNew:true});w.pump();await w.drain();
+  assert.deepEqual(calls[3].agentOptions,{provider:'configured',model:'advanced',reasoningEffort:'high',maxTokens:1800});
+  assert.deepEqual(permissions, ['read-only', 'read-only','read-only','read-only']);
   await w.close();
 });
 

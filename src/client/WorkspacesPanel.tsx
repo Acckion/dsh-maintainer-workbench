@@ -1,9 +1,29 @@
 import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceInspection } from "../application/workspaces.ts";
 import type { WorkspaceRecord } from "../domain/workspaces.ts";
+import type { HostWorkspaces, HostWorkspace } from "./host-workspaces.ts";
 import { request } from "./api.ts";
 
-export function WorkspacesPanel() {
+export function WorkspacesPanel({host}: {host?:HostWorkspaces}) {
+  const [development, setDevelopment] = useState<readonly HostWorkspace[]>(host?.source.getSnapshot().items ?? []);
+  const [adding, setAdding] = useState(false), [addError, setAddError] = useState(""), [added,setAdded] = useState("");
+  useEffect(() => {
+    if (!host) return;
+    const refresh = () => setDevelopment(host.source.getSnapshot().items);
+    refresh(); return host.source.subscribe(refresh);
+  }, [host]);
+  const add = async () => {
+    if (!host || adding) return;
+    setAdding(true); setAddError(""); setAdded("");
+    try {
+      const path = await host.pickDirectory();
+      if (!path) return;
+      const workspace = await host.create({path});
+      setDevelopment(host.source.getSnapshot().items);
+      setAdded(`已添加 ${workspace.title}。插件将自动识别此目录，无需连接 GitHub。`);
+    } catch(e) {setAddError((e as Error).message);}
+    finally {setAdding(false);}
+  };
   const [items, setItems] = useState<WorkspaceRecord[]>([]),
     [preview, setPreview] = useState<WorkspaceInspection>(),
     [busy, setBusy] = useState(false),
@@ -32,8 +52,21 @@ export function WorkspacesPanel() {
     }
   };
   return (
-    <section className="mw-settings-card">
-      <h3>任务工作区</h3>
+    <div className="mw-workspace-settings">
+      <section className="mw-settings-card mw-development-workspaces">
+        <div className="mw-preference-row"><div className="mw-preference-copy"><span>开发工作区</span>
+          <small>添加到 Harness 的本地目录会自动被插件发现</small></div>
+          <button type="button" className="mw-button" disabled={!host || adding} onClick={()=>void add()}>{adding ? "正在添加…" : "添加工作区"}</button>
+        </div>
+        {!host && <p className="mw-muted">请在 Harness 原生插件中选择本地文件夹。</p>}
+        {host && !development.filter(workspace=>!items.some(task=>task.path===workspace.path)).length && <p className="mw-muted">尚未添加开发工作区。</p>}
+        {development.filter(workspace=>!items.some(task=>task.path===workspace.path)).map(workspace=><div className="mw-workspace-list-row" key={workspace.workspaceId}>
+          <strong>{workspace.title}</strong><span>{workspace.path}</span></div>)}
+        {added && <p role="status" className="mw-preference-footnote">{added}</p>}
+        {addError && <p role="alert">{addError}</p>}
+      </section>
+      <section className="mw-settings-card">
+      <h3>任务隔离目录</h3>
       <p>
         检查中断目录的所有权，或清理已结束的工作区。清理保留分支、补丁快照和执行证据。
       </p>
@@ -128,6 +161,6 @@ export function WorkspacesPanel() {
           </div>
         </div>
       )}
-    </section>
+    </section></div>
   );
 }

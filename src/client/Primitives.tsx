@@ -46,7 +46,7 @@ export function Tag({
   children: React.ReactNode;
   tone?: string;
 }) {
-  return <span className={`mw-tag ${tone}`}>{children}</span>;
+  return <span className={`mw-tag ${tone}`} title={typeof children === "string" ? children : undefined}>{children}</span>;
 }
 export function Empty({ title, text }: { title: string; text: string }) {
   return (

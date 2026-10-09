@@ -20,13 +20,17 @@ export function WorkflowCard({
   issue,
   history,
   busy,
-  act,
+  act: perform,
 }: {
   issue: Issue;
   history: Job[];
   busy: boolean;
   act: WorkflowAction;
 }) {
+  const act: WorkflowAction = (path, data, message) => perform(path, {
+    ...(data as Record<string, unknown>),
+    ...(path === "/workflow/analyze" ? {} : { expectedVersion: issue.processing?.version }),
+  }, message);
   const draft = issue.orchestration?.draft,
     run = issue.orchestration?.run;
   const {
@@ -78,7 +82,7 @@ export function WorkflowCard({
     setPlan(next);
     update({ plan: next, systemPlanInputKey: draft.inputKey });
   };
-  const status = issue.processingSuggestion?.status;
+  const status = issue.orchestrationView?.status;
   const start = async (
     route?: "fix" | "docs" | "investigate" | "review",
     sourceJobId?: string,
@@ -105,7 +109,7 @@ export function WorkflowCard({
       {draftError && <p role="alert">{draftError}</p>}
       <h3>{run ? "事项处理进度" : "系统处理建议"}</h3>
       <p>
-        {issue.processingSuggestion?.reason ??
+        {issue.orchestrationView?.reason ??
           "系统先整理已有材料、范围和验收草稿；只请你补充真正缺失的信息。"}
       </p>
       {run && (

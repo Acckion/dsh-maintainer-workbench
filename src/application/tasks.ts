@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ServiceBase,
   type Enqueue,
+  type EnqueueOptions,
   type ServiceDependencies,
 } from "../application/service.ts";
 import { lightweight, type FindingDecision } from "../core/artifacts.ts";
@@ -21,7 +22,13 @@ import {
 import { validationAcceptance } from "../core/validation-acceptance.ts";
 import { validationInstructions } from "../core/validation-context.ts";
 import { stageBlocker } from "../workflow/actions.ts";
-const settingsSchema = z.object({
+const modelChoiceSchema = z.object({
+  provider: z.string().min(1).max(200), model: z.string().min(1).max(500),
+  reasoningEffort: z.string().min(1).max(100).optional(),
+}).strict();
+export const settingsSchema = z.object({
+  nativeDefaultModel: modelChoiceSchema.optional(),
+  stageModels: z.record(z.enum(kinds), modelChoiceSchema).default({}),
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
   autoPreflight: z.boolean().default(false),
   autoReview: z.boolean().default(false),
@@ -58,15 +65,7 @@ export class TaskService extends ServiceBase {
   enqueue(
     issueIds: string[],
     kind: JobKind,
-    options: {
-      sourceJobId?: string;
-      instructions?: string;
-      forceNew?: boolean;
-      goal?: "resolve";
-      goalId?: string;
-      resumeInput?: boolean;
-      workflowRunId?: string;
-    } = {},
+    options: EnqueueOptions = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
     const ids = [
@@ -133,8 +132,8 @@ export class TaskService extends ServiceBase {
           "approved",
           ...(options.resumeInput ? ["waiting_input"] : []),
           ...(options.workflowRunId &&
-          ["docs", "fix"].includes(kind) &&
-          source.kind === "review"
+          source.kind === "review" &&
+          ["fix", "docs"].includes(kind)
             ? ["rejected"]
             : []),
         ].includes(source.status)
@@ -145,7 +144,7 @@ export class TaskService extends ServiceBase {
           revision(candidates[0].issue, candidates[0].repo, source.kind) &&
         !(
           source.kind === "review" &&
-          ["review", "fix", "investigate", "ci"].includes(kind)
+          ["review", "fix", "docs", "investigate", "ci"].includes(kind)
         )
       )
         throw new Error("来源产物已过期，请先重新分析");
@@ -168,8 +167,8 @@ export class TaskService extends ServiceBase {
           .find(
             (j) =>
               (!j.caseId || j.caseId === issue.processing?.id) &&
-              j.sourceJobId === options.sourceJobId &&
               j.workflowRunId === options.workflowRunId &&
+              j.sourceJobId === options.sourceJobId &&
               (j.instructions ?? "") === (options.instructions ?? "") &&
               ![
                 "failed",
@@ -186,7 +185,6 @@ export class TaskService extends ServiceBase {
           if (options.goal && !prior.goal)
             this.saveJob({
               ...prior,
-              workflowRunId: options.workflowRunId,
               goal: options.goal,
               goalId: options.goalId ?? prior.id,
             });
@@ -317,9 +315,9 @@ export class TaskService extends ServiceBase {
     const result = this.hooks.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
-      workflowRunId: job.workflowRunId,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
       forceNew: true,
     });
     for (const created of result.created)
@@ -374,9 +372,9 @@ export class TaskService extends ServiceBase {
     return this.hooks.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
-      workflowRunId: job.workflowRunId,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
     });
   }
   resume(id: string): { created: string[]; reused: string[] } {
@@ -394,9 +392,9 @@ export class TaskService extends ServiceBase {
         sourceJobId: job.sourceJobId,
         forceNew: true,
         instructions: job.instructions,
-        workflowRunId: job.workflowRunId,
         goal: job.goal,
         goalId: job.goalId,
+        workflowRunId: job.workflowRunId,
       });
     }
     if (
@@ -422,9 +420,9 @@ export class TaskService extends ServiceBase {
         (job.instructions ?? "") +
         "\nMaintainer supplied input (use only within accepted scope):\n" +
         JSON.stringify(responses.map((r) => r.values)),
-      workflowRunId: job.workflowRunId,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
     });
   }
   async review(

@@ -3,13 +3,13 @@ import type { Store } from "../core/store.ts";
 import type { HostStatus, Job, JobKind, Repo, Runner } from "../core/types.ts";
 import type { WorkspaceManager } from "../infrastructure/git/workspace-manager.ts";
 export interface EnqueueOptions {
-  workflowRunId?: string;
   sourceJobId?: string;
   instructions?: string;
   forceNew?: boolean;
   goal?: "resolve";
   goalId?: string;
   resumeInput?: boolean;
+  workflowRunId?: string;
 }
 export type Enqueue = (
   ids: string[],

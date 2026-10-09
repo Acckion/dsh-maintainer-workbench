@@ -157,6 +157,7 @@ export function RepositoryDetail({
   localPatch,
   responseDraft,
   onPreviewReply,
+  workflow = false,
 }: {
   issue: Issue;
   repository: string;
@@ -178,6 +179,7 @@ export function RepositoryDetail({
   localPatch?: { patch: string; label: string; revision: string };
   responseDraft?: string;
   onPreviewReply?: () => void;
+  workflow?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<ReaderTab>(initialTab);
@@ -318,7 +320,7 @@ export function RepositoryDetail({
   }, [tab, cache.files, diffSource, requestedTab?.sequence]);
   const summary = cache.summary?.summary;
   const data = isAgent(tab) ? undefined : cache[tab as DetailSection];
-  const aiTabs: ReaderTab[] = [
+  const aiTabs: ReaderTab[] = workflow ? ["overview"] : [
     "overview",
     ...(issue.type === "issue" &&
     (issue.plan ||
@@ -337,7 +339,7 @@ export function RepositoryDetail({
   const state =
     (summary?.merged ?? issue.merged)
       ? "已合并"
-      : summary?.draft
+      : (summary?.draft ?? issue.draft)
         ? "草稿"
         : (summary?.state ?? issue.state) === "closed"
           ? "已关闭"
@@ -362,6 +364,67 @@ export function RepositoryDetail({
           )}
           {summary?.title ?? issue.title}
         </h2>
+        <div className="mw-reader-tabbar">
+          <nav
+            className="mw-reader-tabs mw-reader-ai-tabs"
+            aria-label="AI 功能"
+          >
+            {aiTabs.map((key) => (
+              <button
+                key={key}
+                aria-current={(workflow ? isAgent(tab) : tab === key) ? "page" : undefined}
+                className={(workflow ? isAgent(tab) : tab === key) ? "active" : ""}
+                onClick={() => selectTab(key)}
+              >
+                {workflow ? "处理流程" : names[key]}
+              </button>
+            ))}
+          </nav>
+          <nav
+            className="mw-reader-tabs mw-reader-source-tabs"
+            aria-label="GitHub 原始内容"
+          >
+            {sourceTabs.map((key) => (
+              <button
+                key={key}
+                aria-current={tab === key ? "page" : undefined}
+                className={tab === key ? "active" : ""}
+                onClick={() => selectTab(key)}
+              >
+                {names[key]}
+              </button>
+            ))}
+          </nav>
+          <div className="mw-reader-compact-tabs">
+            <select
+              aria-label="AI 功能"
+              value={isAgent(tab) ? workflow ? "overview" : tab : ""}
+              onChange={(e) => selectTab(e.target.value as ReaderTab)}
+            >
+              <option value="" disabled>
+                AI
+              </option>
+              {aiTabs.map((key) => (
+                <option key={key} value={key}>
+                  {workflow ? "处理流程" : names[key]}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="GitHub 原始内容"
+              value={!isAgent(tab) ? tab : ""}
+              onChange={(e) => selectTab(e.target.value as ReaderTab)}
+            >
+              <option value="" disabled>
+                GitHub
+              </option>
+              {sourceTabs.map((key) => (
+                <option key={key} value={key}>
+                  {names[key]}
+                </option>
+              ))}
+            </select>
+          </div>
         <div className="mw-reader-meta">
           <div className="mw-reader-facts">
             <span
@@ -375,7 +438,6 @@ export function RepositoryDetail({
               {state}
             </span>
             <span className="mw-title-reference">
-              <span>#{issue.number}</span>{" "}
               {safeLink(issue.url) && (
                 <a
                   className="mw-icon-button"
@@ -390,6 +452,7 @@ export function RepositoryDetail({
               )}
             </span>
             <strong>{summary?.author ?? issue.author}</strong>
+            <span className="mw-reader-number">#{issue.number}</span>
             <span>
               {summary
                 ? `创建于 ${when(summary.createdAt)}`
@@ -431,67 +494,6 @@ export function RepositoryDetail({
             )}
           </div>
         </div>
-        <div className="mw-reader-tabbar">
-          <nav
-            className="mw-reader-tabs mw-reader-ai-tabs"
-            aria-label="AI 功能"
-          >
-            {aiTabs.map((key) => (
-              <button
-                key={key}
-                aria-current={tab === key ? "page" : undefined}
-                className={tab === key ? "active" : ""}
-                onClick={() => selectTab(key)}
-              >
-                {names[key]}
-              </button>
-            ))}
-          </nav>
-          <nav
-            className="mw-reader-tabs mw-reader-source-tabs"
-            aria-label="GitHub 原始内容"
-          >
-            {sourceTabs.map((key) => (
-              <button
-                key={key}
-                aria-current={tab === key ? "page" : undefined}
-                className={tab === key ? "active" : ""}
-                onClick={() => selectTab(key)}
-              >
-                {names[key]}
-              </button>
-            ))}
-          </nav>
-          <div className="mw-reader-compact-tabs">
-            <select
-              aria-label="AI 功能"
-              value={isAgent(tab) ? tab : ""}
-              onChange={(e) => selectTab(e.target.value as ReaderTab)}
-            >
-              <option value="" disabled>
-                AI
-              </option>
-              {aiTabs.map((key) => (
-                <option key={key} value={key}>
-                  {names[key]}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="GitHub 原始内容"
-              value={!isAgent(tab) ? tab : ""}
-              onChange={(e) => selectTab(e.target.value as ReaderTab)}
-            >
-              <option value="" disabled>
-                GitHub
-              </option>
-              {sourceTabs.map((key) => (
-                <option key={key} value={key}>
-                  {names[key]}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </header>
       <main className="mw-reader-content">

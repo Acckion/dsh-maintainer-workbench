@@ -24,6 +24,7 @@ export async function verifyTheme(page, dir, width) {
   await page.emulateMedia({colorScheme:'dark'});
   assert.equal(await scheme(),'dark'); await dark('.mw-reader-embedded');
   await contrast('.mw-issue-title strong');await contrast('.mw-reader-header h2');
+  if(width<=760)await page.getByRole('button',{name:'返回来源列表',exact:true}).click();
   await page.getByRole('button',{name:'展开筛选',exact:true}).click();
   await dark('.mw-filter-popover');await contrast('.mw-filter-popover button');
   await page.screenshot({path:join(dir,`theme-dark-filter-${width}.png`)});
@@ -35,6 +36,7 @@ export async function verifyTheme(page, dir, width) {
   await page.emulateMedia({colorScheme:'light'});assert.equal(await scheme(),'light');
   assert.ok((await background('.mw-modal')).match(/\d+/g).slice(0,3).every(n=>Number(n)>200), 'open top-layer dialog switches to light live');
   await page.getByRole('button',{name:'关闭',exact:true}).click();
+  if(width<=760)await page.locator('[id="mw-item-fixture/queue#128"]').click();
   // A host explicitly in light mode wins over a dark OS. No plugin theme storage is involved.
   await page.locator('.mw').evaluate(el=>el.setAttribute('data-mw-host',''));
   await page.emulateMedia({colorScheme:'dark'});assert.equal(await scheme(),'light');
@@ -46,7 +48,13 @@ export async function verifyTheme(page, dir, width) {
     await page.getByRole('button',{name:new RegExp('^'+name+'(?:\\s|$)')}).click();await dark('.mw');
     await page.screenshot({path:join(dir,`theme-${name}-${width}.png`)});
   }
-  await page.getByRole('button',{name:'Issues & PRs',exact:false}).click();
+  const header=page.locator('.mw-header-controls');
+  await page.locator('.mw-layout-tabs').evaluate(el=>el.style.setProperty('--dsh-frame-leading-clearance','160px'));
+  assert.equal(await header.evaluate(el=>getComputedStyle(el).paddingInlineStart),'178px');
+  await page.locator('.mw-layout-tabs').evaluate(el=>el.style.setProperty('--dsh-frame-leading-clearance','84px'));
+  assert.equal(await header.evaluate(el=>getComputedStyle(el).paddingInlineStart),'102px');
+  await page.locator('.mw-layout-tabs').evaluate(el=>el.style.removeProperty('--dsh-frame-leading-clearance'));
+  await page.getByRole('button',{name:/^Pull Requests/}).click();
   await page.locator('[id="mw-item-fixture/queue#135"]').click();
   if(width>760)await page.getByRole('button',{name:'Diff',exact:true}).click();
   else await page.locator('select[aria-label="GitHub 原始内容"]').selectOption('files');
@@ -58,6 +66,8 @@ export async function verifyTheme(page, dir, width) {
   assert.equal(await scheme(),'light');
   await page.locator('.mw').evaluate(el=>el.removeAttribute('data-mw-host'));
   await page.emulateMedia({colorScheme:'light'});
+  if(width<=760)await page.getByRole('button',{name:'返回来源列表',exact:true}).click();
+  await page.getByRole('button',{name:/^Issues(?: \d+)?$/}).click();
   await page.locator('[id="mw-item-fixture/queue#128"]').click();
   console.log(`Theme switching, top-layer dialogs, panels and Diff passed at ${width}px`);
 }

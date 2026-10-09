@@ -52,6 +52,7 @@ export class Store {
         const {
           orchestration,
           processingSuggestion,
+          orchestrationView,
           processing,
           actionsAvailable,
           ...stored
@@ -138,6 +139,7 @@ export class Store {
           ...currentIssue(issue),
           orchestration: undefined,
           processingSuggestion: undefined,
+          orchestrationView: undefined,
           processing: undefined,
           actionsAvailable: undefined,
         } as unknown as T;
@@ -204,6 +206,7 @@ export class Store {
   }
   settings(): Settings {
     return {
+      stageModels: {},
       syncLimit: 1000,
       autoPreflight: false,
       triageMaxTokens: 1800,

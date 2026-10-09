@@ -69,17 +69,19 @@ export async function validateCheckout(
   const root = await git(canonical, ["rev-parse", "--show-toplevel"]);
   if ((await realpath(root)) !== canonical)
     throw new Error("请选择 Git 仓库根目录");
-  if (repo.mode === "local") return canonical;
+  const remote =
+    repo.githubName ?? (repo.mode === "github" ? repo.fullName : undefined);
+  if (!remote) return canonical;
   const origin = await git(canonical, ["remote", "get-url", "origin"]);
   const normalized = origin.replace(/\.git$/, "").replace(/\/$/, "");
   if (
     ![
-      `https://github.com/${repo.fullName}`,
-      `git@github.com:${repo.fullName}`,
-      `ssh://git@github.com/${repo.fullName}`,
+      `https://github.com/${remote}`,
+      `git@github.com:${remote}`,
+      `ssh://git@github.com/${remote}`,
     ].some((s) => s.toLowerCase() === normalized.toLowerCase())
   )
-    throw new Error("本地 origin 与所选 GitHub 仓库不匹配");
+    throw new Error(`本地 origin 与所选 GitHub 仓库（${remote}）不匹配`);
   return canonical;
 }
 async function createWorktree(
@@ -202,6 +204,14 @@ export async function prepareManagedCheckout(
         360000,
       );
       await rename(temporary, path);
+    } catch (error) {
+      throw new Error(
+        gitFailureMessage(
+          error,
+          `克隆 GitHub 仓库 ${repo.fullName} 失败`,
+          "克隆 GitHub 仓库超时（超过 6 分钟），请检查网络后重试",
+        ),
+      );
     } finally {
       await rm(temporary, { recursive: true, force: true });
     }
@@ -216,15 +226,43 @@ export async function prepareManagedCheckout(
     );
   } catch {
     const shallow = (await executeGit(path, ['rev-parse', '--is-shallow-repository'])) === 'true';
-    await executeGit(
-      path,
-      ["fetch", "--no-tags", ...(shallow ? ["--depth=64"] : []), "origin", repo.headSha],
-      true,
-      signal,
-      120000,
-    );
+    try {
+      await executeGit(
+        path,
+        ["fetch", "--no-tags", ...(shallow ? ["--depth=64"] : []), "origin", repo.headSha],
+        true,
+        signal,
+        120000,
+      );
+    } catch (error) {
+      throw new Error(
+        gitFailureMessage(
+          error,
+          `拉取 ${repo.fullName} 的提交 ${repo.headSha.slice(0, 7)} 失败`,
+          "拉取提交超时（超过 2 分钟），请检查网络后重试",
+        ),
+      );
+    }
   }
   return path;
+}
+
+function gitFailureMessage(
+  error: unknown,
+  fallback: string,
+  timeoutMessage: string,
+): string {
+  const failure = error as {
+    killed?: boolean;
+    signal?: string | null;
+    stderr?: string;
+  };
+  if (failure.killed || failure.signal) return timeoutMessage;
+  const firstLine = (failure.stderr ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)[0];
+  return firstLine ? `${fallback}：${firstLine}` : fallback;
 }
 
 /** Fetch GitHub's PR head ref, including forks, then require the exact API snapshot. */

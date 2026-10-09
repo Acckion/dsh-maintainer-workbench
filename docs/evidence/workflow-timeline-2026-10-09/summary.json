@@ -1,0 +1,108 @@
+{
+  "date": "2026-10-09",
+  "branch": "feat/workflow-timeline",
+  "baseCommit": "2ba01e3",
+  "checks": {
+    "typecheck": "passed",
+    "unitTests": {
+      "passed": 304,
+      "failed": 0
+    },
+    "build": "passed",
+    "timelineBrowserWidths": [
+      1440,
+      390
+    ],
+    "maintenanceBrowserWidths": [
+      1440,
+      390
+    ],
+    "navigationRaceBrowserWidths": [
+      1440,
+      390
+    ]
+  },
+  "fixtureLimitations": "Real client, local API and SQLite; synthetic source/review evidence. Primary execution request contract intercepted. No external GitHub writes or model calls. No new native Harness E2E run.",
+  "screenshots": [
+    "timeline-attempt-history-1440.png",
+    "timeline-attempt-history-390.png",
+    "timeline-dark-running-1440.png",
+    "timeline-dark-running-390.png",
+    "timeline-history-1440.png",
+    "timeline-history-390.png",
+    "timeline-light-1440.png",
+    "timeline-light-390.png"
+  ],
+  "sourceHashes": {
+    "src/domain/timeline.ts": "4a39c6e99ad9dba1583a79680f8f09c355b49b9b073f03db054cf2eb257c4df8",
+    "src/application/timeline.ts": "82d387ede9598f78662416fb97cf8c912ee15f30836033b355e2ade3eb5d2529",
+    "src/workflow/timeline.ts": "f0562bc4e5ed507e8773305ac8b76c549cefc2d2a11a6384be059e65a593f400",
+    "src/workflow/presentation.ts": "18bb0fbcb991cd59d39394a7da300c2bc4da79e0599fff36ba79be73443e1766",
+    "src/client/WorkflowDetail.tsx": "87a86d7803afdc94f05bbaeba2ccf43dcac14b8c07767a36b76985a2bc96f80f",
+    "src/client/WorkflowTimeline.tsx": "c893a18654dfd308e8559e48425983d23e05aafeab3668ed204b2de65104c864",
+    "src/client/StagePanel.tsx": "b15b53a018e1a5c0aa90f042ee0720d46b7b03ade71289bffceb1f5f7128b523",
+    "src/client/StageResult.tsx": "5ebb9b535738bb4f072a03eae72b5cdaf648cff1c69752d4249e7da517a91c41",
+    "src/client/NextAction.tsx": "2e7b47e26184caba7b41a069d79dcfc019de8da26958f2ddc4e5b879f6e64608",
+    "src/client/AssistantActions.tsx": "c0bc25d3c81d8c2ae422e716845641bddb25ed886936bde62fa76b366cc4f544",
+    "src/client/App.tsx": "f14fd604feee9302b9d960dfb6813cbe4085ea43d71d4e34a1844cec029be0f3",
+    "src/client/styles.css": "c6347d18636de14eb676de9bb7063a35deb03e3c5a5248c2483c9afbd8e1d712",
+    "src/client/RepositoryDetail.tsx": "a9a57550bac2862247f36a764063a4db248d24bc153a7b059a325da52192d495",
+    "src/server/http.ts": "9170820eee88e6731ca0e76b760ec26940a55a5e01cf6144b51504012d6ebd97",
+    "src/core/types.ts": "e9f8a4a70656952370bf5624eedbbb16e4a3bb2ae8794dca080cf67b002e9e23",
+    "src/infrastructure/github/repository.ts": "94feb59d6f7df48709d02a608bf5938619b08e07fd6761395881b2f88d73b55c",
+    "tests/timeline.test.ts": "170f8887541705299c7ab7a2f42aea8e897b24986d470cd950c20cadc0389e01",
+    "scripts/browser-timeline-fixture.mjs": "b7ef6aaa9a5e3d820cd3a771c27d2c25cb36bdd67826f1cfe33dd212cb05dbd9",
+    "scripts/browser-maintenance-fixture.mjs": "df9044a42e2210f906e15fc8ef9df1f8bc17ec3251797ece09d7cc7f319f263d",
+    "scripts/browser-navigation-fixture.mjs": "aca442607f7bcbeef5764e49642fa820e52d02085e31059a754de0cd8a6b4370",
+    "scripts/browser-theme-check.mjs": "8c8d691c1bfd041b652eccf6bafdcaf9cbc6790e74f3cfc31e61ef7c71109f5f"
+  },
+  "baselineSourceCommit": "bf58bf6",
+  "screenshotsFor": "overviewRemoval",
+  "uiCleanup": {
+    "changes": "Remove the classification, source-path and basis block above the stage navigation; retain the overview/plan/cycle controls.",
+    "checks": {
+      "typecheck": "passed",
+      "build": "passed",
+      "timelineBrowserWidths": [
+        1440,
+        390
+      ]
+    },
+    "sourceHashes": {
+      "src/client/WorkflowDetail.tsx": "7f21b84c696e0e8f96b50ff525c320157afda4b7223789d590026737677fa665",
+      "src/client/styles.css": "73a497d16887796277fcf312f7ee673253a677b460e9ad143fb29ea2bc80cabe",
+      "scripts/browser-timeline-fixture.mjs": "eead4ae3c9b671c8dde3e0f25adb7051320e76ce1080ebe1e00fa30f330c961e"
+    }
+  },
+  "overviewRemoval": {
+    "changes": "Remove the standalone overview and move linked validation/delivery evidence to confirmation and tracking stages; migrate saved overview selection to the current stage.",
+    "checks": {
+      "typecheck": "passed",
+      "unitTests": {
+        "passed": 304,
+        "failed": 0
+      },
+      "build": "passed",
+      "timelineBrowserWidths": [
+        1440,
+        390
+      ],
+      "maintenanceBrowserWidths": [
+        1440,
+        390
+      ],
+      "navigationRaceBrowserWidths": [
+        1440,
+        390
+      ]
+    },
+    "sourceHashes": {
+      "src/client/WorkflowDetail.tsx": "af34d1b18d8b3886d4fd2feeccf0741e669ec11744f33bb6aa622887f023a8d0",
+      "src/client/StagePanel.tsx": "7292547306d365c416200575d71c5d3c826d6a65c7b92601a709473ce838e7df",
+      "src/client/App.tsx": "043156677f3a8539684111a694e42c09f7b57004666931354d198a11a1dc59b0",
+      "scripts/browser-timeline-fixture.mjs": "eafffe60440c75d1feea9d8b46efe986b6bafd6eae4a939d0596150f195c4a8a",
+      "scripts/browser-maintenance-fixture.mjs": "6aee1217fbb88fc7fce36115938f4b99cfa59c848319b36fe326bcd44eaa2228",
+      "scripts/browser-navigation-fixture.mjs": "a35a3c6688738774147546e4d390d8c491e378426d189a29214b7ae32aaee0d6"
+    }
+  }
+}

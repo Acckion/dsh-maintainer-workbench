@@ -32,6 +32,15 @@
 - 通过相同认证来源完成 HTTPS 私有克隆，并验证提交 0ea4647f7678a4f35b8ed1586e35fa35f818fbfe 存在；origin 不含令牌。
 - 未执行远端写入或真实模型任务。22 项自动化测试、类型检查、构建通过。
 
+## 2026-10-09 导入仓库问题修复
+
+- 仓库名归一化独立为 `src/core/repo-name.ts`：接受任意大小写、`.git` 后缀、协议/主机名、带路径的 GitHub URL、`git@github.com:` 形式，统一返回小写 owner/repo；无效输入不再让整批失败。
+- `/sync-many` 改为逐行容错：无效行按条返回错误，有效行继续同步；单批上限 20 个（超出按条提示分批），中文 zod 校验消息；客户端连接弹窗超过 20 行自动分批提交并合并结果。
+- 自动发现与手动连接合并：`performSync` 的 `prev` 匹配扩展到 `remoteCandidates`，单远端发现的工作区连接后不再产生重复行；同步全部仓库的预填只包含可同步的 GitHub 名称，不再混入本地文件夹名。
+- 发现工作区的本地分支改存 `localBranch`，不再覆盖 GitHub `defaultBranch`；界面显示 `localBranch ?? defaultBranch`。
+- `validateCheckout` 按 `githubName ?? fullName` 校验 origin，本地模式绑定的仓库不再跳过或错配；托管克隆与拉取失败给出可执行的中文错误（含超时提示）。
+- 空状态引导文案与浏览器冒烟脚本对齐：标题“自动发现 Harness 工作区”，按钮“添加其他远程仓库”。
+
 # MVP 验证记录
 
 ## 2026-09-25：移除产品演示数据
@@ -176,3 +185,41 @@ REGRESSION_PASSED
 合并远端 `cdaa83b` 后，维护浏览器夹具仍在两种宽度通过。新增 Mac 路径回归修复：恢复工作区以规范化的管理父目录加工作区 ID 对比真实路径，允许 `/var` 与 `/private/var` 的目录别名，但不允许工作区叶节点被替换为外部 checkout 的符号链接。新增可移植别名/替换测试，干净待提交副本中的类型检查、288 项测试和构建全部通过。原工作树未跟踪的 `src/client/item-next-step.ts` 仍引用旧 `Issue.workflow`，因此不改动该文件、不将它纳入提交；原工作树类型检查会因该文件报错。
 
 远端新增的 `@deepseek-ai/dsh-tools` peer 范围已扩展为 `0.2.0-rc.2 || ^0.2.1-alpha.1`，与其他 Harness peer 保持一致；本机官方 rc.2 工具模块包含所用 `defineTool`、`register` 和 `concludeTurn` 接口。真实客户端兼容性以安装后的加载结果验收。
+
+
+## 2026-10-09：类型化阶段导航与所选阶段面板
+
+分支 `feat/workflow-timeline`，从最新 master `2ba01e3` 创建。实现与边界见 [阶段导航说明](product/WORKFLOW-UX.md)，本轮源文件指纹与结果见 [验收摘要](evidence/workflow-timeline-2026-10-09/summary.json)。
+
+- `npm run check`：严格类型检查、304 项测试及完整构建通过。新增 13 项覆盖真实阶段顺序与尝试、Question 路径、Draft 与维护者确认、等待归属、迟到运行、历史周期只读、保守分类、实际决定与交付来源、读取无副作用、输入变化与旧批准失效、活动裁剪，以及历史范围节点不挂载当前可编辑计划。
+- 新阶段浏览器夹具在 1440px、390px 通过：节点上方留白至少 12px，下方只显示所选阶段；点击历史/未来不执行；实时更新保留所选历史；重试与旧周期只读；暂停输入保存后显式继续；当前确认阶段单独提供审批。明暗模式与窄屏无页面横向溢出。主操作请求经过截获核对 issueId、sourceJobId、expectedVersion，PR 补足证据不携带自动实施目标。
+- 既有维护浏览器夹具在两种宽度通过：计划草稿和派发、追问/回复、补充输入、事件历史、发现处置与复核、讨论串两步确认、GitHub 阅读与回复草稿、远端 PR/CI/Actions 日志、原始工具日志、工作区清理，以及实时主题与对比度。外部返回均为夹具。
+- 既有导航竞态夹具在两种宽度通过：返回来源恢复筛选/滚动/焦点、移除任务后的返回、跨仓库派发、跨任务审批、操作追踪与慢轮询。手机详情替换列表后，返回会重新展示原列表。
+
+截图使用公开 PR 标题与明确标记为“演示”的合成分析，不是对真实 PR 的新审查结论：[浅色当前阶段](evidence/workflow-timeline-2026-10-09/timeline-light-1440.png)、[查看历史](evidence/workflow-timeline-2026-10-09/timeline-history-1440.png)、[深色执行中](evidence/workflow-timeline-2026-10-09/timeline-dark-running-1440.png)、[手机](evidence/workflow-timeline-2026-10-09/timeline-light-390.png)。无付费模型调用、外部 GitHub 写入或新增原生 Harness 端到端验证。
+
+同日界面精简：移除进度条上方的分类、初步判断、源码模块路径与分类依据说明，保留概览、计划和周期操作。严格类型检查、构建与阶段浏览器夹具（1440px / 390px）通过；截图更新为精简后的界面，当前源文件指纹见验收摘要的 `uiCleanup`，此前 304 项测试与完整维护/导航验收对应 `bf58bf6`。
+
+同日移除“处理概览”入口与原汇总面板；旧概览选择自动迁移到当前阶段，关联验证与交付证据放在确认和交付阶段按需展开。执行记录链接在阶段的执行视图中保留。`npm run check`（304 项测试）与阶段、维护、导航三组浏览器夹具（1440px / 390px）通过；阶段夹具额外验证旧概览选择迁移与确认阶段证据入口。截图和源文件指纹更新至验收摘要的 `overviewRemoval`。
+## 2026-10-09 v0.4.0 Harness 模型选择
+
+- 全局设置新增「模型」：复用 Harness 模型目录，提供方分组菜单、插件默认模型、8 个阶段覆盖、模型声明的推理等级，以及恢复默认和刷新入口。配置持久化并与原生设置/工作台共享版本冲突保护。
+- 302 项测试、严格类型检查、构建通过。行为测试覆盖所有阶段的优先级、移除模型/提供方、无效推理等级、实际 Agent 参数和 SQLite 重开。新增模型字段不触发缓存结果重新运行。
+- 浏览器夹具验证实际 settings.section 注册、模型菜单/保存/重开/跨分类草稿/冲突/失败恢复/移除模型恢复/键盘与外部点击关闭；截图在本机临时验收目录，不包含真实凭据。
+- 原生 SDK 联调使用模拟 Messages 服务和独立合成仓库，10 次请求：插件默认 Pro，分诊覆盖 Flash；真实 Bash 完成修复及先失败后通过回归，验证记录与补丁绑定，暂停/继续输入桥接通过。首次在外层受限沙盒中被 sandbox-exec 拒绝；允许沙盒执行器启动后重测通过，未改为无沙盒运行。不是收费模型效果验收。证据：[model-routing-2026-10-09.json](evidence/model-routing-2026-10-09.json)。
+- 真实 macOS Harness 0.2.0-rc.2 已安装 v0.4.0：模型菜单读取当前已配置的提供方与模型，搜索与 Escape 关闭、8 个阶段选择、审查模型草稿及其推理等级、恢复草稿实测通过。未保存不同模型到用户实际配置，未发起收费调用。已安装 client/plugin 构建与验收版本字节一致；旧包/配置/SQLite 备份保留在本机忽略目录。
+
+### Workflow timeline integration with master (2026-10-09)
+
+Integrated master through `908e7c3`, preserving version 0.4.0, orchestration,
+model routing, native settings autosave and isolated dirty-workspace tasks.
+Current-stage processing advice remains available; historical stages remain
+read-only and the standalone overview remains removed.
+
+Validation: `npm run check` passed (344 tests, typecheck and build). Timeline
+and maintenance browser fixtures passed at 1440px and 390px; native settings
+browser fixture passed, including autosave/retry, model selection, workspace
+management and light/dark layouts. The dirty-workspace browser fixture passed
+through isolated task execution and frozen patch generation. Navigation fixtures
+cover source-list restoration and asynchronous dispatch/review races; their
+batch operation entry now opens the latest master's advanced operations menu.

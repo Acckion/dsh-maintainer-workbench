@@ -182,6 +182,7 @@ export interface Repo {
   fullName: string;
   description: string;
   defaultBranch: string;
+  localBranch?: string;
   headSha: string;
   localPath: string;
   mode: "github" | "local";
@@ -205,11 +206,15 @@ export interface PRContext {
   warnings: string[];
 }
 export interface Issue {
-  /** Compatibility projection of processing.planning; never stored on the issue. */
-  orchestration?: import("../domain/plan-workflow.ts").WorkflowState;
-  processingSuggestion?: import("../domain/plan-workflow.ts").WorkflowProgress;
+  draft?: boolean;
   processing?: import("../domain/processing.ts").ProcessingCase;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
+  orchestration?: import("../domain/plan-workflow.ts").WorkflowState;
+  processingSuggestion?: import("../domain/plan-workflow.ts").WorkflowProgress;
+  orchestrationView?: {
+    status: "plan" | "running" | "blocked" | "review" | "waiting" | "stale" | "deferred";
+    reason: string;
+  };
   remotePRs?: import("./remote-progress.ts").RemotePR[];
   actions?: import("./remote-progress.ts").ActionsSnapshot;
   remoteWarning?: string;
@@ -248,12 +253,12 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 export interface Job {
-  workflowRunId?: string;
   caseId?: string;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
   goal?: "resolve";
   goalId?: string;
   goalPauseReason?: string;
+  workflowRunId?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
   evidenceGate?: { allowed: boolean; reasons: string[] };
@@ -337,6 +342,8 @@ export interface Audit {
 }
 export interface Settings {
   autoReview?: boolean;
+  nativeDefaultModel?: ModelChoice;
+  stageModels?: Partial<Record<JobKind, ModelChoice>>;
   syncLimit?: number;
   autoPreflight?: boolean;
   triageMaxTokens?: number;
@@ -351,7 +358,26 @@ export interface Settings {
   syncIntervalMinutes: number;
   autoTriage: boolean;
 }
+export interface ModelChoice {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+/** Credential-free catalog projected by the same Harness API as its composer. */
+export interface HostModelCatalog {
+  default: ModelChoice;
+  groups: readonly {
+    id: string;
+    name: string;
+    models: readonly { id: string; name: string; reasoning?: {
+      efforts: readonly { id: string; name: string; description?: string }[];
+      defaultEffort?: string;
+    } }[];
+  }[];
+  failures: readonly { id: string; name: string; message: string }[];
+}
 export interface HostStatus {
+  providers?: readonly { id: string; name: string }[];
   contextServices?: {
     tokenMeter: boolean;
     pruner: boolean;

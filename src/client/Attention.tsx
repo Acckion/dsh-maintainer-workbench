@@ -1,4 +1,5 @@
 import React from "react";
+import { Row, Toggle } from "./GlobalSettingsFields.tsx";
 import type { Snapshot } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
 export function Attention({
@@ -18,31 +19,15 @@ export function Attention({
           issue: i,
           job: state.jobs.find((j) => j.issueId === i.id),
         }));
-        const needs = latest.filter(({ issue, job }) =>
-          issue.processingSuggestion?.status
-            ? ["plan", "blocked", "review", "stale"].includes(
-                issue.processingSuggestion.status,
-              ) &&
-              (["decision", "blocked", "review"].includes(
-                issue.processing?.phase ?? "",
-              ) ||
-                issue.processing?.waits.some(
-                  (w) =>
-                    w.state === "open" &&
-                    ["user_input", "environment_ready"].includes(w.type),
-                ) ||
-                !!issue.orchestration?.draft ||
-                !!issue.orchestration?.run ||
-                ["failed", "awaiting_review"].includes(job?.status ?? "") ||
-                (job?.kind === "validate" &&
-                  validationState(job.artifact)?.state !== "passed") ||
-                issue.informationRequests?.some(
-                  (r) => r.state === "reply_received",
-                ))
-            : ["needs_info", "decision", "blocked", "review"].includes(
-                issue.processing?.phase ?? "",
-              ) || ["failed", "awaiting_review"].includes(job?.status ?? ""),
-        );
+        const needs = latest.filter(({ issue, job }) => {
+          const status = issue.orchestrationView?.status;
+          if (status && ["running", "waiting", "deferred"].includes(status)) return false;
+          return !!issue.orchestration?.draft || !!issue.orchestration?.run ||
+            issue.informationRequests?.some((r) => r.state === "reply_received") ||
+            ["needs_info", "decision", "blocked", "review"].includes(issue.processing?.phase ?? "") ||
+            ["failed", "awaiting_review", "waiting_input", "waiting_environment"].includes(job?.status ?? "") ||
+            (job?.kind === "validate" && validationState(job.artifact)?.state !== "passed");
+        });
         return (
           <section className="mw-settings-card" key={repo.id}>
             <div className="mw-section-title">{repo.fullName}</div>
@@ -51,24 +36,10 @@ export function Attention({
             </p>
             {needs.slice(0, 8).map(({ issue, job }) => (
               <div className="mw-stage-event" key={issue.id}>
-                <button
-                  className="mw-text-button"
-                  onClick={() => open(repo.id, issue.id)}
-                >
-                  #{issue.number} {issue.title}
-                </button>
-                <strong>
-                  {issue.processingSuggestion?.status === "plan"
-                    ? "待确认计划"
-                    : issue.processingSuggestion?.status === "review"
-                      ? "待最终审核"
-                      : "需要补充或解除阻塞"}
-                </strong>
+                <button className="mw-text-button" onClick={() => open(repo.id, issue.id)}>#{issue.number} {issue.title}</button>
+                <strong>{issue.orchestrationView?.status === "plan" ? "待确认计划" : issue.orchestrationView?.status === "review" ? "待最终审核" : "需要补充或解除阻塞"}</strong>
                 <p>
-                  {issue.processingSuggestion?.reason ??
-                    job?.error ??
-                    issue.processing?.reason ??
-                    "变更产物等待审核"}
+                  {issue.orchestrationView?.reason ?? job?.error ?? issue.processing?.reason ?? "变更产物等待审核"}
                 </p>
               </div>
             ))}
@@ -95,7 +66,7 @@ export function RepositoryPolicy({
   state: Snapshot;
   repoId: string;
   busy: boolean;
-  save: (value: unknown) => void;
+  save: (value: unknown) => Promise<unknown>;
 }) {
   const repo = state.repos.find((r) => r.id === repoId);
   const defaults = repo?.policy ?? state.settings;
@@ -109,95 +80,40 @@ export function RepositoryPolicy({
     timeoutMs: defaults.timeoutMs,
     maxTokens: defaults.maxTokens,
   });
+  const identity = JSON.stringify(value);
+  const initial = React.useRef(identity), attempted = React.useRef(identity);
+  const saveRef = React.useRef(save); saveRef.current = save;
+  const [error, setError] = React.useState("");
+  const persist = async () => {
+    setError("");
+    attempted.current = identity;
+    try {
+      const result = await saveRef.current({repoId, policy:value});
+      if (result === undefined) setError("仓库设置未保存，请重试。");
+      else initial.current = identity;
+    } catch(e) {setError(e instanceof Error ? e.message : "保存失败");}
+  };
+  const persistRef = React.useRef(persist); persistRef.current = persist;
+  React.useEffect(() => {
+    if (busy || identity === initial.current || identity === attempted.current) return;
+    const timer = setTimeout(() => void persistRef.current(), 600);
+    return () => clearTimeout(timer);
+  }, [identity, busy]);
   if (!repo) return null;
-  return (
-    <section className="mw-settings-card">
-      <h3>当前仓库策略</h3>
-      <p>
-        模型继承
-        Harness；这里仅调整该仓库的同步与执行预算。远端发布仍使用具体内容预览。
-      </p>
-      <label>
-        <input
-          type="checkbox"
-          checked={value.autoTriage}
-          onChange={(e) => setValue({ ...value, autoTriage: e.target.checked })}
-        />{" "}
-        自动整理新增或更新 Issue 的处理建议与计划草稿
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={value.autoPreflight}
-          onChange={(e) =>
-            setValue({ ...value, autoPreflight: e.target.checked })
-          }
-        />{" "}
-        自动整理新增或更新 PR 的预检与审查建议
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={value.autoReview}
-          onChange={(e) => setValue({ ...value, autoReview: e.target.checked })}
-        />{" "}
-        自动审查预检已就绪的 PR（只读，不自动修订或发布）
-      </label>
-      <label>
-        同步记录上限（0 表示无上限）
-        <input
-          type="number"
-          min={0}
-          max={1000000}
-          value={value.syncLimit}
-          onChange={(e) =>
-            setValue({ ...value, syncLimit: Number(e.target.value) })
-          }
-        />
-      </label>
-      <label>
-        同步间隔（分钟，0 关闭）
-        <input
-          type="number"
-          min={0}
-          max={1440}
-          value={value.syncIntervalMinutes}
-          onChange={(e) =>
-            setValue({ ...value, syncIntervalMinutes: Number(e.target.value) })
-          }
-        />
-      </label>
-      <label>
-        单次任务时间上限（秒）
-        <input
-          type="number"
-          min={1}
-          max={1800}
-          value={value.timeoutMs / 1000}
-          onChange={(e) =>
-            setValue({ ...value, timeoutMs: Number(e.target.value) * 1000 })
-          }
-        />
-      </label>
-      <label>
-        输出 Token 上限
-        <input
-          type="number"
-          min={500}
-          max={32000}
-          value={value.maxTokens}
-          onChange={(e) =>
-            setValue({ ...value, maxTokens: Number(e.target.value) })
-          }
-        />
-      </label>
-      <button
-        className="mw-button"
-        disabled={busy}
-        onClick={() => save({ repoId, policy: value })}
-      >
-        保存仓库策略
-      </button>
-    </section>
-  );
+  const number = (key:"syncLimit"|"syncIntervalMinutes"|"timeoutMs"|"maxTokens", label:string, min:number, max:number, factor=1) =>
+    <Row label={label}><input type="number" aria-label={label} min={min} max={max} disabled={busy}
+      value={value[key]/factor} onChange={e=>setValue({...value,[key]:Number(e.target.value)*factor})}/></Row>;
+  return <section className="mw-settings-card">
+    <h3>仓库设置</h3>
+    <Toggle label="自动分诊新增或更新的 Issue" description="" value={value.autoTriage} change={autoTriage=>setValue({...value,autoTriage})}/>
+    <Toggle label="自动快速预检新增或更新的 PR" description="" value={value.autoPreflight} change={autoPreflight=>setValue({...value,autoPreflight})}/>
+    <Toggle label="自动审查预检已就绪的 PR" description="只读，不自动修订或发布" value={value.autoReview} change={autoReview=>setValue({...value,autoReview})}/>
+    {number("syncLimit","同步记录上限（0 表示无上限）",0,1000000)}
+    {number("syncIntervalMinutes","同步间隔（分钟，0 关闭）",0,1440)}
+    <details className="mw-preference-details"><summary>高级执行选项</summary>
+      {number("timeoutMs","单次任务时间上限（秒）",1,1800,1000)}
+      {number("maxTokens","输出 Token 上限",500,32000)}
+    </details>
+    {error && <div role="alert" className="mw-settings-feedback error">{error} <button type="button" className="mw-button" disabled={busy} onClick={()=>void persist()}>重试保存</button></div>}
+  </section>;
 }

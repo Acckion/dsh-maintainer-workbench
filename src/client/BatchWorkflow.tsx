@@ -26,7 +26,11 @@ export function BatchWorkflow({
       setResults((response as { results: typeof results }).results);
   };
   const ready = issues.filter(
-    (i) => i.orchestration?.draft && i.processingSuggestion?.status === "plan",
+    (i) =>
+      i.orchestration?.draft &&
+      !i.orchestration.run &&
+      ["fix", "docs", "investigate", "review"].includes(i.orchestration.draft.route) &&
+      i.orchestrationView?.status === "plan",
   );
   return (
     <section aria-label="批量处理建议">
@@ -37,7 +41,7 @@ export function BatchWorkflow({
             void run("/workflow/analyze", { issueIds: issues.map((i) => i.id) })
           }
         >
-          分析所选事项
+          分析
         </button>
         <button
           disabled={busy || !ready.length}
@@ -45,18 +49,18 @@ export function BatchWorkflow({
             void run("/workflow/start-batch", {
               items: ready.map((i) => ({
                 issueId: i.id,
-                inputKey: i.orchestration!.draft!.inputKey,
                 expectedVersion: i.processing?.version,
+                inputKey: i.orchestration!.draft!.inputKey,
                 plan: { ...i.orchestration!.draft, decision: "accepted" },
               })),
             })
           }
         >
-          按建议开始处理 · {ready.length} 项
+          开始处理{ready.length ? ` · ${ready.length}` : ""}
         </button>
       </div>
       {issues.length > 0 && (
-        <details open>
+        <details>
           <summary>逐项建议与范围 · {issues.length} 项</summary>
           {issues.map((i) => (
             <article className="mw-stage-event" key={i.id}>

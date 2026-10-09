@@ -92,6 +92,7 @@ export class RepositoryClient extends GitHubResourceClient {
             .array(
               z.object({
                 number: z.number(),
+                draft: z.boolean().optional(),
                 head: z.object({ sha: z.string() }),
                 base: z.object({ sha: z.string() }),
               }),
@@ -107,6 +108,7 @@ export class RepositoryClient extends GitHubResourceClient {
             );
             if (issue) {
               issue.headSha = pr.head.sha;
+              issue.draft = pr.draft;
               issue.prBaseSha = pr.base.sha;
             }
           }

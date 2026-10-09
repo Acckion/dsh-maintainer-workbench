@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GlobalSettingsSnapshot, Settings } from "../core/types.ts";
+import type { HostWorkspaces } from "./host-workspaces.ts";
 import { SettingsView } from "./SettingsView.tsx";
 import { request } from "./api.ts";
 
 const panels = [
-  ["automation", "自动化"], ["execution", "执行"],
+  ["models", "模型"], ["automation", "自动化"], ["execution", "执行"],
   ["connections", "连接"], ["workspaces", "工作区"],
 ] as const;
 type Panel = typeof panels[number][0];
 
 /** Same form/controller in the native settings section and workbench shortcut. */
-export function GlobalSettings({ native = false }: { native?: boolean }) {
+export function GlobalSettings({ native = false, hostWorkspaces }: { native?: boolean; hostWorkspaces?: HostWorkspaces }) {
   const [snapshot, setSnapshot] = useState<GlobalSettingsSnapshot>();
   const [panel, setPanel] = useState<Panel>("automation");
   const [busy, setBusy] = useState(true);
@@ -18,6 +19,8 @@ export function GlobalSettings({ native = false }: { native?: boolean }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState(false);
+  const [retryVersion, setRetryVersion] = useState(0);
+  const [reloadVersion, setReloadVersion] = useState(0);
   const [confirmReload, setConfirmReload] = useState(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -34,7 +37,7 @@ export function GlobalSettings({ native = false }: { native?: boolean }) {
     try {
       const value = await request("/settings/global");
       if (!mounted.current) return;
-      setSnapshot(value); setDirty(false); setError(""); setNotice("");
+      setSnapshot(value); setReloadVersion(n=>n+1); setDirty(false); setError(""); setNotice("");
       setConflict(false); setConfirmReload(false);
     } catch (e) { if (mounted.current) setError((e as Error).message); }
     finally { if (mounted.current) setBusy(false); }
@@ -45,7 +48,7 @@ export function GlobalSettings({ native = false }: { native?: boolean }) {
     try {
       const value = await request("/settings/global", { settings, revision: snapshot.revision });
       if (!mounted.current) return;
-      setSnapshot(value); setDirty(false); setConflict(false); setNotice("设置已保存");
+      setSnapshot(value); setDirty(false); setConflict(false); setNotice("");
     } catch (e) {
       if (!mounted.current) return;
       setError((e as Error).message);
@@ -66,12 +69,13 @@ export function GlobalSettings({ native = false }: { native?: boolean }) {
     <section className={`mw mw-global-settings ${native ? "mw-native-settings" : ""}`}
       data-mw-host={native ? "" : undefined} aria-label="维护工作台全局设置">
       <div className="mw-settings-heading"><h2>维护工作台</h2>
-        <span>{dirty ? "有未保存的更改" : "全局默认设置"}</span></div>
+</div>
       <nav className="mw-settings-tabs" aria-label="全局设置分类">
         {panels.map(([id, label]) => <button key={id} type="button"
           aria-current={panel === id ? "page" : undefined} onClick={() => setPanel(id)}>{label}</button>)}
       </nav>
       {error && <div role="alert" className="mw-settings-feedback error">{error}</div>}
+      {error && snapshot && !conflict && <button type="button" className="mw-button" disabled={busy} onClick={() => setRetryVersion(n=>n+1)}>重试保存</button>}
       {notice && <div role="status" className="mw-settings-feedback">{notice}</div>}
       {((!snapshot && error) || conflict) && <button type="button" className="mw-button" disabled={busy}
         onClick={() => dirty ? setConfirmReload(true) : void reload()}>重新加载设置</button>}
@@ -81,8 +85,8 @@ export function GlobalSettings({ native = false }: { native?: boolean }) {
         <button type="button" className="mw-button" disabled={busy} onClick={() => setConfirmReload(false)}>保留草稿</button>
       </div>}
       {!snapshot && !error && <p role="status">正在读取设置…</p>}
-      {snapshot && <fieldset disabled={busy} className="mw-settings-fields"><SettingsView key={snapshot.revision} scope="global" state={snapshot}
-        panel={panel} repoId="" busy={busy} changed={onChanged}
+      {snapshot && <fieldset disabled={busy} className="mw-settings-fields"><SettingsView key={reloadVersion} scope="global" state={snapshot}
+        panel={panel} retryVersion={retryVersion} hostWorkspaces={hostWorkspaces} repoId="" busy={busy} changed={onChanged}
         save={s => void save(s)} credentials={credentials}
         prepare={() => {}} bind={() => {}} /></fieldset>}
     </section>

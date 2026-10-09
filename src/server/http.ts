@@ -7,6 +7,7 @@ import { organizeModes } from "../core/organize.ts";
 import { kinds, type Job } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
+import { processingTimeline } from "../application/timeline.ts";
 import { SettingsConflictError } from "../application/tasks.ts";
 export const API = "/maintainer/api";
 export function send(
@@ -51,6 +52,10 @@ export function handler(
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.slice(API.length);
     try {
+      if (req.method === "GET" && path === "/models") {
+        send(res, 200, await workbench.models());
+        return;
+      }
       if (req.method === "GET" && path === "/settings/global") {
         send(res, 200, workbench.globalSettings());
         return;
@@ -94,6 +99,18 @@ export function handler(
           200,
           await workbench.workspaces.inspect(
             z.string().min(1).parse(url.searchParams.get("id")),
+          ),
+        );
+        return;
+      }
+      if (req.method === "GET" && path === "/processing/timeline") {
+        send(
+          res,
+          200,
+          processingTimeline(
+            workbench.store,
+            z.string().min(1).max(400).parse(url.searchParams.get("issueId")),
+            url.searchParams.get("caseId") ?? undefined,
           ),
         );
         return;
@@ -162,6 +179,7 @@ export function handler(
       const input = await body(req);
       if (path === "/settings/global") {
         const p = z.object({ settings: z.unknown(), revision: z.string().length(64) }).parse(input);
+        await workbench.validateModelSettings(p.settings);
         workbench.updateSettings(p.settings, p.revision);
         send(res, 200, workbench.globalSettings());
         return;
@@ -321,7 +339,17 @@ export function handler(
           200,
           await workbench.syncMany(
             z
-              .object({ names: z.array(z.string().max(250)).min(1).max(20) })
+              .object({
+                names: z
+                  .array(
+                    z
+                      .string()
+                      .max(250, "单个仓库地址不能超过 250 个字符")
+                      .min(1, "仓库地址不能为空"),
+                  )
+                  .min(1, "请至少输入 1 个仓库")
+                  .max(20, "一次最多 20 个仓库，请分批连接"),
+              })
               .parse(input).names,
           ),
         );
@@ -692,7 +720,7 @@ export function handler(
           .object({ repoId: z.string(), policy: z.unknown() })
           .parse(input);
         workbench.updatePolicy(p.repoId, p.policy);
-      } else if (path === "/settings") workbench.updateSettings(input);
+      } else if (path === "/settings") { await workbench.validateModelSettings(input); workbench.updateSettings(input); }
       else {
         send(res, 404, { error: "接口不存在" });
         return;
