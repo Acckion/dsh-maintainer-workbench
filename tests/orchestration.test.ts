@@ -165,9 +165,12 @@ test("repository synchronization preserves orchestration and saved policy settin
 test("batch dispatch reports a blocked environment as an error without claiming a task was created", async () => {
   const { store, wb, issue, repo } = setup();
   try {
-    store.put("repos", { ...repo, mode: "local", dirty: true });
-    const result = wb.orchestration.startBatch([{ issueId: issue.id, inputKey: issue.orchestration!.draft!.inputKey, plan: accept }]);
-    assert.match(result.results[0].error!, /未提交修改/);
+    const emptyRepo = { ...repo, mode: "local" as const, headSha: "" };
+    store.put("repos", emptyRepo);
+    const inputKey = planInputKey(issue, emptyRepo);
+    store.put("issues", { ...issue, orchestration: { ...issue.orchestration, draft: { ...issue.orchestration!.draft!, inputKey } } });
+    const result = wb.orchestration.startBatch([{ issueId: issue.id, inputKey, plan: accept }]);
+    assert.match(result.results[0].error!, /无 Git 提交/);
     assert.ok("created" in result.results[0]);
     assert.equal(result.results[0].created?.length, 0);
     assert.equal(store.jobs().length, 0);

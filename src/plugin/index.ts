@@ -8,6 +8,7 @@ import { lockDirectory } from '../core/lock.ts';
 import { Credentials } from '../core/credentials.ts';
 import { Store } from '../core/store.ts';
 import { Workbench } from '../core/workbench.ts';
+import { buildModelCatalog } from '@deepseek-ai/dsh-api-session-controller';
 import { API, handler } from '../server/http.ts';
 import { harnessRunner, hostStatus } from './native-runner.ts';
 import type {} from '@deepseek-ai/dsh-compaction';
@@ -21,7 +22,7 @@ export async function apply(ctx: Context): Promise<void> {
   ctx.effect(() => unlock);
   const credentials = new Credentials(dataDir, 'github-only');
   await credentials.load();
-  const workbench = new Workbench(new Store(resolve(dataDir, 'workbench.sqlite')), dataDir, harnessRunner(ctx), undefined, true, () => hostStatus(ctx));
+  const workbench = new Workbench(new Store(resolve(dataDir, 'workbench.sqlite')), dataDir, harnessRunner(ctx), undefined, true, () => hostStatus(ctx), () => buildModelCatalog(ctx));
   let discovering = false;
   const discover = async () => { if(discovering)return; discovering=true; try {await workbench.discover(ctx.workspaceRegistry.list().map(w=>w.path));} finally {discovering=false;} };
   await organizeTaskWorkspaces(ctx,workbench.store.jobs(),workbench.store.repos());

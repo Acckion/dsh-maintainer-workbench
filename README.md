@@ -27,7 +27,7 @@ npm start
 
 ## 从零完成一次真实维护
 
-1. **配置模型**：只在 Harness 的「设置 → 模型」配置一次默认模型、提供方和凭据。本插件每次真实任务开始读取宿主默认模型与推理设置；原生界面不重复提供 API Key、端点和模型输入。单个聊天的临时模型选择不等于全局默认。独立预览保留自己的兼容 API 配置。
+1. **配置模型**：先在 Harness「设置 → 模型」配置提供方与凭据，再在「设置 → 维护工作台 → 模型」选择插件默认模型。菜单直接读取 Harness 模型目录，按提供方分组；高级设置可为分诊、预检、调查、实施、审查、文档、验证和 CI 单独选择模型与推理等级。优先级为阶段选择 → 插件默认 → Harness 默认；已启动任务保留原模型，已有结果不会自动重跑。模型被移除时明确报错，重新选择后才能运行，不自动切换提供方。单个聊天的临时模型选择不改变本插件设置。独立预览保留自己的兼容 API 配置。
 2. **发现仓库**：优先自动识别 Harness 工作区及 GitHub 远端；其他远程仓库可以输入 `owner/repository` 添加。公开仓库可以匿名读取；私有仓库、写入和更高读取限额需要在“设置与连接”填写 GitHub Token。细粒度令牌的读取需要 Metadata/Issues/Pull requests，发布还需要相应写权限，代码推送需要 Contents write。
 3. **准备仓库**：分诊可以直接使用远程仓库资料；调查、审查、修复与文档任务自动克隆到插件管理的目录，并在固定提交创建专用 worktree，无需用户配置路径。也可在设置中点击「自动准备仓库」，或绑定已有 clone。自动准备不安装依赖、不执行仓库脚本。私有仓库仍需 GitHub 凭据。已有用户克隆需要包含同步时提交，缺失时会提示 fetch。
 4. **批量派发**：勾选 Issue/PR，执行智能分诊、调查、修复、文档维护或 PR 审查。选中 Issue 时不能使用 PR 专属审查。默认每批 20 个、并发 2 个，可在设置修改。
@@ -72,6 +72,7 @@ dsh web
 ```sh
 npm run check          # strict TypeScript + 行为/本地 Git 流程测试 + 构建
 npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent / Shell 联调
+npm run test:browser:settings # 原生设置注册、保存、重开、冲突与失败恢复的浏览器夹具
 ```
 
 新增 `npm run evaluate` 可对固定基线和当前源码运行八案例工作流对照，并生成 JSON/Markdown 证据；默认同时进行本地模型驱动的真实 Harness 联调。使用方式与未测边界见 [可复现评估](docs/EVALUATION.md)。这不是模型质量或修复成功率评测。
@@ -79,6 +80,8 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 浏览器回归脚本为 `scripts/browser-smoke.mjs`；需要先启动独立预览，并安装 Playwright Chromium。已记录的证据范围见 [验证记录](docs/VALIDATION.md)。本地模型夹具验证协议和工具链，不代表真实模型的智能评测。
 
 ## 数据与限制
+
+- **全局设置入口**：Harness「设置 → 维护工作台」，包含模型、自动化、执行、连接和任务工作区。工作台右上角按钮保留快捷页面，两处使用同一表单与 SQLite 配置；保存前核对配置版本，冲突时保留草稿。仓库策略与本地路径仍在工作台的「仓库设置」。当前 SDK 未公开打开指定设置 section 的服务，因此快捷按钮不操纵宿主私有状态，也不替换原生设置启动器。
 
 - 原生模型凭据由 Harness 管理。GitHub 令牌以及独立预览凭据单独保存在 `credentials.json`（权限 0600），不返回浏览器、不包含在任务导出中。环境变量也可配置：`DEEPSEEK_API_KEY`、`MAINTAINER_API_KEY`、`MAINTAINER_BASE_URL`、`GITHUB_TOKEN`。启动器不会自动读取 `.env`，如使用 `.env`，由运行环境加载。
 - 每个数据目录只允许一个 worker 进程。崩溃中的任务转为失败，保留 worktree，人工决定是否重试；不会静默重放代码修改。
@@ -116,7 +119,7 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 
 默认首页汇总跨仓库需要判断的事项。Issue 使用“快速分诊 → 调查 / 实施 → 验证 → 审查 → 发布”；PR 使用“变更预检 → 审查此版本 → 逐项处理发现 → 更新原 PR”。详情页根据产物给出下一步，其他阶段收在快捷操作中。目标、验收条件、历史证据和反馈会自动交接，无需重复输入完整提示词。
 
-分诊与预检仅处理元数据，不创建代码工作区、不开放 shell；代码任务在固定版本的隔离工作区执行，继续继承 Harness 模型和权限。设置中可按仓库调整同步、自动分诊与预算。发布仍需预览并确认，不自动合并。
+分诊与预检仅处理元数据，不创建代码工作区、不开放 shell；代码任务在固定版本的隔离工作区执行，继续通过 Harness 运行，按阶段解析模型并继承权限。设置中可按仓库调整同步、自动分诊与预算。发布仍需预览并确认，不自动合并。
 
 具体实现、验证与能力边界见 [工作流实现记录](docs/product/IMPLEMENTATION.md)。
 
@@ -128,7 +131,7 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 
 ### Fresh profile compatibility
 
-The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers for Cordis `^4.0.5-alpha.1`, dsh-home-paths `^0.2.1-alpha.1`, dsh-llm `^0.2.1-alpha.1`, and dsh-tools `^0.2.1-alpha.1` (the durable question bridge requires `concludeTurn()`). The source lockfile resolves Cordis `4.0.5-alpha.1`. Git dependency installs build the package through `prepare`. The earlier isolated DSH `0.1.7-alpha.1` / Cordis `4.0.4` installed-package workflow evidence below describes the previous dependency contract; it does not verify the current host runtime.
+The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers for Cordis `^4.0.5-alpha.1`, dsh-home-paths `^0.2.1-alpha.1`, dsh-llm `^0.2.1-alpha.1`, dsh-api-session-controller `0.2.0-rc.2 || ^0.2.1-alpha.1`, and dsh-tools `^0.2.1-alpha.1` (the durable question bridge requires `concludeTurn()`). The source lockfile resolves Cordis `4.0.5-alpha.1`. Git dependency installs build the package through `prepare`. The earlier isolated DSH `0.1.7-alpha.1` / Cordis `4.0.4` installed-package workflow evidence below describes the previous dependency contract; it does not verify the current host runtime.
 
 Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. This command requires pnpm 11 or later: before running it, verify `pnpm --version`; use an isolated pnpm 11+ tool directory if the user's PATH provides an older version. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).
 
@@ -159,3 +162,4 @@ Issue 详情现支持类型化目标与验收计划、已提出的问题和等�
 ### 后续工作流编排计划
 
 后续改造按 [工作流编排计划](docs/product/WORKFLOW-ORCHESTRATION-PLAN.md) 推进：系统整理带来源的计划草稿，确认后自动衔接实施、验证与审查，界面集中呈现计划确认、异常决定和最终审核；交付区分新建 PR、更新已有 PR 与补丁导出。首版已接入计划草稿、事项编排与对应界面，操作与验证范围见 [编排实现记录](docs/product/ORCHESTRATION-IMPLEMENTATION.md)。自动修复审查发现暂留后续。
+模型目录复用 Harness 官方 `buildModelCatalog(ctx)`，与宿主对话选择器使用同一来源；菜单是插件自身的紧凑界面，不读取宿主私有 React 状态。模型 ID 与阶段覆盖存入既有 SQLite 设置行，两处设置入口共享版本冲突保护。推理等级仅使用所选模型声明的值，切换模型后恢复该模型默认。公开接口说明：[Harness model selection](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-model-selection/README.md)。

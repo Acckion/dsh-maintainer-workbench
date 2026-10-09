@@ -37,10 +37,6 @@ export class IssueService extends ServiceBase {
       throw new Error(
         "已发现此目录，但当前整理执行需要至少一个 Git 提交；不会自动初始化或提交你的文件",
       );
-    if (repo.mode === "local" && repo.dirty && mode !== "audit")
-      throw new Error(
-        "当前目录有未提交修改。本版隔离任务读取 HEAD，请先提交；不会悄悄忽略或覆盖这些修改",
-      );
     if (!this.nativeRunner) throw new Error("仓库整理需要 Harness 原生执行器");
     let id = issueId;
     if (id) {

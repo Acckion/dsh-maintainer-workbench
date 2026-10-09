@@ -1,0 +1,66 @@
+{
+  "version": "0.4.0",
+  "automatedTests": 302,
+  "typecheck": true,
+  "build": true,
+  "modelSelection": {
+    "catalog": "Harness buildModelCatalog(ctx)",
+    "precedence": [
+      "stage",
+      "plugin default",
+      "Harness default"
+    ],
+    "stages": 8,
+    "storage": "existing SQLite settings with optimistic revision",
+    "unavailableModel": "explicit failure, no fallback"
+  },
+  "nativeFixture": {
+    "provider": "deepseek-official",
+    "hostDefault": "deepseek-flash",
+    "pluginDefault": "deepseek-v4-pro",
+    "triageOverride": "deepseek-flash",
+    "fixStatus": "awaiting_review",
+    "triageStatus": "completed",
+    "validationStatus": "completed",
+    "validationExitCode": 0,
+    "inputBridge": {
+      "pausedStatus": "waiting_input",
+      "question": "Expected queue behavior?",
+      "continuedStatus": "completed",
+      "differentWorktree": true,
+      "running": 0
+    },
+    "requests": 10,
+    "transport": "owned loopback fixture, no real model call"
+  },
+  "browserFixture": {
+    "passed": true,
+    "coverage": [
+      "provider groups and checkmark",
+      "default/stage/effort save and reopen",
+      "drafts across tabs",
+      "conflicts",
+      "failed save recovery",
+      "unavailable model reset",
+      "keyboard and outside dismiss",
+      "opaque popover and compact stage rows"
+    ]
+  },
+  "realDesktop": {
+    "hostVersion": "0.2.0-rc.2",
+    "installedPlugin": "0.4.0",
+    "verified": [
+      "native settings entry",
+      "live configured provider groups and names",
+      "search",
+      "Escape dismiss",
+      "eight stage selectors",
+      "review model draft",
+      "advertised reasoning effort",
+      "reset draft to original"
+    ],
+    "paidModelCalls": 0,
+    "existingModelConfiguration": "preserved",
+    "screenshots": "local ignored verification directory"
+  }
+}

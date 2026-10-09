@@ -223,6 +223,7 @@ try {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.screenshot({ path: join(dir, `maintenance-${width}.png`), fullPage: true });
       await page.getByRole('button',{name:'全局设置',exact:true}).click();
+      await page.getByRole('button',{name:'工作区',exact:true}).click();
       await page.getByRole('heading',{name:'任务工作区',exact:true}).waitFor();
       await page.getByRole('button',{name:'检查与预览',exact:true}).click();
       await page.getByLabel('工作区处置预览',{exact:true}).waitFor();

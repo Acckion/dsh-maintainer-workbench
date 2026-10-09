@@ -339,6 +339,8 @@ export interface Audit {
   detail: string;
 }
 export interface Settings {
+  nativeDefaultModel?: ModelChoice;
+  stageModels?: Partial<Record<JobKind, ModelChoice>>;
   syncLimit?: number;
   autoPreflight?: boolean;
   autoReview?: boolean;
@@ -354,7 +356,26 @@ export interface Settings {
   syncIntervalMinutes: number;
   autoTriage: boolean;
 }
+export interface ModelChoice {
+  provider: string;
+  model: string;
+  reasoningEffort?: string;
+}
+/** Credential-free catalog projected by the same Harness API as its composer. */
+export interface HostModelCatalog {
+  default: ModelChoice;
+  groups: readonly {
+    id: string;
+    name: string;
+    models: readonly { id: string; name: string; reasoning?: {
+      efforts: readonly { id: string; name: string; description?: string }[];
+      defaultEffort?: string;
+    } }[];
+  }[];
+  failures: readonly { id: string; name: string; message: string }[];
+}
 export interface HostStatus {
+  providers?: readonly { id: string; name: string }[];
   contextServices?: {
     tokenMeter: boolean;
     pruner: boolean;
@@ -382,6 +403,12 @@ export interface Snapshot {
     host?: HostStatus;
   };
   version: string;
+}
+/** Small settings projection: excludes repository contents, jobs and credentials. */
+export interface GlobalSettingsSnapshot {
+  settings: Settings;
+  capabilities: Snapshot["capabilities"];
+  revision: string;
 }
 export type Runner = (input: {
   repo: Repo;
