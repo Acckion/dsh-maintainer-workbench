@@ -43,7 +43,7 @@ export function BatchWorkflow({
             void run("/workflow/analyze", { issueIds: issues.map((i) => i.id) })
           }
         >
-          分析所选事项
+          分析
         </button>
         <button
           disabled={busy || !ready.length}
@@ -58,11 +58,11 @@ export function BatchWorkflow({
             })
           }
         >
-          按建议开始处理 · {ready.length} 项
+          开始处理{ready.length ? ` · ${ready.length}` : ""}
         </button>
       </div>
       {issues.length > 0 && (
-        <details open>
+        <details>
           <summary>逐项建议与范围 · {issues.length} 项</summary>
           {issues.map((i) => (
             <article className="mw-stage-event" key={i.id}>

@@ -735,3 +735,77 @@ body[data-ds-dark-theme] .mw:is(.mw-global-settings,.mw-repository-settings),bod
 
 .mw :is(.mw-global-settings,.mw-repository-settings) .mw-token-row>label{width:auto;max-width:none}
 .mw :is(.mw-global-settings,.mw-repository-settings) .mw-token-row input{border:0;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft,#f5f6f7));color:var(--ink)}
+
+/* Shared Harness appearance; layout and status semantics stay unchanged. */
+:root{--mw-text:#15171a;--mw-muted:#7b8089;--mw-accent:#15171a;--mw-accent-fill:#15171a;--mw-accent-fill-hover:#303339;--mw-on-accent:#fff;--mw-surface:#fff;--mw-surface-soft:#f5f6f7;--mw-surface-raised:#eceef0;--mw-surface-strong:#f0f1f3;--mw-selected:#edeef1;--mw-border:#e0e2e6;--mw-focus:#8e949e}
+body[data-ds-dark-theme]{--mw-text:#eceef0;--mw-muted:#999ea7;--mw-accent:#eceef0;--mw-accent-fill:#eceef0;--mw-accent-fill-hover:#fff;--mw-on-accent:#17191d;--mw-surface:#151517;--mw-surface-soft:#27292e;--mw-surface-raised:#32353b;--mw-surface-strong:#191b1f;--mw-selected:#34373d;--mw-border:#393c43;--mw-focus:#a6acb6}
+@media(prefers-color-scheme:dark){:root:not(:has(.mw[data-mw-host])){--mw-text:#eceef0;--mw-muted:#999ea7;--mw-accent:#eceef0;--mw-accent-fill:#eceef0;--mw-accent-fill-hover:#fff;--mw-on-accent:#17191d;--mw-surface:#151517;--mw-surface-soft:#27292e;--mw-surface-raised:#32353b;--mw-surface-strong:#191b1f;--mw-selected:#34373d;--mw-border:#393c43;--mw-focus:#a6acb6}}
+.mw{--ink:var(--dsw-alias-label-primary,var(--mw-text));--muted:var(--dsw-alias-label-secondary,var(--mw-muted));--line:var(--dsw-alias-border-l2,var(--mw-border));--green:var(--ink);color:var(--ink);background:var(--dsw-alias-bg-layer-2,var(--mw-surface));font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}
+.mw .mw-button,.mw .mw-model-trigger{background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft));border-color:transparent;border-radius:var(--dsw-radius-md,10px);color:var(--ink);box-shadow:none;font-weight:400}
+.mw .mw-button:hover,.mw .mw-model-trigger:hover{background:var(--dsw-alias-interactive-bg-hover,var(--mw-surface-raised));border-color:transparent}
+.mw .mw-button.primary{background:var(--ink);color:var(--dsw-alias-bg-layer-2,var(--mw-surface))}
+.mw .mw-button.primary:hover{opacity:.85}
+.mw input:not([type=checkbox]):not([type=radio]),.mw textarea,.mw select{background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft));color:var(--ink);border-color:transparent;border-radius:var(--dsw-radius-md,10px);box-shadow:none}
+.mw .mw-search{background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft));border-color:transparent}
+.mw input[type=checkbox],.mw input[type=radio]{accent-color:var(--ink)}
+.mw button:focus-visible,.mw a:focus-visible,.mw input:focus-visible,.mw select:focus-visible,.mw textarea:focus-visible{outline:2px solid var(--mw-focus);outline-offset:2px}
+.mw .mw-text-button,.mw .mw-stage-event summary,.mw .mw-native-settings-entry,.mw .mw-brand,.mw .mw-brand-inline{color:var(--ink)}
+.mw .mw-issue-row.selected,.mw .mw-task-row.selected{background:var(--mw-selected);border-color:var(--mw-border)}
+.mw .mw-diff .add{background:var(--mw-success-surface,#edf7f1);color:var(--mw-success-text,#236940)}
+.mw .mw-diff .del{background:var(--mw-danger-surface,#fff0f0);color:var(--mw-danger-text,#ac3434)}
+.mw .mw-global-tabs button.active,.mw .mw-reader-tabs button.active{color:var(--ink);border-bottom-color:var(--ink)}
+.mw .mw-toast{background:var(--mw-accent-fill);color:var(--mw-on-accent);border-color:transparent}
+.mw .mw-toast.error{background:var(--mw-danger-surface,#fff0f0);color:var(--mw-danger-text,#ac3434);border-color:var(--mw-danger-border,#f0cccc)}
+
+/* Compact repository header and bulk toolbar. */
+.mw .mw-header-controls{gap:10px;padding:10px 18px}
+.mw .mw-header-brand{width:20px;flex:none}
+.mw .mw-header-controls .mw-repo-switch{width:auto;max-width:min(520px,60%);min-width:120px;height:34px;padding:0 6px;border:0;background:transparent;border-radius:8px;gap:8px}
+.mw .mw-header-controls .mw-repo-switch:hover{background:var(--mw-surface-soft)}
+.mw .mw-header-controls .mw-repo-switch select{background:transparent;border:0;border-radius:0;min-height:32px;padding:0;line-height:32px;font-size:14px}
+.mw .mw-header-controls>.mw-button{min-height:32px;height:32px;width:32px;padding:6px}
+.mw.mw-layout-tabs .mw-batch{padding:8px 12px;gap:4px;min-height:0}
+.mw.mw-layout-tabs .mw-batch>label{min-height:22px;margin:0}
+.mw.mw-layout-tabs .mw-batch>div{align-items:center;gap:6px}
+.mw.mw-layout-tabs .mw-batch .mw-workflow-actions{gap:6px;margin:0;display:flex;flex-wrap:nowrap}
+.mw.mw-layout-tabs .mw-batch button,.mw.mw-layout-tabs .mw-batch select{min-height:28px;padding:3px 6px;line-height:20px}
+.mw .mw-batch-advanced{position:relative;margin:0 0 0 auto;font-size:11px}
+.mw .mw-batch-advanced>summary{list-style:none;cursor:pointer;padding:4px 6px;min-height:28px;color:var(--muted)}
+.mw .mw-batch-advanced[open]{position:absolute;right:12px;top:100%;z-index:20;padding:6px;min-width:150px;border:1px solid var(--mw-border);border-radius:10px;background:var(--mw-surface);box-shadow:0 6px 20px var(--mw-shadow,#0002)}
+.mw .mw-batch-advanced[open]>button,.mw .mw-batch-advanced[open]>select{display:flex;width:100%;justify-content:flex-start}
+.mw .mw-batch>div{position:relative}
+.mw .mw-batch section[aria-label="批量处理建议"]{flex:1;min-width:0}
+.mw .mw-batch section[aria-label="批量处理建议"]>details{font-size:11px;margin-top:4px}
+@media(max-width:640px){.mw .mw-header-controls .mw-repo-switch{max-width:none;flex:1}.mw .mw-header-controls{padding:8px 12px}}
+.mw .mw-header-controls .mw-repo-switch{height:32px;padding:0 10px;background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft));border-radius:var(--dsw-radius-md,10px)}
+.mw .mw-header-controls .mw-repo-switch:hover{background:var(--dsw-alias-interactive-bg-hover,var(--mw-surface-raised))}
+
+/* Main canvas colors stay consistent across native and standalone themes. */
+.mw{--mw-canvas:#fff;background:var(--mw-canvas)}
+body[data-ds-dark-theme] .mw{--mw-canvas:#151517}
+@media(prefers-color-scheme:dark){:root:not(:has(.mw[data-mw-host])) .mw{--mw-canvas:#151517}}
+.mw :is(.mw-shell,.mw-main,.mw-header-controls,.mw-global-tabs,.mw-list-panel,.mw-reader-embedded,.mw-detail-placeholder,.mw-repository-settings){background:var(--mw-canvas)}
+.mw.mw-global-settings{background:transparent}
+
+/* Embedded settings share the workbench canvas; host settings retain their own surface. */
+.mw-layout-tabs .mw:is(.mw-global-settings),.mw.mw-layout-tabs .mw-repository-settings,body[data-ds-dark-theme] .mw.mw-layout-tabs .mw-repository-settings,body[data-ds-dark-theme] .mw-layout-tabs .mw.mw-global-settings{background:transparent}
+.mw-layout-tabs :is(.mw-global-settings,.mw-repository-settings) .mw-settings-card{background:transparent}
+body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
+
+/* Shared action controls. Navigation tabs and selectable content keep their semantics. */
+.mw{--mw-control-bg:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft));--mw-control-hover:var(--dsw-alias-interactive-bg-hover,var(--mw-surface-raised));--mw-control-radius:var(--dsw-radius-md,10px)}
+.mw :is(.mw-button,.mw-text-button,.mw-model-trigger,.mw-workflow-actions>button,.mw-batch button,.mw-reader-close,.mw-modal-close,.mw-filter-trigger,.mw-icon-button,.mw-operation-close){background:var(--mw-control-bg);color:var(--ink);border:0;border-radius:var(--mw-control-radius);min-height:32px;padding:6px 10px;box-shadow:none;font-weight:400;line-height:20px}
+.mw :is(.mw-button,.mw-text-button,.mw-model-trigger,.mw-workflow-actions>button,.mw-batch button,.mw-reader-close,.mw-modal-close,.mw-filter-trigger,.mw-icon-button,.mw-operation-close):hover:not(:disabled){background:var(--mw-control-hover)}
+.mw .mw-button.primary{background:var(--ink);color:var(--mw-canvas)}
+.mw .mw-button.primary:hover:not(:disabled){background:var(--ink);opacity:.85}
+.mw .mw-button.danger{color:var(--mw-danger-text,#ac3434)}
+.mw .mw-global-tabs :is(.mw-repo-settings-tab,.mw-tab-sync){align-self:center;min-height:32px;height:32px;padding:6px 10px;margin-top:6px;margin-bottom:6px;border:0;border-radius:var(--mw-control-radius);background:var(--mw-control-bg);color:var(--ink);font-weight:400}
+.mw .mw-global-tabs .mw-repo-settings-tab{margin-left:auto;margin-right:8px}
+.mw .mw-global-tabs .mw-tab-sync{margin-right:8px}
+.mw .mw-global-tabs :is(.mw-repo-settings-tab,.mw-tab-sync):hover:not(:disabled){background:var(--mw-control-hover)}
+.mw .mw-global-tabs .mw-repo-settings-tab.active{background:var(--mw-control-hover);box-shadow:inset 0 0 0 1px var(--mw-focus);border:0}
+.mw.mw-layout-tabs .mw-batch button{min-height:28px;padding:3px 8px}
+.mw .mw-batch-advanced>summary{background:var(--mw-control-bg);border-radius:var(--mw-control-radius);color:var(--ink);padding:4px 8px}
+.mw .mw-batch-advanced>summary:hover{background:var(--mw-control-hover)}
+.mw :is(.mw-reader-close,.mw-modal-close,.mw-icon-button,.mw-operation-close){width:32px;height:32px;padding:6px}
+.mw button:disabled{opacity:.4;cursor:not-allowed}

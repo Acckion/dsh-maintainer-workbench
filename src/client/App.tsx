@@ -542,8 +542,6 @@ export function App({
           <div className="mw-header-controls">
             <div className="mw-header-brand">
               <GitBranch size={20} />
-              <strong>Maintainer</strong>
-              <small>v{state?.version ?? "…"}</small>
             </div>
             <div className="mw-repo-switch">
               <Code2 size={16} />
@@ -847,8 +845,8 @@ export function App({
                             action("workflow-batch", path, data, message)
                           }
                         />
-                        <details>
-                          <summary>高级操作</summary>
+                        <details className="mw-batch-advanced">
+                          <summary>更多操作</summary>
                           <button
                             disabled={!selected.length || !!busy}
                             onClick={() => void enqueue("triage")}
