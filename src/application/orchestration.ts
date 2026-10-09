@@ -450,6 +450,24 @@ export class Orchestration {
           : "请核对产物并选择下一步",
       );
   }
+  assertRecovery(job: Job) {
+    if (!job.workflowRunId) return;
+    const issue = this.issue(job.issueId), run = issue.orchestration?.run;
+    const repo = this.wb.store.get<import("../core/types.ts").Repo>("repos", issue.repoId)!;
+    if (!run || run.id !== job.workflowRunId || run.currentJobId !== job.id ||
+      (run.caseId && run.caseId !== issue.processing?.id) ||
+      (job.caseId && job.caseId !== issue.processing?.id))
+      throw new Error("原任务不再属于当前计划或处理周期，请重新确认");
+    if (run.inputKey !== planInputKey(issue, repo) || JSON.stringify(run.plan) !== JSON.stringify(issue.plan))
+      throw new Error("版本或计划已变化，请重新分析");
+  }
+  private renewed(issue: Issue, run: WorkflowRun): WorkflowRun {
+    const repo = this.wb.store.get<import("../core/types.ts").Repo>("repos", issue.repoId)!;
+    const deadlineAt = new Date(Date.now() + (repo.policy?.timeoutMs ?? this.wb.store.settings().timeoutMs) * 4).toISOString();
+    const maxSteps = Math.max(run.maxSteps, this.wb.store.jobs().filter(j => j.workflowRunId === run.id).length + 6);
+    this.wb.store.audit("workflow.budget_renewed", `${issue.id}: 维护者明确恢复当前计划；截止 ${run.deadlineAt} → ${deadlineAt}，步骤上限 ${run.maxSteps} → ${maxSteps}`);
+    return { ...run, deadlineAt, maxSteps };
+  }
   replacement(jobId: string, result: { created: string[]; reused: string[] }) {
     const job = this.wb.store.get<Job>("jobs", jobId);
     if (!job?.workflowRunId) return;
@@ -467,7 +485,7 @@ export class Orchestration {
       this.put(issue, {
         ...issue.orchestration,
         run: {
-          ...run,
+          ...this.renewed(issue, run),
           status: "running",
           currentJobId: nextId,
           reason: "已明确恢复当前步骤，保留原始记录",
@@ -505,25 +523,7 @@ export class Orchestration {
       JSON.stringify(run.plan) !== JSON.stringify(issue.plan)
     )
       throw new Error("版本或计划已变化，请重新分析");
-    if (
-      this.wb.store.jobs().filter((j) => j.workflowRunId === run.id).length >=
-      run.maxSteps
-    )
-      throw new Error("本次计划步骤预算已到上限，请重新确认计划");
-    if (Date.now() > Date.parse(run.deadlineAt))
-      throw new Error("本次执行预算已到期，请重新确认计划");
-    const result = this.wb.retry(run.currentJobId);
-    const current = this.issue(id);
-    this.put(current, {
-      ...current.orchestration,
-      run: {
-        ...run,
-        status: "running",
-        currentJobId: result.created[0] ?? result.reused[0],
-        reason: "维护者检查现场后明确重试，保留原失败记录",
-      },
-    });
-    return result;
+    return this.wb.retry(run.currentJobId);
   }
   resume(id: string) {
     const issue = this.issue(id),
@@ -544,11 +544,15 @@ export class Orchestration {
       : undefined;
     if (job && ["failed", "cancelled", "rejected"].includes(job.status))
       throw new Error("原执行状态不明或失败，请检查工作区后从高级操作明确重试");
+    if (job) this.assertRecovery(job);
+    if (this.wb.store.jobs().some(j => j.issueId === id && ["queued", "running"].includes(j.status)))
+      throw new Error("当前事项仍有执行中的任务，请等待完成");
+    if (job && ["waiting_input", "waiting_environment"].includes(job.status)) return this.wb.resume(job.id);
     const updated = {
       ...issue,
       orchestration: {
         ...issue.orchestration,
-        run: { ...run, status: "running" as const },
+        run: { ...this.renewed(issue, run), status: "running" as const },
       },
     };
     this.put(updated, updated.orchestration);

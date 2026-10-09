@@ -128,6 +128,9 @@ export function WorkflowCard({
           </p>
         </>
       )}
+      {run && ["paused", "blocked"].includes(run.status) && status !== "stale" && (
+        <p>明确继续或重试会续期当前计划的执行预算，保留已有修改与历史记录。</p>
+      )}
       {active ? (
         <p className="mw-callout">
           系统正在{kindNames[active.kind]}：

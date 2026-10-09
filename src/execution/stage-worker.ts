@@ -463,11 +463,11 @@ export class StageWorker extends ServiceBase {
           "Agent 未产生可审核的代码差异。该任务不能作为已完成的修复交付。",
         );
       if (output.artifact) {
-        output.artifact = reconcileTestExecutions(output.artifact, {
+        output.artifact = documentAcceptance(output.artifact, {
           ...job,
           patchSha256: patchHash(patch),
         });
-        output.artifact = documentAcceptance(output.artifact, {
+        output.artifact = reconcileTestExecutions(output.artifact, {
           ...job,
           patchSha256: patchHash(patch),
         });
