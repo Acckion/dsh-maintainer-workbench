@@ -70,6 +70,7 @@ dsh web
 ```sh
 npm run check          # strict TypeScript + 行为/本地 Git 流程测试 + 构建
 npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent / Shell 联调
+npm run test:browser:settings # 原生设置注册、保存、重开、冲突与失败恢复的浏览器夹具
 ```
 
 新增 `npm run evaluate` 可对固定基线和当前源码运行八案例工作流对照，并生成 JSON/Markdown 证据；默认同时进行本地模型驱动的真实 Harness 联调。使用方式与未测边界见 [可复现评估](docs/EVALUATION.md)。这不是模型质量或修复成功率评测。
@@ -77,6 +78,8 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 浏览器回归脚本为 `scripts/browser-smoke.mjs`；需要先启动独立预览，并安装 Playwright Chromium。已记录的证据范围见 [验证记录](docs/VALIDATION.md)。本地模型夹具验证协议和工具链，不代表真实模型的智能评测。
 
 ## 数据与限制
+
+- **全局设置入口**：Harness「设置 → 维护工作台」，包含自动化、执行、连接和任务工作区。工作台右上角按钮保留快捷页面，两处使用同一表单与 SQLite 配置；保存前核对配置版本，冲突时保留草稿。仓库策略与本地路径仍在工作台的「仓库设置」。当前 SDK 未公开打开指定设置 section 的服务，因此快捷按钮不操纵宿主私有状态，也不替换原生设置启动器。
 
 - 原生模型凭据由 Harness 管理。GitHub 令牌以及独立预览凭据单独保存在 `credentials.json`（权限 0600），不返回浏览器、不包含在任务导出中。环境变量也可配置：`DEEPSEEK_API_KEY`、`MAINTAINER_API_KEY`、`MAINTAINER_BASE_URL`、`GITHUB_TOKEN`。启动器不会自动读取 `.env`，如使用 `.env`，由运行环境加载。
 - 每个数据目录只允许一个 worker 进程。崩溃中的任务转为失败，保留 worktree，人工决定是否重试；不会静默重放代码修改。

@@ -42,6 +42,7 @@ import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 
 import { type DetailTab } from "./ReviewSummary.tsx";
 import { GitHubConnection, SettingsView } from "./SettingsView.tsx";
+import { GlobalSettings } from "./GlobalSettings.tsx";
 
 import { API, request } from "./api.ts";
 import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
@@ -575,6 +576,7 @@ export function App({
             <button
               className={`mw-button ${page === "settings" ? "active" : ""}`}
               aria-label="全局设置"
+              title={host ? "全局设置 · 也可从 Harness 设置 → 维护工作台进入" : "全局设置"}
               onClick={() => navigate("settings")}
             >
               <Settings2 size={16} />
@@ -658,7 +660,7 @@ export function App({
                 <p>
                   {repo.localKind === "folder"
                     ? "普通文件夹：可执行只读仓库检查。"
-                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：可只读检查；隔离修改暂需提交后执行" : "工作区干净，可执行隔离任务"}`}
+                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：任务基于已提交版本在独立 worktree 执行，本地修改保留" : "工作区干净，可执行隔离任务"}`}
                 </p>
                 <p>
                   {repo.githubName
@@ -1263,12 +1265,11 @@ export function App({
                   }
                 />
               )}
-              {(page === "settings" || page === "repository-settings") && (
+              {page === "settings" && <GlobalSettings native={host} />}
+              {page === "repository-settings" && (
                 <SettingsView
                   key={page}
-                  scope={
-                    page === "repository-settings" ? "repository" : "global"
-                  }
+                  scope="repository"
                   state={state}
                   repoId={repoId}
                   busy={!!busy}

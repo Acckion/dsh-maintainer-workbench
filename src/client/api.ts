@@ -11,6 +11,6 @@ export async function request(path: string, data?: unknown) {
         },
   );
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error ?? "请求失败");
+  if (!response.ok) throw Object.assign(new Error(result.error ?? "请求失败"), { status: response.status, code: result.code });
   return result;
 }

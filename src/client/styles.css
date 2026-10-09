@@ -552,3 +552,26 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 .mw-workflow-card { border:1px solid var(--mw-border,#d4e3dc); border-radius:12px; padding:18px; margin:12px 0; background:var(--mw-surface,#fff); }
 .mw-workflow-progress { display:flex; flex-wrap:wrap; gap:20px; padding-left:24px; color:var(--mw-muted,#587568); }
 .mw-workflow-card details { margin:12px 0; }
+/* Shared native settings section and workbench shortcut. No workbench shell
+   height, fixed overlays, or host-wide styling inside the Settings dialog. */
+.mw.mw-global-settings{display:block;min-height:0;max-width:100%;background:transparent;container-name:maintainer-settings;padding:0}
+.mw-settings-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.mw-settings-heading h2{font-size:18px;font-weight:600}
+.mw-settings-heading>span{font-size:12px;color:var(--mw-muted,#647780)}
+.mw-settings-tabs{display:flex;gap:4px;border-bottom:1px solid var(--mw-border,#e0e8e6);margin-bottom:16px;flex-wrap:wrap}
+.mw-settings-tabs>button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--mw-muted,#647780);padding:8px 14px;font-size:13px}
+.mw-settings-tabs>button[aria-current=page]{color:var(--mw-text,#198374);border-bottom-color:var(--mw-accent-fill,#198374);font-weight:600}
+.mw-global-settings .mw-settings-grid{grid-template-columns:minmax(0,1fr);gap:16px}
+.mw-global-settings .mw-settings-card{border-color:var(--mw-border,#e0e8e6);padding:18px}
+.mw-global-settings .mw-check-label input{width:16px;min-height:0;margin:0}
+.mw-global-settings .mw-settings-note{margin:12px 0;color:var(--mw-muted,#647780);font-size:12px}
+.mw-global-settings .mw-settings-card>button{margin-top:16px}
+.mw-global-settings .mw-settings-feedback{padding:10px 12px;margin-bottom:12px;border-radius:6px;background:var(--mw-success-surface,#eaf6ef);color:var(--mw-success-text,#23634c);overflow-wrap:anywhere}
+.mw-global-settings .mw-settings-feedback.error{background:var(--mw-danger-surface,#fff3f1);color:var(--mw-danger-text,#a33c32)}
+.mw-global-settings .mw-settings-feedback>button{margin:8px 8px 0 0}
+.mw-native-settings .mw-settings-card{padding:16px}
+.mw-native-settings .mw-credential-fields{margin-top:12px;padding-top:12px}
+.mw-native-settings .mw-host-model p{font-size:12px}
+@container maintainer-settings (max-width:480px){.mw-global-settings .mw-form-grid{grid-template-columns:minmax(0,1fr)}.mw-settings-heading{flex-wrap:wrap}}
+.mw-settings-fields{border:0;min-width:0;margin:0;padding:0}
+.mw-global-settings .mw-form-grid>.mw-muted{grid-column:1/-1;font-size:12px}

@@ -10,6 +10,7 @@ import type { Settings, Snapshot } from "../core/types.ts";
 import { Tag } from "./Primitives.tsx";
 import { WorkspacesPanel } from "./WorkspacesPanel.tsx";
 import { request } from "./api.ts";
+import { settingsIdentity } from "./settings-draft.ts";
 export function GitHubConnection({
   refreshKey = false,
   configure = false,
@@ -119,9 +120,13 @@ export function SettingsView({
   bind,
   credentials,
   prepare,
+  panel = "all",
+  changed,
 }: {
   scope: "global" | "repository";
-  state: Snapshot;
+  state: Pick<Snapshot, "settings" | "capabilities"> & { repos?: Snapshot["repos"] };
+  panel?: "all" | "automation" | "execution" | "connections" | "workspaces";
+  changed?: (dirty: boolean) => void;
   repoId: string;
   busy: boolean;
   prepare: () => void;
@@ -131,20 +136,23 @@ export function SettingsView({
     apiKey?: string;
     githubToken?: string;
     baseUrl?: string;
-  }) => void;
+  }) => void | Promise<boolean>;
 }) {
   const [settings, setSettings] = useState(state.settings);
   const [apiKey, setApiKey] = useState("");
   const [githubToken, setGithubToken] = useState("");
   const [baseUrl, setBaseUrl] = useState(state.capabilities.baseUrl);
-  const repo = state.repos.find((r) => r.id === repoId);
+  const repo = state.repos?.find((r) => r.id === repoId);
   const [path, setPath] = useState(repo?.localPath ?? "");
   useEffect(() => setPath(repo?.localPath ?? ""), [repo?.id, repo?.localPath]);
   const native = state.capabilities.harness;
   const host = state.capabilities.host;
+  useEffect(() => {
+    changed?.(settingsIdentity(settings) !== settingsIdentity(state.settings));
+  }, [settings, state.settings, changed]);
   return (
     <div className="mw-settings-grid">
-      <section className="mw-settings-card">
+      {(scope === "repository" || panel === "all" || panel === "connections") && <section className="mw-settings-card">
         {scope === "repository" ? (
           <>
             <div className="mw-section-title">
@@ -253,15 +261,17 @@ export function SettingsView({
               <button
                 className="mw-button"
                 disabled={busy}
-                onClick={() => {
-                  credentials({
+                onClick={async () => {
+                  const accepted = await credentials({
                     ...(native
                       ? {}
                       : { ...(apiKey ? { apiKey } : {}), baseUrl }),
                     ...(githubToken ? { githubToken } : {}),
                   });
-                  setApiKey("");
-                  setGithubToken("");
+                  if (accepted !== false) {
+                    setApiKey("");
+                    setGithubToken("");
+                  }
                 }}
               >
                 保存连接配置
@@ -307,8 +317,8 @@ export function SettingsView({
             </div>
           </>
         )}
-      </section>
-      {scope === "global" && (
+      </section>}
+      {scope === "global" && (panel === "all" || panel === "automation" || panel === "execution") && (
         <form
           className="mw-settings-card"
           onSubmit={(e) => {
@@ -318,10 +328,10 @@ export function SettingsView({
         >
           <div className="mw-section-title">
             <Settings2 size={19} />
-            全局默认执行策略
+            {panel === "automation" ? "自动化与同步" : "全局默认执行策略"}
           </div>
           <div className="mw-form-grid">
-            {!native && (
+            {!native && panel !== "automation" && (
               <>
                 <label>
                   模型提供方
@@ -345,7 +355,7 @@ export function SettingsView({
                 </label>
               </>
             )}
-            <label>
+            {panel !== "automation" && <><label>
               并发任务
               <input
                 type="number"
@@ -368,8 +378,8 @@ export function SettingsView({
                   setSettings({ ...settings, maxJobsPerBatch: +e.target.value })
                 }
               />
-            </label>
-            <label>
+            </label></>}
+            {panel !== "execution" && <><label>
               同步记录上限（0 表示无上限）
               <input
                 type="number"
@@ -419,8 +429,9 @@ export function SettingsView({
             <p className="mw-muted">
               手动或定时同步后自动派发，后台按批补齐。结果保存在本机，未变化的版本直接复用；失败后需手动重试。分诊使用模型并产生费用，不会自动修改代码或发布。
             </p>
+            </>}
           </div>
-          <details className="mw-advanced">
+          {panel !== "automation" && <details className="mw-advanced">
             <summary>高级执行选项（通常无需修改）</summary>
             <div className="mw-form-grid">
               <label>
@@ -493,21 +504,24 @@ export function SettingsView({
               的工具与 Skills。调查、审查使用 read-only；修复、文档的权限填
               inherit 时也跟随宿主默认。
             </p>
-          </details>
-          <div className="mw-callout amber">
+          </details>}
+          {panel !== "automation" && <details className="mw-settings-note">
+            <summary>执行权限与发布范围</summary>
+            <div className="mw-callout amber">
             <ShieldCheck size={18} />
             <p>
               单次输出上限不等于总费用上限。执行遵循 Harness
               的权限策略；工作台不自动发布评论、推送分支或合并 PR。
             </p>
           </div>
+          </details>}
           <button className="mw-button primary" disabled={busy}>
             <Check size={15} />
             保存设置
           </button>
         </form>
       )}
-      {scope === "global" && <WorkspacesPanel />}
+      {scope === "global" && (panel === "all" || panel === "workspaces") && <WorkspacesPanel />}
     </div>
   );
 }

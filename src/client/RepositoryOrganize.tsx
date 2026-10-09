@@ -9,7 +9,7 @@ export function RepositoryOrganize({state,repoId,busy,run,open}:{state:Snapshot;
   const prs=state.issues.filter(i=>i.repoId===repoId && i.type==='pr' && i.state==='open');
   const jobs=state.jobs.filter(j=>j.repoId===repoId && (j.issueSnapshot.origin==='repository' || j.instructions?.startsWith(organizeActions.docs.instructions))).slice(0,20);
   const current=organizeActions[mode];
-  const disabled=busy || !repoId || !state.capabilities.harness || mode !== 'audit' && repo?.mode === 'local' && (!repo.headSha || repo.dirty);
+  const disabled=busy || !repoId || !state.capabilities.harness || mode !== 'audit' && repo?.mode === 'local' && !repo.headSha;
   return <div className="mw-organize-workspace"><aside className="mw-organize-sidebar">
     <h3>仓库维护</h3><nav aria-label="仓库整理项目">{Object.entries(organizeActions).map(([value,a])=><button key={value} className={`mw-task-row ${mode===value?'focused':''}`} aria-current={mode===value?'page':undefined} onClick={()=>setMode(value as OrganizeMode)}><strong>{a.title}</strong></button>)}</nav>
     <h3>最近处理</h3>{jobs.length ? jobs.map(j=><button className="mw-task-row" key={j.id} onClick={()=>open(j.id)}><div><strong>{j.issueSnapshot.title}</strong><small>{j.artifactState==='stale'?'旧版本 · ':''}{new Date(j.createdAt).toLocaleString('zh-CN')}</small></div></button>):<p className="mw-muted">尚无整理任务</p>}
