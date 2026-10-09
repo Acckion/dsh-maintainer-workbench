@@ -4,9 +4,10 @@ import { chromium } from '@playwright/test';
 import { verifyTheme } from './browser-theme-check.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, mkdtemp } from 'node:fs/promises';
+import { readFile, mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import {git} from '../src/core/git.ts';
 import { Store } from '../src/core/store.ts';
 import { Workbench, revision } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
@@ -32,6 +33,10 @@ try {
       summary:section==='summary'?{...item,createdAt:item.updatedAt,assignees:[],headSha:pr.headSha,headRef:'feature',baseRef:'main',changedFiles:1,additions:1,deletions:1}:undefined,
       rows:section==='files'?[{id:'file-sum',kind:'file',path:'sum.ts',status:'modified',at:item.updatedAt,author:'fixture',body:'',additions:1,deletions:1,patch:'@@ -1 +1 @@\n-old\n+new'}]:section==='activity'?[{id:'comment-1',kind:'commented',at:item.updatedAt,author:'fixture',body:'Original fixture comment'}]:[]};
     };
+    const inputIssue=store.get('issues','fixture/queue#132');
+    const inputJob={id:'input-waiting',caseId:inputIssue.processing.id,repoId:repo.id,issueId:inputIssue.id,issueSnapshot:inputIssue,kind:'triage',status:'waiting_input',revision:revision(inputIssue,repo,'triage'),baseSha:repo.headSha,result:fixtureAnalysis(inputIssue,'triage'),attempt:1,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    store.put('jobs',inputJob);
+    const inputWait=w.processing.requestInput(inputIssue.id,{reason:'Fixture needs expected behavior',fields:[{id:'behavior',question:'Expected queue behavior?'}]},inputJob.id);
     let writes = 0;
     const threadSnapshot = { headSha: pr.headSha, baseSha: pr.prBaseSha, syncedAt: new Date().toISOString(), partial: false, threads: [{ id: 'thread-fixture', path: 'sum.ts', line: 1, isResolved: false, isOutdated: false, viewerCanResolve: true, viewerCanUnresolve: true, url: 'https://github.com/fixture/queue/pull/135#discussion', body: 'Fixture thread' }] };
     github.remotePR = async (_repo,url) => ({ url,number:135,headSha:pr.headSha,baseSha:pr.prBaseSha,state:'OPEN',draft:false,review:'CHANGES_REQUESTED',mergeState:'DIRTY',mergedAt:null,checks:[{name:'Fixture CI',status:'COMPLETED',conclusion:'FAILURE'}],closingIssues:[],partial:false,syncedAt:new Date().toISOString() });
@@ -43,6 +48,10 @@ try {
     github.setThreadResolved = async (_id, resolved, beforeSend) => { beforeSend?.(); writes++; threadSnapshot.threads[0].isResolved = resolved; };
     github.sync = async () => ({ repo, issues: store.issues().map(issue => issue.informationRequests?.length ? { ...issue, comments: issue.comments + 1, updatedAt: new Date().toISOString() } : issue) });
     github.informationReplies = async (_repo, issue) => ({ replies: [{ id: 101, author: issue.author, createdAt: new Date(Date.now() + 1000).toISOString(), url: 'https://github.com/fixture/queue/issues/131#comment', body: 'Fixture user supplied reproduction steps' }], partial: false });
+    const cleanupPath=join(dir,'cleanup-repo');await mkdir(cleanupPath);await git(cleanupPath,['init','-b','main']);await writeFile(join(cleanupPath,'README.md'),'Cleanup fixture\n');await git(cleanupPath,['add','.']);await git(cleanupPath,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
+    const cleanupSha=await git(cleanupPath,['rev-parse','HEAD']),cleanupRepo={...repo,id:'fixture/cleanup',fullName:'fixture/cleanup',mode:'local',localKind:'git',localPath:cleanupPath,headSha:cleanupSha,profile:{...repo.profile,revision:cleanupSha}};
+    store.put('repos',cleanupRepo);const cleanupIssue={...store.issues()[0],id:'fixture/cleanup:maintenance',repoId:cleanupRepo.id,origin:'repository',number:0,title:'Cleanup fixture',url:''};store.put('issues',cleanupIssue);
+    const cleanupId=w.enqueue([cleanupIssue.id],'investigate').created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
     const api = handler(w, localRejection), files = { '/': ['preview.html', 'text/html'], '/app.js': ['app.js', 'application/javascript'], '/app.css': ['app.css', 'text/css'] };
     const server = createServer(async (req, res) => {
       if (req.url?.startsWith('/maintainer/api')) return api(req, res);
@@ -116,6 +125,26 @@ try {
       await page.getByRole('button', { name: '信息已足够', exact: true }).click();
       await page.getByText('维护者确认信息已足够', { exact: false }).waitFor();
 
+      await page.locator('[id="mw-item-fixture/queue#132"]').click();
+      const resume=page.getByRole('button',{name:'等待填写补充信息',exact:true});
+      assert.equal(await resume.isDisabled(),true);
+      await page.getByLabel('Expected queue behavior?',{exact:true}).fill('Keep queue order');
+      await page.getByRole('button',{name:'保存补充输入',exact:true}).click();
+      await page.getByText('已保存补充输入，可继续处理',{exact:true}).waitFor();
+      assert.equal(store.processing.current(inputIssue.id).waits.find(wait=>wait.id===inputWait.id).state,'satisfied');
+      assert.equal(store.jobs().filter(item=>item.issueId===inputIssue.id).length,1);
+      await page.getByRole('button',{name:'根据补充信息继续',exact:true}).click();
+      await page.getByText('已根据补充输入继续，原运行与证据保留',{exact:true}).waitFor();
+      const continued=store.jobs().find(item=>item.sourceJobId===inputJob.id);
+      assert.ok(continued);assert.match(continued.instructions,/Keep queue order/);
+      assert.equal(store.get('jobs',inputJob.id).status,'waiting_input');
+      await page.screenshot({path:join(dir,`processing-input-${width}.png`),fullPage:true});
+
+      await selectPanel('Work');
+      await page.getByText('处理状态与事件历史',{exact:true}).click();
+      await page.getByText('input.submitted',{exact:true}).waitFor();
+      await page.getByLabel('查看处理周期',{exact:true}).selectOption(inputIssue.processing.id);
+      await page.getByText('input.submitted',{exact:true}).waitFor();
       await page.getByRole('button', { name: 'Tasks' }).click();
       await page.locator('#mw-item-review-current').click();
       await selectPanel('Review');
@@ -173,6 +202,15 @@ try {
       await page.getByText(/Fixture assertion failed/, { exact: false }).last().waitFor();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
       await page.screenshot({ path: join(dir, `maintenance-${width}.png`), fullPage: true });
+      await page.getByRole('button',{name:'全局设置',exact:true}).click();
+      await page.getByRole('heading',{name:'任务工作区',exact:true}).waitFor();
+      await page.getByRole('button',{name:'检查与预览',exact:true}).click();
+      await page.getByLabel('工作区处置预览',{exact:true}).waitFor();
+      await page.getByRole('button',{name:'确认清理此工作区',exact:true}).click();
+      await page.getByText('暂无保留的任务工作区。',{exact:true}).waitFor();
+      assert.equal(w.workspaces.list().find(item=>item.id===cleanupId).status,'removed');assert.equal(await git(cleanupPath,['rev-parse',store.get('jobs',cleanupId).branch]),cleanupSha);
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      await page.screenshot({path:join(dir,`workspace-cleanup-${width}.png`),fullPage:true});
       console.log(`Maintenance browser fixture PASS ${width}px; evidence ${dir}`);
     } catch (error) { await page.screenshot({ path: join(dir, `maintenance-failure-${width}.png`), fullPage: true }); console.error(`Browser failure evidence: ${dir}`); throw error; } finally { await page.close(); await new Promise(resolve => server.close(resolve)); await w.close(); }
   }

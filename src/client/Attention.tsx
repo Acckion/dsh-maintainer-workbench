@@ -24,7 +24,7 @@ export function Attention({
               (r) => r.state === "reply_received",
             ) ||
             ["needs_info", "decision", "blocked", "review"].includes(
-              issue.workflow?.stage ?? "",
+              issue.processing?.phase ?? "",
             ) ||
             ["failed", "awaiting_review"].includes(job?.status ?? "") ||
             (validationState(job?.artifact)?.state !== undefined &&
@@ -42,7 +42,7 @@ export function Attention({
                   #{issue.number} {issue.title}
                 </strong>
                 <p>
-                  {job?.error ?? issue.workflow?.reason ?? "变更产物等待审核"}
+                  {job?.error ?? issue.processing?.reason ?? "变更产物等待审核"}
                 </p>
               </div>
             ))}

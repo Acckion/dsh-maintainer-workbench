@@ -172,3 +172,7 @@ REGRESSION_PASSED
 - 本机先备份配置、SQLite 和旧包再安装；确认 v0.3.7 加载，已安装 client/plugin 构建与本次源码构建逐字节相同。真实 macOS Harness 验证明暗切换、筛选菜单、连接弹窗、PR Summary 和三个文件的 GitHub Diff；截图留在本地验收目录，未上传用户运行数据。
 - `npm run check`：类型检查、250 项测试、构建通过；最终配色微调后再通过类型检查、构建和两种宽度的浏览器流程。
 - `npm run test:browser:maintenance`：1440px、390px 通过；新增覆盖系统实时切换、宿主主题优先级、打开的顶层弹窗切换、Repository/Tasks/设置配色、Diff 增删区分和正文对比度。所测深色列表标题、详情标题、筛选菜单、连接弹窗正文/标题与 Diff 三种行均达到 4.5:1。GitHub/模型使用合成夹具，没有付费模型调用或远端写入。
+
+合并远端 `cdaa83b` 后，维护浏览器夹具仍在两种宽度通过。新增 Mac 路径回归修复：恢复工作区以规范化的管理父目录加工作区 ID 对比真实路径，允许 `/var` 与 `/private/var` 的目录别名，但不允许工作区叶节点被替换为外部 checkout 的符号链接。新增可移植别名/替换测试，干净待提交副本中的类型检查、288 项测试和构建全部通过。原工作树未跟踪的 `src/client/item-next-step.ts` 仍引用旧 `Issue.workflow`，因此不改动该文件、不将它纳入提交；原工作树类型检查会因该文件报错。
+
+远端新增的 `@deepseek-ai/dsh-tools` peer 范围已扩展为 `0.2.0-rc.2 || ^0.2.1-alpha.1`，与其他 Harness peer 保持一致；本机官方 rc.2 工具模块包含所用 `defineTool`、`register` 和 `concludeTurn` 接口。真实客户端兼容性以安装后的加载结果验收。

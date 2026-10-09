@@ -63,7 +63,8 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5-alpha.1",
     "@deepseek-ai/dsh-home-paths": "0.2.0-rc.2 || ^0.2.1-alpha.1",
-    "@deepseek-ai/dsh-llm": "0.2.0-rc.2 || ^0.2.1-alpha.1"
+    "@deepseek-ai/dsh-llm": "0.2.0-rc.2 || ^0.2.1-alpha.1",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2 || ^0.2.1-alpha.1"
   },
   "dependencies": {
     "react": "18.3.1",

@@ -546,3 +546,5 @@ body[data-ds-dark-theme]{
 body[data-ds-dark-theme] .mw textarea{background:var(--mw-surface);color:var(--mw-text)}
 body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 @media(prefers-color-scheme:dark){:root:not(:has(.mw[data-mw-host])) .mw textarea{background:var(--mw-surface);color:var(--mw-text)}}
+/* Cross-view evidence navigation preserves its exact list origin on desktop too. */
+.mw-reader-header h2>.mw-mobile-list-return.mw-origin-return{display:inline-flex;margin-right:6px}

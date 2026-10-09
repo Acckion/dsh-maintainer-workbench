@@ -1,7 +1,7 @@
 import { artifactSchemas } from '../src/core/artifacts.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { nextGoalStep } from '../src/core/goal-flow.ts';
+import { nextGoalStep } from '../src/workflow/continuation.ts';
 import type { Issue, Job } from '../src/core/types.ts';
 const issue = {state:'open',plan:{category:'bug',decision:'accepted',goal:'Fix sum',reproduction:'Run test',expected:'3',actual:'1',acceptanceCriteria:['test passes']}} as Issue;
 const validationArtifact = (status: 'passed'|'failed') => artifactSchemas.validate.parse({schemaVersion:1,stage:'validate',summary:'Validation',coverage:'Unit tests',environment:'Local',evidence:[],nextSteps:[],responseDraft:'',tests:[{command:'node test.cjs',status,output:'Test result'}],blockers:[]});

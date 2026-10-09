@@ -4,7 +4,7 @@
 
 ## 启动
 
-要求 Node.js 24+、Git。开发环境使用 Harness `0.2.1-alpha.1`，已安装的 macOS 客户端兼容 `0.2.0-rc.2`。
+要求 Node.js 24+、Git、Harness `0.2.1-alpha.1` 或提供兼容接口的更新版本。持久化原生提问使用 `@deepseek-ai/dsh-tools@^0.2.1-alpha.1` 的 `concludeTurn()`，旧 `0.2.0-rc.2` 客户端需要升级后使用此版本。
 
 ```sh
 npm ci
@@ -44,6 +44,8 @@ npm start
 | 修复 / 文档维护 | 复用 Harness Standard preset 和原生工具，在专用 worktree 运行，返回实际差异 |
 | PR 审查 | 获取 PR base/head 和变更，结合报告及代码分析，明确覆盖边界 |
 | 队列 | SQLite 持久化、版本绑定、幂等派发、并发上限、超时、取消、保留历史的重试 |
+| 事项状态 | 独立处理周期、事件历史、暂缓与等待；GitHub 更新使旧输入/审核过期，关闭重开保留历史 |
+| 补充输入 | Agent 结构化问题表单，回答持久化后显式继续；新的运行与工作区保留原证据 |
 | 审核 | 结果、工具证据、输入提交、真实 diff、接受/退回、差异变更和输入过期检查 |
 | 交付 | JSON / patch 导出，GitHub 回复、标签、草稿 PR；发布去重与状态记录 |
 | 自动化 | 可配置定时同步、对新版本问题自动分诊；默认关闭，不自动发布 |
@@ -116,13 +118,15 @@ npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent 
 
 具体实现、验证与能力边界见 [工作流实现记录](docs/product/IMPLEMENTATION.md)。
 
+模块划分、持久化状态机、事件与人工输入、worktree 所有权、冻结补丁交接和旧数据迁移见 [架构说明](docs/product/ARCHITECTURE.md)。
+
 2026-10-02 安装包试用发现并修复了两处维护流程断点：失败验证仍保留为待处理事项；接受独立审查后可定位同版本、同补丁的原实施产物，继续单独批准与发布。完整十步试用、复现脚本和未测边界见 [安装包维护试用](docs/product/INSTALLED-TRIAL.md)，参赛剩余材料见 [准备状态](docs/product/COMPETITION-READINESS.md)。
 
 随后收敛为“维护者判断台”，默认详情加入同补丁的统一审阅摘要及明确恢复状态。产品目标与非目标见 [产品定义](docs/product/PRODUCT-FOCUS.md)，个人试用时建议检查的五个场景见 [个人试用说明](docs/product/PERSONAL-TRIAL.md)。后续验证可见性与过期发布预览的补充修正、已知限制见 [补充复核](docs/product/RECOVERY-REVIEW.md)。
 
 ### Fresh profile compatibility
 
-The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers for Cordis `^4.0.5-alpha.1`, dsh-home-paths `^0.2.1-alpha.1`, and dsh-llm `^0.2.1-alpha.1`. The source lockfile resolves Cordis `4.0.5-alpha.1`. Git dependency installs build the package through `prepare`. The earlier isolated DSH `0.1.7-alpha.1` / Cordis `4.0.4` installed-package workflow evidence below describes the previous dependency contract; it does not verify the current host runtime.
+The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers for Cordis `^4.0.5-alpha.1`, dsh-home-paths `^0.2.1-alpha.1`, dsh-llm `^0.2.1-alpha.1`, and dsh-tools `^0.2.1-alpha.1` (the durable question bridge requires `concludeTurn()`). The source lockfile resolves Cordis `4.0.5-alpha.1`. Git dependency installs build the package through `prepare`. The earlier isolated DSH `0.1.7-alpha.1` / Cordis `4.0.4` installed-package workflow evidence below describes the previous dependency contract; it does not verify the current host runtime.
 
 Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. This command requires pnpm 11 or later: before running it, verify `pnpm --version`; use an isolated pnpm 11+ tool directory if the user's PATH provides an older version. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).
 
