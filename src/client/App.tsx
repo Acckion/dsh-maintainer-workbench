@@ -449,6 +449,7 @@ export function App({
   const [showQuickTasks, setShowQuickTasks] = useState(false);
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
+  const [filterOpen, setFilterOpen] = useState(false);
   const [type, setType] = useState("all");
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -883,6 +884,7 @@ export function App({
               />
               同步仓库
             </button>
+            {repo?.syncedAt && <time className="mw-sync-time" title="最近同步时间" dateTime={repo.syncedAt}>{date(repo.syncedAt)}</time>}
           </nav>
         </header>
         <main
@@ -952,7 +954,7 @@ export function App({
             </section>
           ) : (
             <>
-              <OperationTracker
+              {page === "tasks" && !displayedIssue && (<OperationTracker
                 record={operationRecords[repoId]}
                 jobs={jobs}
                 close={() =>
@@ -973,7 +975,7 @@ export function App({
                   setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
                   moveFocusToDetail();
                 }}
-              />
+              />)}
               {page === "organize" && (
                 <RepositoryOrganize
                   state={state}
@@ -1035,11 +1037,6 @@ export function App({
                           Pull Requests
                         </button>
                       </div>
-                      <span className="mw-muted">
-                        {repo?.syncedAt
-                          ? `同步于 ${date(repo.syncedAt)}`
-                          : "尚未同步"}
-                      </span>
                     </div>
                     <div className="mw-toolbar">
                       <label className="mw-search">
@@ -1051,7 +1048,8 @@ export function App({
                           onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
-                      <label className="mw-filter">
+                      <button className={`mw-icon-button mw-filter-toggle ${filter !== "all" ? "active" : ""}`} aria-label="展开筛选" aria-expanded={filterOpen} onClick={()=>setFilterOpen(v=>!v)}><Filter size={16}/></button>
+                      {filterOpen && <label className="mw-filter">
                         <Filter size={14} />
                         <select
                           aria-label="筛选问题"
@@ -1064,7 +1062,7 @@ export function App({
                           <option value="duplicates">疑似重复</option>
                           <option value="closed">已关闭</option>
                         </select>
-                      </label>
+                      </label>}
                     </div>
                     <div className="mw-batch">
                       <label>
@@ -1196,7 +1194,7 @@ export function App({
                                 <span>
                                   #{i.number} · {i.author}
                                 </span>
-                                {i.labels.slice(0, 2).map((l) => (
+                                {i.labels.filter(l => !/^p[0-3]$/i.test(l)).slice(0, 2).map((l) => (
                                   <Tag key={l}>{l}</Tag>
                                 ))}
                                 <span className="mw-issue-comments">
@@ -1205,6 +1203,7 @@ export function App({
                               </div>
                             </button>
                             <div className="mw-row-status">
+                              {i.type === "issue" && (i.plan?.category ?? i.analysis?.category) && <Tag>{categoryNames[(i.plan?.category ?? i.analysis?.category)!]}</Tag>}
                               {current ? (
                                 <Tag tone="violet">
                                   <Loader2 size={11} className="mw-spin" />{" "}
@@ -1899,7 +1898,28 @@ export function App({
       return <section className="mw-item-overview"><h3>{active ? `${kindNames[active.kind]}中` : saved ? '当前结论' : '尚未分析'}</h3>{saved ? <><p>{saved.summary}</p><div className="mw-tags"><span className="mw-tag">{saved.category}</span><span className="mw-tag">{saved.priority}</span></div>{saved.missingInfo.length>0 && <details><summary>需要补充的信息 · {saved.missingInfo.length}</summary><ul>{saved.missingInfo.map(text=><li key={text}>{text}</li>)}</ul></details>}</> : <p>选择上方操作开始分析。</p>}{job?.error && <p role="alert">最近一次任务失败：{job.error}。已保存的结论仍可查看。</p>}{displayedIssue.type === "issue" && displayedIssue.analysis?.category === "question" && <button className="mw-text-button" onClick={()=>setReaderRequest({sequence:Date.now(),issueId:displayedIssue.id,tab:"plan"})}>调整事项类型</button>}{job && <button className="mw-text-button" onClick={()=>openEvidenceJob(job.id,"log")}>查看执行记录</button>}</section>;
     }
     if (stage === "plan") return <IssuePlanning start={kind=>action("workflow","/jobs",{issueIds:[displayedIssue.id],kind,goal:"resolve",instructions:assistantInstructions[displayedIssue.id]},"已按确认计划开始实施")} issue={displayedIssue} job={job} busy={!!busy || history.some(j=>['running','queued'].includes(j.status))} act={(path,data,message)=>action('workflow',path,data,message)} />;
-    if (stage === "work") return <section className="mw-item-work">{job ? <><h3>{kindNames[job.kind]} · {taskStatus(job).label}</h3>{job.error && <p role="alert">{job.error}</p>}{job.result && <p>{job.result.summary}</p>}{job.sessionId && openSession && <button className="mw-button" onClick={()=>openSession(job.sessionId!)}>打开 Harness 会话</button>}{job.evidenceGate && !job.evidenceGate.allowed && <p className="mw-callout red">证据待补齐：{job.evidenceGate.reasons.join('；')}</p>}<details><summary>分析依据 · {job.result?.evidence.length??0}</summary>{job.result?.evidence.map((item,index)=><article className="mw-evidence" key={index}><strong>{item.source}</strong><p>{item.detail}</p></article>)}</details>{job.toolDiagnostics && <details><summary>工具与执行环境</summary><p>{job.toolDiagnostics.provider}/{job.toolDiagnostics.model} · {job.toolDiagnostics.preset} · {job.toolDiagnostics.permission}</p><p>挂载工具：{job.toolDiagnostics.mountedTools.join(', ')}</p><p>请求 {job.toolDiagnostics.requests.length} · 调用 {job.toolDiagnostics.calls} · 宿主结果 {job.toolDiagnostics.canonicalResults} · 错误 {job.toolDiagnostics.errors}</p><p>基线 {job.baseSha} · 输入版本 {job.revision} · Token {job.tokens??'未采集'}</p></details>}{job.rawOutput && !job.result && <details><summary>未解析的原始输出</summary><pre>{job.rawOutput}</pre></details>}{job.executionRecords?.map(record=><ExecutionEvidence key={record.id} job={job} record={record}/>)}<details><summary>运行记录</summary>{state?.audit.filter(a=>a.jobId===job.id).slice().reverse().map(a=><div className="mw-job-log" key={a.id}><time>{date(a.at)}</time><p>{a.detail}</p></div>)}</details></> : <p>暂无执行任务。</p>}<ItemInstructions issueId={displayedIssue.id} onChange={value=>setAssistantInstructions(current=>({...current,[displayedIssue.id]:value}))}/><details><summary>处理历史 · {history.length}</summary>{history.map(j=><button className="mw-task-row" key={j.id} onClick={()=>openEvidenceJob(j.id,'evidence')}>{kindNames[j.kind]} · {taskStatus(j).label} · {date(j.createdAt)}</button>)}</details></section>;
+    if (stage === "work") return <section className="mw-item-work"><OperationTracker
+                record={operationRecords[repoId]}
+                jobs={jobs}
+                close={() =>
+                  setOperationRecords((records) => {
+                    const next = { ...records };
+                    delete next[repoId];
+                    return next;
+                  })
+                }
+                open={(id) => {
+                  navigationGeneration.current += 1;
+                  rememberOrigin(id);
+                  navigate("tasks", repoId, true);
+    setTaskFilter("all");
+                  setFocused(undefined);
+                  setJobFocus(id);
+                  setReaderRequest(undefined);
+                  setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
+                  moveFocusToDetail();
+                }}
+              />{job ? <><h3>{kindNames[job.kind]} · {taskStatus(job).label}</h3>{job.error && <p role="alert">{job.error}</p>}{job.result && <p>{job.result.summary}</p>}{job.sessionId && openSession && <button className="mw-button" onClick={()=>openSession(job.sessionId!)}>打开 Harness 会话</button>}{job.evidenceGate && !job.evidenceGate.allowed && <p className="mw-callout red">证据待补齐：{job.evidenceGate.reasons.join('；')}</p>}<details><summary>分析依据 · {job.result?.evidence.length??0}</summary>{job.result?.evidence.map((item,index)=><article className="mw-evidence" key={index}><strong>{item.source}</strong><p>{item.detail}</p></article>)}</details>{job.toolDiagnostics && <details><summary>工具与执行环境</summary><p>{job.toolDiagnostics.provider}/{job.toolDiagnostics.model} · {job.toolDiagnostics.preset} · {job.toolDiagnostics.permission}</p><p>挂载工具：{job.toolDiagnostics.mountedTools.join(', ')}</p><p>请求 {job.toolDiagnostics.requests.length} · 调用 {job.toolDiagnostics.calls} · 宿主结果 {job.toolDiagnostics.canonicalResults} · 错误 {job.toolDiagnostics.errors}</p><p>基线 {job.baseSha} · 输入版本 {job.revision} · Token {job.tokens??'未采集'}</p></details>}{job.rawOutput && !job.result && <details><summary>未解析的原始输出</summary><pre>{job.rawOutput}</pre></details>}{job.executionRecords?.map(record=><ExecutionEvidence key={record.id} job={job} record={record}/>)}<details><summary>运行记录</summary>{state?.audit.filter(a=>a.jobId===job.id).slice().reverse().map(a=><div className="mw-job-log" key={a.id}><time>{date(a.at)}</time><p>{a.detail}</p></div>)}</details></> : <p>暂无执行任务。</p>}<ItemInstructions issueId={displayedIssue.id} onChange={value=>setAssistantInstructions(current=>({...current,[displayedIssue.id]:value}))}/><details><summary>处理历史 · {history.length}</summary>{history.map(j=><button className="mw-task-row" key={j.id} onClick={()=>openEvidenceJob(j.id,'evidence')}>{kindNames[j.kind]} · {taskStatus(j).label} · {date(j.createdAt)}</button>)}</details></section>;
     if (stage === "review") return job && !["triage","preflight"].includes(job.kind) && (job.result || job.patch) && !["failed","cancelled","running","queued"].includes(job.status) ? <><ReviewSummary compact job={job} jobs={jobs} issue={displayedIssue} audit={state?.audit??[]} native={!!state?.capabilities.harness} open={openEvidenceJob} openSession={openSession} openLocation={(path,line)=>setReaderRequest({sequence:Date.now(),issueId:displayedIssue.id,tab:'files',path,line})} deliveryActions={renderReviewActions()}/>{job.kind==='review' && <ReviewFindingControls job={job} history={history} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>}<details><summary>远端 PR 与 CI</summary><RemoteProgress issue={displayedIssue} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/></details></> : <p>尚无可审核的产物。执行失败或未生成结果时，请在 Work 查看并重试。</p>;
 
     const relevant = history.filter((j) =>

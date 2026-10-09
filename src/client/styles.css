@@ -409,3 +409,17 @@
 @media(max-width:760px){.mw-reader-tabbar>.mw-reader-tabs{display:none}.mw-reader-compact-tabs{display:flex;gap:12px;width:100%;padding:8px 0}.mw-reader-compact-tabs select{min-width:0;flex:1;border:1px solid #dce5e1;border-radius:6px;padding:8px;background:#fff;color:#31574a}.mw-reader-panel-actions{flex-wrap:wrap}}
 .mw-review-summary .mw-finding>.mw-text-button{display:block;margin:6px 0}.mw-item-work>details textarea{width:100%;box-sizing:border-box;border:1px solid #dce5e1;border-radius:6px;padding:10px;font:inherit}
 .mw-reader-diff .mw-diff-target{outline:2px solid #d2a957;outline-offset:-2px}
+
+/* Compact inbox: selection stays independent of the item navigation button. */
+.mw-layout-tabs .mw-issue-row{position:relative;display:flex;flex-wrap:wrap;padding-right:14px}
+.mw-issue-row>input[type=checkbox]{position:absolute;right:14px;top:16px;margin:0;z-index:1}
+.mw-issue-row .mw-issue-content{width:100%;flex:1 1 100%;padding-right:26px}
+.mw-issue-row .mw-row-status{width:100%;display:flex;flex-direction:row;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px;margin-top:6px}
+.mw-row-status .mw-triaged{display:inline-flex;align-items:center;gap:4px}
+.mw-list-panel .mw-toolbar{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;align-items:center}
+.mw-list-panel .mw-toolbar .mw-search{flex:1;min-width:0}
+.mw-list-panel .mw-toolbar .mw-filter{flex-basis:100%;width:100%}
+.mw-filter-toggle{flex:none;width:34px;height:34px}
+.mw-filter-toggle.active{color:var(--green);background:#e8f4ef}
+.mw-sync-time{align-self:center;color:var(--muted);font-size:11px;white-space:nowrap;padding-right:12px}
+.mw-item-work .mw-operation-tracker{margin:0 0 12px}

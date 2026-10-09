@@ -54,6 +54,16 @@ try {
       await page.getByRole('button', { name: 'Issues & PRs' }).click();
       await page.locator('[id="mw-item-fixture/queue#128"]').click();
       const selectPanel=async(name)=>{if(width>760)await page.getByRole('button',{name,exact:true}).click();else await page.locator('select[aria-label="AI 功能"]').selectOption(name.toLowerCase());};
+      assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
+      assert.equal(await page.getByLabel('筛选问题', {exact:true}).count(), 0);
+      await page.getByRole('button', {name:'展开筛选',exact:true}).click();
+      await page.getByLabel('筛选问题', {exact:true}).selectOption('all');
+      await page.getByRole('button', {name:'展开筛选',exact:true}).click();
+      const row = page.locator('[id="mw-item-fixture/queue#128"]').locator('..');
+      assert.ok(await row.locator('.mw-issue-title strong').evaluate(el=>el.getBoundingClientRect().width) > 50, 'item title remains readable');
+      const selection = await row.locator('input[type=checkbox]').boundingBox();
+      const rowBox = await row.boundingBox();
+      assert.ok(selection.x > rowBox.x + rowBox.width / 2, 'selection belongs at the upper right');
       await selectPanel('Plan');
       assert.equal(await page.getByRole('button', {name:'Triage',exact:true}).count(), 0);
       assert.equal(await page.getByRole('button', {name:'Execution',exact:true}).count(), 0);
