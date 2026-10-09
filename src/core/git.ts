@@ -7,6 +7,17 @@ import { repositoryLocks } from "../infrastructure/git/locks.ts";
 import { resolveGitHubAuth } from "./github-auth.ts";
 import type { Job, Repo } from "./types.ts";
 const exec = promisify(execFile);
+export function gitFailure(error: unknown, operation: string, timeout: number): Error {
+  const value = error as { name?: string; killed?: boolean; signal?: string; code?: string; stderr?: string; message?: string };
+  if (value?.name === 'AbortError') return error as Error;
+  const label = operation === 'clone' ? '仓库克隆' : operation === 'fetch' ? '仓库提交下载' : 'Git 操作';
+  if (value?.killed && value.signal === 'SIGTERM') return new Error(`${label}超过 ${Math.round(timeout / 1000)} 秒，已停止。GitHub 连接可用并不代表源码下载已完成；请检查网络传输或绑定已有本地克隆后重试。`, {cause:error});
+  const detail = (value?.stderr || value?.message || String(error))
+    .replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1[redacted]@')
+    .replace(/\b(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)\b/g, '[redacted]')
+    .trim().slice(-2000);
+  return new Error(`${label}失败：${detail}`, {cause:error});
+}
 export async function git(
   cwd: string,
   args: string[],
@@ -17,7 +28,8 @@ export async function git(
   indexPath?: string,
 ): Promise<string> {
   const auth = authenticate ? await resolveGitHubAuth() : undefined;
-  const output = (
+  let output: string;
+  try { output = (
     await exec(
       "git",
       ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args],
@@ -46,7 +58,7 @@ export async function git(
         },
       },
     )
-  ).stdout;
+  ).stdout; } catch (error) { throw gitFailure(error, args[0] ?? '', timeout); }
   return preserveOutput ? output : output.trimEnd();
 }
 export async function validateCheckout(
@@ -178,13 +190,16 @@ export async function prepareManagedCheckout(
         [
           "clone",
           "--no-checkout",
+          "--depth=64",
+          "--single-branch",
+          "--no-tags",
           "--",
           `https://github.com/${repo.fullName}.git`,
           temporary,
         ],
         true,
         signal,
-        240000,
+        360000,
       );
       await rename(temporary, path);
     } finally {
@@ -200,9 +215,10 @@ export async function prepareManagedCheckout(
       signal,
     );
   } catch {
+    const shallow = (await executeGit(path, ['rev-parse', '--is-shallow-repository'])) === 'true';
     await executeGit(
       path,
-      ["fetch", "origin", repo.headSha],
+      ["fetch", "--no-tags", ...(shallow ? ["--depth=64"] : []), "origin", repo.headSha],
       true,
       signal,
       120000,
@@ -226,21 +242,35 @@ async function fetchRevision(
     !/^[a-f0-9]{40,64}$/.test(pr.baseSha)
   )
     throw new Error("PR 版本信息无效");
+  const shallow = (await executeGit(repo.localPath, ['rev-parse', '--is-shallow-repository'])) === 'true';
+  const options = shallow ? ['--no-tags', '--depth=64'] : [];
   await executeGit(
     repo.localPath,
-    ["fetch", "origin", `refs/pull/${number}/head`],
+    ["fetch", ...options, "origin", `refs/pull/${number}/head`],
     true,
     signal,
+    120000,
   );
   const fetched = await executeGit(repo.localPath, ["rev-parse", "FETCH_HEAD"]);
   if (fetched !== pr.headSha)
     throw new Error("PR 在准备过程中已更新，请重新派发");
   await executeGit(
     repo.localPath,
-    ["fetch", "origin", pr.baseSha],
+    ["fetch", ...options, "origin", pr.baseSha],
     true,
     signal,
+    120000,
   );
+  // Shallow clones still contain full source blobs. Extend ancestry only when
+  // needed for a trustworthy PR merge-base; never review an incomplete range.
+  if (shallow) {
+    for (const depth of [0, 256, 1024, 4096]) {
+      if (depth) await executeGit(repo.localPath, ['fetch', '--no-tags', `--deepen=${depth}`, 'origin', pr.headSha, pr.baseSha], true, signal, 240000);
+      try { await executeGit(repo.localPath, ['merge-base', pr.baseSha, pr.headSha], false, signal); return; }
+      catch (error) { if (signal?.aborted) throw error; }
+    }
+    throw new Error('PR 的共同祖先尚未下载完整，已暂停审查。请绑定包含完整历史的本地克隆后重试，避免审查错误的变更范围。');
+  }
 }
 
 export async function fetchPullRequestRevision(

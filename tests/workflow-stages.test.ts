@@ -95,7 +95,7 @@ test('PR update pushes an approved patch to the existing branch without creating
 test('PR fetch pins the API head, including fork refs, and rejects a concurrent force push',async()=>{
   const {fetchPullRequestRevision}=await import('../src/core/git.ts');const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],localPath:'/fixture'};
   const pr={headSha:'a'.repeat(40),baseSha:'b'.repeat(40),headRef:'topic',headRepo:'someone/fork',baseRef:'main',draft:false,merged:false,mergeable:null,checks:null,reviews:[],warnings:[]};const calls:string[][]=[];
-  await fetchPullRequestRevision(repo,7,pr,undefined,async(_,args)=>{calls.push(args);return args[0]==='rev-parse'?pr.headSha:'';});assert.deepEqual(calls,[['fetch','origin','refs/pull/7/head'],['rev-parse','FETCH_HEAD'],['fetch','origin',pr.baseSha]]);
+  await fetchPullRequestRevision(repo,7,pr,undefined,async(_,args)=>{calls.push(args);return args[1]==='--is-shallow-repository'?'false':args[0]==='rev-parse'?pr.headSha:'';});assert.deepEqual(calls,[['rev-parse','--is-shallow-repository'],['fetch','origin','refs/pull/7/head'],['rev-parse','FETCH_HEAD'],['fetch','origin',pr.baseSha]]);
   await assert.rejects(fetchPullRequestRevision(repo,7,pr,undefined,async()=> 'c'.repeat(40)),/已更新/);store.close();
 });
 
