@@ -45,7 +45,7 @@ for (const [kind, denied, patched] of [['review', false, false], ['fix', false, 
     workspaceRegistry: { create: async (path: string) => ({ path, attachSession: async () => {} }) },
     on: (name: string, callback: any) => { if (name === 'session/event') listener = callback; return () => {}; },
     agents: { create: async (options: any) => {
-      await options.setup({ tools: { schemas: () => [{ name: 'read' }], restrict: () => {}, guard: () => {} } });
+      await options.setup({ tools: { register: () => () => {}, schemas: () => [{ name: 'read' }], restrict: () => {}, guard: () => {} } });
       return { dispose: async () => {}, agent: { session: {}, cancel: () => {}, whenIdle: () => new Promise<void>(resolve => setImmediate(() => { busy = false; resolve(); })), followup: (message: any) => {
         assert.equal(busy, false, 'followup must wait for host driver idle, not just turn/end'); busy = true;
         requestTexts.push(message.content[0].text);
