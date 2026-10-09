@@ -429,7 +429,8 @@ function Result({
 }
 export function App({
   openSession,
-}: { openSession?: (id: string) => void } = {}) {
+  host = false,
+}: { openSession?: (id: string) => void; host?: boolean } = {}) {
   const [state, setState] = useState<Snapshot>();
   const [page, setPage] = useState<Page>("inbox");
   const [repoId, setRepoId] = useState(() => {
@@ -793,7 +794,7 @@ export function App({
     { id: "repository-settings", label: "仓库设置", icon: Settings2, count: 0 },
   ] as const;
   return (
-    <div className="mw mw-layout-tabs">
+    <div className="mw mw-layout-tabs" data-mw-host={host ? '' : undefined}>
       <div className="mw-shell">
         <header className="mw-header">
           <div className="mw-header-controls">
