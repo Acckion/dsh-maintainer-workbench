@@ -1,10 +1,14 @@
+import {useItemDraft} from './item-draft.ts';
 import React, { useEffect, useState } from 'react';
 import type { Issue, IssuePlan, Job } from '../core/types.ts';
 import { categoryNames, defaultPlan, planBlocker } from '../core/issue-flow.ts';
 
 export type WorkflowAction = (path: string, data: unknown, message: string) => Promise<unknown>;
 const lines = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean);
-export function IssuePlanning({ issue, job, busy, act }: { issue: Issue; job?: Job; busy: boolean; act: WorkflowAction }) {
+export function IssuePlanning({ issue, job, busy, act, start }: { issue: Issue; job?: Job; busy: boolean; act: WorkflowAction;start?:(kind:'fix'|'docs')=>Promise<unknown> }) {
+  const {draft,ready,error,update}=useItemDraft(issue.id);
+  const restored=React.useRef(false);
+  useEffect(()=>{if(ready&&!restored.current){restored.current=true;if(draft.plan)setPlan(draft.plan);}},[ready]);
   const [plan, setPlan] = useState(defaultPlan(issue));
   const [planOpen, setPlanOpen] = useState(!!issue.plan || issue.analysis?.category === 'feature');
   useEffect(() => { setPlanOpen(!!issue.plan || issue.analysis?.category === 'feature'); }, [issue.id]);
@@ -15,15 +19,15 @@ export function IssuePlanning({ issue, job, busy, act }: { issue: Issue; job?: J
   const [informationOpen, setInformationOpen] = useState(!!issue.informationRequests?.some(r => ['asked','reply_received'].includes(r.state)));
   useEffect(() => { if (issue.informationRequests?.some(r => ['asked','reply_received'].includes(r.state))) setInformationOpen(true); }, [issue.informationRequests?.filter(r => ['asked','reply_received'].includes(r.state)).length]);
   const planKey = JSON.stringify(issue.plan);
-  useEffect(() => { setPlan(defaultPlan(issue)); }, [issue.id, planKey, issue.analysis?.category]);
+  useEffect(() => { if(!restored.current)setPlan(defaultPlan(issue)); }, [issue.id, planKey, issue.analysis?.category]);
   useEffect(() => { setQuestions(''); setWaitingFor(issue.author); setAnswer(''); setAskedAt(''); }, [issue.id]);
   const active = issue.informationRequests?.filter(request => ['asked','reply_received'].includes(request.state)) ?? [];
   const pendingQuestions = new Set(active.flatMap(request => request.questions.map(text => text.trim().toLowerCase())));
   const missing = (job?.artifact?.stage === 'triage' ? job.artifact.missingInfo : issue.analysis?.missingInfo ?? []).filter(text => !pendingQuestions.has(text.trim().toLowerCase()));
-  const edit = <K extends keyof IssuePlan>(key: K, value: IssuePlan[K]) => setPlan(plan => ({ ...plan, [key]: value }));
+  const edit = <K extends keyof IssuePlan>(key: K, value: IssuePlan[K]) => {const next={ ...plan, [key]: value };setPlan(next);if(ready)update({plan:next});};
   const blocker = planBlocker({ ...issue, plan }, plan.category === 'docs' ? 'docs' : 'fix');
-  return <section aria-label="事项类型与补充信息" className="mw-issue-planning">
-    <details open={planOpen} onToggle={event => setPlanOpen(event.currentTarget.open)}>
+  return <section aria-label="事项类型与补充信息" className="mw-issue-planning"><p className="mw-muted">此处编辑的是本机草稿；确认后才更新正式计划。</p>{error && <p role="alert">{error}</p>}
+    <details open={true} onToggle={event => setPlanOpen(event.currentTarget.open)}>
       <summary>事项类型、目标与验收</summary>
       <label>处理类型<select aria-label="处理类型" value={plan.category} disabled={busy} onChange={event => edit('category', event.target.value as IssuePlan['category'])}>{Object.entries(categoryNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>{plan.category === 'question' ? '需要回答的问题' : '维护目标'}<textarea aria-label={plan.category === 'question' ? '需要回答的问题' : '维护目标'} value={plan.goal} rows={2} onChange={event => edit('goal', event.target.value)} /></label>
@@ -33,7 +37,8 @@ export function IssuePlanning({ issue, job, busy, act }: { issue: Issue; job?: J
       <label>维护者取舍<select aria-label="维护者取舍" value={plan.decision} onChange={event => edit('decision', event.target.value as IssuePlan['decision'])}><option value="proposed">待决定</option><option value="accepted">接受目标与范围</option><option value="deferred">暂缓</option></select></label>
       {plan.category !== 'question' && blocker && <p className="mw-callout amber">{blocker}</p>}
       <p className="mw-muted">保存新的目标或验收条件会使旧版本产物失效。文档事项可直接进入文档维护。</p>
-      <button className="mw-button" disabled={busy} onClick={() => void act('/issue-plan', { issueId: issue.id, plan: { ...plan, acceptanceCriteria: lines(plan.acceptanceCriteria.join('\n')) } }, '已保存事项类型与验收计划')}>保存类型与验收计划</button>
+      <button className="mw-button primary" disabled={busy || !ready} onClick={() => void act('/issue-plan', { issueId: issue.id, plan: { ...plan, acceptanceCriteria: lines(plan.acceptanceCriteria.join('\n')) } }, '已保存事项类型与验收计划')}>确认类型与验收计划</button>
+      {start && !['question'].includes(plan.category) && plan.decision !== 'deferred' && <button className="mw-button primary" disabled={busy || !ready || !!planBlocker({...issue,plan:{...plan,decision:'accepted'}},plan.category==='docs'?'docs':'fix')} onClick={async()=>{const confirmed={...plan,decision:'accepted' as const,acceptanceCriteria:lines(plan.acceptanceCriteria.join('\n'))};const saved=await act('/issue-plan',{issueId:issue.id,plan:confirmed},'已确认计划');if(saved){setPlan(confirmed);update({plan:confirmed});await start(plan.category==='docs'?'docs':'fix');}}}>{plan.category==='docs'?'确认并更新文档':'确认计划并开始实施'}</button>}
     </details>
     <details open={informationOpen} onToggle={event => setInformationOpen(event.currentTarget.open)}>
       <summary>补充信息与追问记录 · {issue.informationRequests?.length ?? 0}</summary>

@@ -1,6 +1,6 @@
 {
   "name": "dsh-maintainer-workbench",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "description": "Repository maintenance workbench for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
