@@ -218,17 +218,8 @@ export function WorkflowDetail({
   const cycleLoading = !!cycle && timeline.caseId !== cycle;
   return (
     <section className="mw-workflow-detail" aria-label="事项处理流程">
-      <div className="mw-workflow-toolbar">
+      <div className="mw-workflow-toolbar" hidden={cycles.length <= 1}>
         <div className="mw-workflow-views">
-          {issue.type === "issue" && (
-            <button
-              type="button"
-              className="mw-text-button"
-              onClick={() => choose({ view: "plan", detail: "result" })}
-            >
-              调整分类与计划
-            </button>
-          )}
           {cycles.length > 1 && (
             <label>
               处理周期
@@ -260,8 +251,16 @@ export function WorkflowDetail({
             selected={selection.view === "stage" ? selected?.id : undefined}
             select={select}
           />
-          {(viewingHistory || selection.view !== "stage") && (
-            <NextAction timeline={timeline} back={back} />
+          {(issue.type === "issue" || viewingHistory || selection.view !== "stage") && (
+            <NextAction timeline={timeline} back={back} showBack={viewingHistory || selection.view !== "stage"} tools={issue.type === "issue" && (
+            <button
+              type="button"
+              className="mw-text-button"
+              onClick={() => choose({ view: "plan", detail: "result" })}
+            >
+              调整分类与计划
+            </button>
+          )} />
           )}
           {viewingHistory && seenVersion < state.version && (
             <p className="mw-callout">

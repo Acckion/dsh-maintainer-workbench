@@ -352,6 +352,17 @@ export function RepositoryDetail({
   const content = (
     <>
       <header className="mw-reader-header">
+            {hasGitHub && (
+              <button
+                className="mw-icon-button mw-reader-refresh"
+                title="刷新详情"
+                aria-label="刷新详情"
+                disabled={loading}
+                onClick={refresh}
+              >
+                <RefreshCw size={16} />
+              </button>
+            )}
         <h2>
           {returnToList && (
             <button
@@ -471,17 +482,6 @@ export function RepositoryDetail({
               <div className="mw-reader-stage-actions">
                 {renderAgentActions(tab as AgentTab)}
               </div>
-            )}
-            {hasGitHub && !isAgent(tab) && (
-              <button
-                className="mw-icon-button"
-                title="刷新详情"
-                aria-label="刷新详情"
-                disabled={loading}
-                onClick={refresh}
-              >
-                <RefreshCw size={16} />
-              </button>
             )}
             {!embedded && (
               <button

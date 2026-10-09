@@ -44,7 +44,7 @@ export async function verifyTheme(page, dir, width) {
   await page.evaluate(()=>document.body.setAttribute('data-ds-dark-theme',''));
   assert.equal(await scheme(),'dark');await dark('.mw-reader-embedded');
   await page.emulateMedia({colorScheme:'light'});assert.equal(await scheme(),'dark');
-  for(const name of ['Repository','Tasks','仓库设置','全局设置']){
+  for(const name of ['Repository','Tasks','Settings','全局设置']){
     await page.getByRole('button',{name:new RegExp('^'+name+'(?:\\s|$)')}).click();await dark('.mw');
     await page.screenshot({path:join(dir,`theme-${name}-${width}.png`)});
   }
