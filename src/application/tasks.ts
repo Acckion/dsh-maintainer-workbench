@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ServiceBase,
   type Enqueue,
+  type EnqueueOptions,
   type ServiceDependencies,
 } from "../application/service.ts";
 import { lightweight, type FindingDecision } from "../core/artifacts.ts";
@@ -24,6 +25,7 @@ import { stageBlocker } from "../workflow/actions.ts";
 const settingsSchema = z.object({
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
   autoPreflight: z.boolean().default(false),
+  autoReview: z.boolean().default(false),
   triageMaxTokens: z.number().int().min(500).max(8000).default(1800),
   concurrency: z.number().int().min(1).max(4),
   maxJobsPerBatch: z.number().int().min(1).max(50),
@@ -57,14 +59,7 @@ export class TaskService extends ServiceBase {
   enqueue(
     issueIds: string[],
     kind: JobKind,
-    options: {
-      sourceJobId?: string;
-      instructions?: string;
-      forceNew?: boolean;
-      goal?: "resolve";
-      goalId?: string;
-      resumeInput?: boolean;
-    } = {},
+    options: EnqueueOptions = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
     const ids = [
@@ -137,6 +132,11 @@ export class TaskService extends ServiceBase {
           "awaiting_review",
           "approved",
           ...(options.resumeInput ? ["waiting_input"] : []),
+          ...(options.workflowRunId &&
+          source.kind === "review" &&
+          ["fix", "docs"].includes(kind)
+            ? ["rejected"]
+            : []),
         ].includes(source.status)
       )
         throw new Error("交接来源必须是同一事项的已完成产物");
@@ -145,7 +145,7 @@ export class TaskService extends ServiceBase {
           revision(candidates[0].issue, candidates[0].repo, source.kind) &&
         !(
           source.kind === "review" &&
-          ["review", "fix", "investigate", "ci"].includes(kind)
+          ["review", "fix", "docs", "investigate", "ci"].includes(kind)
         )
       )
         throw new Error("来源产物已过期，请先重新分析");
@@ -168,6 +168,7 @@ export class TaskService extends ServiceBase {
           .find(
             (j) =>
               (!j.caseId || j.caseId === issue.processing?.id) &&
+              j.workflowRunId === options.workflowRunId &&
               j.sourceJobId === options.sourceJobId &&
               (j.instructions ?? "") === (options.instructions ?? "") &&
               ![
@@ -240,6 +241,7 @@ export class TaskService extends ServiceBase {
         }
         const id = randomUUID();
         const job: Job = {
+          workflowRunId: options.workflowRunId,
           goal: options.goal,
           goalId: options.goal ? (options.goalId ?? id) : undefined,
           handoff,
@@ -316,6 +318,7 @@ export class TaskService extends ServiceBase {
       instructions: job.instructions,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
       forceNew: true,
     });
     for (const created of result.created)
@@ -372,6 +375,7 @@ export class TaskService extends ServiceBase {
       instructions: job.instructions,
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
     });
   }
   resume(id: string): { created: string[]; reused: string[] } {
@@ -391,6 +395,7 @@ export class TaskService extends ServiceBase {
         instructions: job.instructions,
         goal: job.goal,
         goalId: job.goalId,
+        workflowRunId: job.workflowRunId,
       });
     }
     if (
@@ -418,6 +423,7 @@ export class TaskService extends ServiceBase {
         JSON.stringify(responses.map((r) => r.values)),
       goal: job.goal,
       goalId: job.goalId,
+      workflowRunId: job.workflowRunId,
     });
   }
   async review(

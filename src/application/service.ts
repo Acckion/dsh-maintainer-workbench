@@ -9,6 +9,7 @@ export interface EnqueueOptions {
   goal?: "resolve";
   goalId?: string;
   resumeInput?: boolean;
+  workflowRunId?: string;
 }
 export type Enqueue = (
   ids: string[],

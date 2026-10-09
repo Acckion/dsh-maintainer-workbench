@@ -548,3 +548,7 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 @media(prefers-color-scheme:dark){:root:not(:has(.mw[data-mw-host])) .mw textarea{background:var(--mw-surface);color:var(--mw-text)}}
 /* Cross-view evidence navigation preserves its exact list origin on desktop too. */
 .mw-reader-header h2>.mw-mobile-list-return.mw-origin-return{display:inline-flex;margin-right:6px}
+
+.mw-workflow-card { border:1px solid var(--mw-border); border-radius:12px; padding:18px; margin:12px 0; background:var(--mw-surface); }
+.mw-workflow-progress { display:flex; flex-wrap:wrap; gap:20px; padding-left:24px; color:var(--mw-muted); }
+.mw-workflow-card details { margin:12px 0; }

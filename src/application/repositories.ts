@@ -29,6 +29,7 @@ export class RepositoryService extends ServiceBase {
       enqueue: Enqueue;
       syncRemote: (id: string) => Promise<void>;
       isClosed: () => boolean;
+      synced: (repoId: string) => void;
     },
   ) {
     super(deps);
@@ -111,6 +112,7 @@ export class RepositoryService extends ServiceBase {
               interval * 60000
           )
             await this.sync(repo.githubName ?? repo.fullName);
+          this.hooks.synced(repo.id);
           this.autoTriage(repo.id);
         } catch (error) {
           if (!this.closed)
@@ -150,6 +152,7 @@ export class RepositoryService extends ServiceBase {
           !i.origin &&
           !i.linkedPullRequests?.length &&
           !["answered", "deferred"].includes(i.processing?.phase ?? "") &&
+          !["running", "paused", "waiting_author"].includes(i.orchestration?.run?.status ?? "") &&
           !i.informationRequests?.some((r) =>
             ["asked", "reply_received"].includes(r.state),
           ) &&
@@ -349,6 +352,7 @@ export class RepositoryService extends ServiceBase {
         this.store.put("issues", {
           ...issue,
           informationRequests,
+          orchestration: old?.orchestration,
           linkedPullRequests: old?.linkedPullRequests,
           remotePRs: old?.remotePRs,
           remoteWarning: old?.remoteWarning,
@@ -380,6 +384,7 @@ export class RepositoryService extends ServiceBase {
         "本次自动跟踪仅覆盖前 20 个事项，其余可手动刷新",
       );
     }
+    this.hooks.synced(repo.id);
     this.autoTriage(repo.id);
   }
   async bindPath(repoId: string, localPath: string): Promise<void> {
@@ -442,6 +447,7 @@ export class RepositoryService extends ServiceBase {
       .object({
         syncLimit: z.number().int().min(0).max(1000000).optional(),
         autoPreflight: z.boolean().optional(),
+        autoReview: z.boolean().optional(),
         autoTriage: z.boolean(),
         syncIntervalMinutes: z.number().int().min(0).max(1440),
         timeoutMs: z.number().int().min(1000).max(1800000),

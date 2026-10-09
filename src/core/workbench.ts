@@ -4,7 +4,7 @@ import { ProcessingService } from "../application/processing.ts";
 import { PublicationService } from "../application/publication.ts";
 import { RepositoryService } from "../application/repositories.ts";
 import { ReviewService } from "../application/reviews.ts";
-import type { ServiceDependencies } from "../application/service.ts";
+import type { EnqueueOptions, ServiceDependencies } from "../application/service.ts";
 import { TaskService } from "../application/tasks.ts";
 import { TrackingService } from "../application/tracking.ts";
 import { WorkspaceService } from "../application/workspaces.ts";
@@ -15,11 +15,12 @@ import { availableActions } from "../workflow/actions.ts";
 import type { FindingDecision } from "./artifacts.ts";
 import type { DetailSection } from "./github-details.ts";
 import { GitHub } from "./github.ts";
+import { Orchestration } from "./orchestration.ts";
 import type { OrganizeMode } from "./organize.ts";
 import type { PublishAction } from "./publish.ts";
 import { revision } from "./revision.ts";
 import { Store } from "./store.ts";
-import type { HostStatus, Job, JobKind, Runner, Snapshot } from "./types.ts";
+import type { HostStatus, Issue, Job, JobKind, Runner, Snapshot } from "./types.ts";
 export { revision } from "./revision.ts";
 /** Compatibility facade. Business rules live in the composed services. */
 export class Workbench {
@@ -33,6 +34,7 @@ export class Workbench {
   private scheduler: Scheduler;
   readonly processing: ProcessingService;
   readonly workspaces: WorkspaceService;
+  readonly orchestration: Orchestration;
   constructor(
     public store: Store,
     private dataDir: string,
@@ -42,6 +44,7 @@ export class Workbench {
     private hostStatus?: () => HostStatus,
   ) {
     this.processing = new ProcessingService(store);
+    this.orchestration = new Orchestration(this);
     const deps: ServiceDependencies = {
       store,
       dataDir,
@@ -55,13 +58,18 @@ export class Workbench {
     this.workspaces = new WorkspaceService(deps);
     this.scheduler = new Scheduler(deps, {
       enqueue: (...args) => this.tasks.enqueue(...args),
-      execute: (...args) => this.worker.execute(...args),
+      execute: async (job, controller) => {
+        await this.worker.execute(job, controller);
+        if (!this.scheduler.closed)
+          this.orchestration.completed(this.store.get<Job>("jobs", job.id)!);
+      },
     });
     this.tracking = new TrackingService(deps);
     this.repositories = new RepositoryService(deps, {
       enqueue: (...args) => this.tasks.enqueue(...args),
       syncRemote: (id) => this.tracking.syncRemote(id),
       isClosed: () => this.scheduler.closed,
+      synced: (id) => this.orchestration.synced(id),
     });
     this.tasks = new TaskService(deps, {
       active: this.scheduler.active,
@@ -120,7 +128,10 @@ export class Workbench {
         }
       }
     if (autoStart) {
-      queueMicrotask(() => this.pump());
+      queueMicrotask(() => {
+        this.orchestration.reconcile();
+        this.pump();
+      });
       this.repositories.start();
     }
   }
@@ -198,19 +209,13 @@ export class Workbench {
   enqueue(
     issueIds: string[],
     kind: JobKind,
-    options: {
-      sourceJobId?: string;
-      instructions?: string;
-      forceNew?: boolean;
-      goal?: "resolve";
-      goalId?: string;
-      resumeInput?: boolean;
-    } = {},
+    options: EnqueueOptions = {},
   ) {
     return this.tasks.enqueue(issueIds, kind, options);
   }
   cancel(id: string) {
-    return this.tasks.cancel(id);
+    this.tasks.cancel(id);
+    this.orchestration.completed(this.store.get<Job>("jobs", id)!);
   }
   rerun(id: string) {
     return this.tasks.rerun(id);
@@ -219,10 +224,16 @@ export class Workbench {
     return this.tasks.retry(id);
   }
   resume(id: string) {
-    return this.tasks.resume(id);
+    const job = this.store.get<Job>("jobs", id)!;
+    if (job) this.orchestration.assertResume(job);
+    const result = this.tasks.resume(id);
+    this.orchestration.resumed(job, result);
+    return result;
   }
-  review(id: string, decision: "approve" | "reject", note: string) {
-    return this.tasks.review(id, decision, note);
+  async review(id: string, decision: "approve" | "reject", note: string) {
+    const result = await this.tasks.review(id, decision, note);
+    this.orchestration.reviewDecision(this.store.get<Job>("jobs", id)!, decision);
+    return result;
   }
   finding(id: string, findingId: string, decision: FindingDecision) {
     return this.tasks.finding(id, findingId, decision);
@@ -254,8 +265,19 @@ export class Workbench {
   previewPublish(id: string, action: PublishAction) {
     return this.publication.previewPublish(id, action);
   }
-  publish(id: string, action: PublishAction, expectedPreview?: string) {
-    return this.publication.publish(id, action, expectedPreview);
+  async publish(id: string, action: PublishAction, expectedPreview?: string) {
+    const urls = await this.publication.publish(id, action, expectedPreview);
+    const job = this.store.get<Job>("jobs", id)!;
+    const run = this.store.get<Issue>("issues", job.issueId)?.orchestration?.run;
+    if (
+      action === "review" &&
+      job.artifact?.stage === "review" &&
+      job.artifact.findings.length &&
+      run?.id === job.workflowRunId &&
+      run?.currentJobId === job.id &&
+      run?.status === "review"
+    ) this.orchestration.waitAuthor(id);
+    return urls;
   }
   pump() {
     return this.scheduler.pump();
@@ -299,6 +321,7 @@ export class Workbench {
       ),
       issues: issues.map((issue) => ({
         ...issue,
+        orchestrationView: this.orchestration.view(issue, histories.get(issue.id) ?? [], repos.get(issue.repoId)),
         actionsAvailable: availableActions(
           issue,
           histories.get(issue.id)?.[0],
