@@ -65,10 +65,16 @@ try {
     const page = await browser.newPage({ viewport: { width, height: 900 } }); page.setDefaultTimeout(12000);
     try {
       await page.goto(`http://127.0.0.1:${server.address().port}`);
-      await page.getByRole('button', { name: 'Issues & PRs' }).click();
+      await page.getByRole('button', { name: /^Issues(?: \d+)?$/ }).click();
+      assert.equal(await page.locator('#mw-list-inbox > .mw-panel-top').count(),0);
+      assert.equal(await page.locator('[id="mw-item-fixture/queue#135"]').count(),0);
+      await page.getByRole('button',{name:/^Pull Requests/}).click();
+      await page.locator('[id="mw-item-fixture/queue#135"]').waitFor();
+      assert.equal(await page.locator('[id="mw-item-fixture/queue#128"]').count(),0);
+      await page.getByRole('button',{name:/^Issues(?: \d+)?$/}).click();
       await page.locator('[id="mw-item-fixture/queue#128"]').click();
       await verifyTheme(page,dir,width);
-      const openIssue=async(id)=>{const back=page.getByRole('button',{name:'返回来源列表',exact:true});if(width<=760&&await back.isVisible())await back.click();await page.locator(`[id="mw-item-${id}"]`).click();};
+      const openIssue=async(id)=>{const back=page.getByRole('button',{name:'返回来源列表',exact:true});if(width<=760&&await back.isVisible())await back.click();await page.getByRole('button',{name:store.issues().find(i=>i.id===id)?.type==='pr'?/^Pull Requests/:/^Issues(?: \d+)?$/}).click();await page.locator(`[id="mw-item-${id}"]`).click();};
       const selectPanel=async(name)=>{
         if(width>760)await page.getByRole('button',{name:'处理流程',exact:true}).click();
         else await page.locator('select[aria-label="AI 功能"]').selectOption('overview');
@@ -80,15 +86,14 @@ try {
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.locator('.mw-reader-topline').count(), 0);
       await page.locator('.mw-reader-header h2').evaluate(el=>{const text=[...el.childNodes].find(n=>n.nodeType===Node.TEXT_NODE && n.textContent.trim());text.textContent='[Bug]: plugin load is CPU-bound on module compilation - one heavy channel plugin entry costs 5-13 seconds cold and three channel plugins use most of the startup budget '.repeat(2);});
-      const refNumber=await page.locator('.mw-title-reference>span').boundingBox();
+      const refNumber=await page.locator('.mw-reader-number').boundingBox();
       const refLink=await page.locator('.mw-title-reference>a').boundingBox();
-      assert.ok(Math.abs((refNumber.y+refNumber.height/2)-(refLink.y+refLink.height/2))<3, 'number and GitHub link stay on the same line with long titles');
+      assert.ok(Math.abs((refNumber.y+refNumber.height/2)-(refLink.y+refLink.height/2))<3, 'number and GitHub link stay on the same toolbar with long titles');
       assert.equal(await page.locator('.mw-reader-meta > .mw-reader-top-actions').count(), 1);
       if(width<=760)await page.getByRole('button',{name:'返回来源列表',exact:true}).click();
-      const listTab = await page.getByRole('button',{name:'Issues',exact:true}).boundingBox();
+      const listTab = await page.locator('.mw-global-tabs').boundingBox();
       const searchBox = await page.getByLabel('搜索问题',{exact:true}).boundingBox();
-      assert.ok(listTab.height <= 40, 'inbox tabs use compact height');
-      assert.ok(searchBox.y - (listTab.y + listTab.height) >= 8, 'search has a visible gap below tabs');
+      assert.ok(searchBox.y - (listTab.y + listTab.height) >= 8, 'search has a visible gap below the main navigation');
       assert.equal(await page.getByLabel('筛选问题', {exact:true}).count(), 0);
       await page.getByRole('button', {name:'展开筛选',exact:true}).click();
       await page.getByRole('dialog', {name:'筛选问题'}).getByRole('button',{name:'所有开放问题',exact:true}).click();
@@ -117,7 +122,7 @@ try {
       await page.waitForFunction(async()=>{const r=await fetch('/maintainer/api/item-draft?id=fixture%2Fqueue%23128');return (await r.json()).plan?.goal==='Fixture offline sync';});
       assert.equal(store.get('issues','fixture/queue#128').plan,undefined);
       const beforeDraftJobs=store.jobs().length;
-      await page.reload();await page.getByRole('button',{name:'Issues & PRs'}).click();await page.locator('[id="mw-item-fixture/queue#128"]').click();
+      await page.reload();await page.getByRole('button',{name:/^Issues(?: \d+)?$/}).click();await page.locator('[id="mw-item-fixture/queue#128"]').click();
       await selectPanel('Plan');await page.getByLabel('维护目标',{exact:true}).waitFor();assert.equal(await page.getByLabel('维护目标',{exact:true}).inputValue(),'Fixture offline sync');assert.equal(store.jobs().length,beforeDraftJobs);
       await page.getByRole('button',{name:'确认计划并开始实施',exact:true}).click();
       await page.getByText('已按确认计划开始实施',{exact:true}).waitFor();

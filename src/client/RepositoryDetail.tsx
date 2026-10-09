@@ -364,75 +364,6 @@ export function RepositoryDetail({
           )}
           {summary?.title ?? issue.title}
         </h2>
-        <div className="mw-reader-meta">
-          <div className="mw-reader-facts">
-            <span
-              className={`mw-reader-state ${state === "已合并" ? "merged" : state === "已关闭" ? "closed" : ""}`}
-            >
-              {issue.type === "pr" ? (
-                <GitPullRequest size={15} />
-              ) : (
-                <CircleDot size={15} />
-              )}
-              {state}
-            </span>
-            <span className="mw-title-reference">
-              <span>#{issue.number}</span>{" "}
-              {safeLink(issue.url) && (
-                <a
-                  className="mw-icon-button"
-                  title="在 GitHub 查看"
-                  aria-label="在 GitHub 查看"
-                  href={safeLink(issue.url)}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink size={16} />
-                </a>
-              )}
-            </span>
-            <strong>{summary?.author ?? issue.author}</strong>
-            <span>
-              {summary
-                ? `创建于 ${when(summary.createdAt)}`
-                : `同步于 ${when(issue.updatedAt)}`}
-            </span>
-            {summary?.headRef && (
-              <>
-                <code>{summary.headRef}</code>
-                <span>→</span>
-                <code>{summary.baseRef}</code>
-              </>
-            )}
-          </div>
-          <div className="mw-reader-top-actions">
-            {isAgent(tab) && renderAgentActions && (
-              <div className="mw-reader-stage-actions">
-                {renderAgentActions(tab as AgentTab)}
-              </div>
-            )}
-            {hasGitHub && !isAgent(tab) && (
-              <button
-                className="mw-icon-button"
-                title="刷新详情"
-                aria-label="刷新详情"
-                disabled={loading}
-                onClick={refresh}
-              >
-                <RefreshCw size={16} />
-              </button>
-            )}
-            {!embedded && (
-              <button
-                className="mw-reader-close"
-                onClick={close}
-                aria-label="关闭完整详情"
-              >
-                <X size={18} />
-              </button>
-            )}
-          </div>
-        </div>
         <div className="mw-reader-tabbar">
           <nav
             className="mw-reader-tabs mw-reader-ai-tabs"
@@ -494,6 +425,75 @@ export function RepositoryDetail({
               ))}
             </select>
           </div>
+        <div className="mw-reader-meta">
+          <div className="mw-reader-facts">
+            <span
+              className={`mw-reader-state ${state === "已合并" ? "merged" : state === "已关闭" ? "closed" : ""}`}
+            >
+              {issue.type === "pr" ? (
+                <GitPullRequest size={15} />
+              ) : (
+                <CircleDot size={15} />
+              )}
+              {state}
+            </span>
+            <span className="mw-title-reference">
+              {safeLink(issue.url) && (
+                <a
+                  className="mw-icon-button"
+                  title="在 GitHub 查看"
+                  aria-label="在 GitHub 查看"
+                  href={safeLink(issue.url)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink size={16} />
+                </a>
+              )}
+            </span>
+            <strong>{summary?.author ?? issue.author}</strong>
+            <span className="mw-reader-number">#{issue.number}</span>
+            <span>
+              {summary
+                ? `创建于 ${when(summary.createdAt)}`
+                : `同步于 ${when(issue.updatedAt)}`}
+            </span>
+            {summary?.headRef && (
+              <>
+                <code>{summary.headRef}</code>
+                <span>→</span>
+                <code>{summary.baseRef}</code>
+              </>
+            )}
+          </div>
+          <div className="mw-reader-top-actions">
+            {isAgent(tab) && renderAgentActions && (
+              <div className="mw-reader-stage-actions">
+                {renderAgentActions(tab as AgentTab)}
+              </div>
+            )}
+            {hasGitHub && !isAgent(tab) && (
+              <button
+                className="mw-icon-button"
+                title="刷新详情"
+                aria-label="刷新详情"
+                disabled={loading}
+                onClick={refresh}
+              >
+                <RefreshCw size={16} />
+              </button>
+            )}
+            {!embedded && (
+              <button
+                className="mw-reader-close"
+                onClick={close}
+                aria-label="关闭完整详情"
+              >
+                <X size={18} />
+              </button>
+            )}
+          </div>
+        </div>
         </div>
       </header>
       <main className="mw-reader-content">

@@ -810,3 +810,71 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 
 .mw-stage-panel>header>.mw-workflow-actions{align-items:center}
 .mw-stage-panel>header .mw-assistant-more>summary{margin:0;padding:6px 10px;line-height:20px;min-height:32px}
+/* Harness-style navigation tabs. Action buttons retain their control styling. */
+.mw{--mw-tab-accent:#79aaff}
+.mw :is(.mw-global-tabs,.mw-reader-tabs,.mw-tabs,.mw-detail-tabs,.mw-settings-tabs)>button:not(.mw-repo-settings-tab):not(.mw-tab-sync){background:transparent;border-bottom-width:2px;border-bottom-style:solid;border-bottom-color:transparent;font-weight:400;box-shadow:none;color:var(--muted)}
+.mw :is(.mw-global-tabs,.mw-reader-tabs,.mw-tabs,.mw-detail-tabs,.mw-settings-tabs)>button:not(.mw-repo-settings-tab):not(.mw-tab-sync):hover{background:transparent;color:var(--muted);box-shadow:none}
+.mw :is(.mw-global-tabs,.mw-reader-tabs,.mw-tabs,.mw-detail-tabs,.mw-settings-tabs)>button:is(.active,[aria-current=page],[aria-selected=true]):not(.mw-repo-settings-tab):not(.mw-tab-sync){background:transparent;color:var(--mw-tab-accent);border-bottom-color:var(--mw-tab-accent);font-weight:400;box-shadow:none}
+
+.mw .mw-tabs button.active:after{content:none}
+
+/* Harness publishes the leading chrome clearance when macOS hides its sidebar. */
+.mw[data-mw-host] .mw-header-controls{padding-inline-start:calc(18px + var(--dsh-frame-leading-clearance,0px))}
+
+/* Dense, consistent Issue and PR list rows. */
+.mw.mw-layout-tabs .mw-issue-row{padding:9px 12px;gap:3px}
+.mw.mw-layout-tabs .mw-issue-row .mw-issue-content{padding:0 24px 0 0;text-align:left;background:transparent;border:0;min-height:0;line-height:1.4}
+.mw.mw-layout-tabs .mw-issue-title strong{font-size:13px;font-weight:500;line-height:1.4}
+.mw.mw-layout-tabs .mw-issue-meta{margin:4px 0 0 21px;gap:4px;font-size:11px;line-height:16px}
+.mw .mw-issue-labels{display:flex;gap:4px;max-width:100%;overflow-x:auto;scrollbar-width:none;flex-basis:100%;padding-bottom:1px}
+.mw .mw-issue-labels::-webkit-scrollbar{display:none}
+.mw.mw-layout-tabs .mw-issue-meta .mw-tag{max-width:none;overflow:visible;text-overflow:clip;flex-shrink:0;font-size:10px}
+.mw.mw-layout-tabs .mw-issue-row .mw-tag{border:0;border-radius:var(--mw-control-radius);padding:1px 6px;line-height:16px;min-height:18px;background:var(--mw-control-bg);color:var(--muted);font-weight:400}
+.mw.mw-layout-tabs .mw-issue-row .mw-tag.red{color:var(--mw-danger-text,#ac3434)}
+.mw.mw-layout-tabs .mw-issue-row .mw-row-status{margin:2px 0 0 21px;gap:5px;line-height:18px;font-size:10px;min-height:18px;width:calc(100% - 21px)}
+.mw.mw-layout-tabs .mw-issue-row>input[type=checkbox]{top:11px;right:12px}
+.mw input[type=checkbox]:not(.mw-preference-switch input){appearance:none;-webkit-appearance:none;display:inline-grid;place-content:center;width:14px;height:14px;margin:0;border:1px solid var(--mw-border);border-radius:4px;background:var(--mw-control-bg);vertical-align:middle;flex:none}
+.mw input[type=checkbox]:not(.mw-preference-switch input):checked{background:#79aaff;border-color:#79aaff}
+.mw input[type=checkbox]:not(.mw-preference-switch input):checked:after{content:'';width:7px;height:4px;border-left:1.5px solid #151517;border-bottom:1.5px solid #151517;transform:rotate(-45deg) translateY(-1px)}
+
+/* One detail toolbar: source tabs beside workflow, repository facts on the right. */
+.mw .mw-reader-tabbar{flex-wrap:wrap;gap:0 6px}
+.mw .mw-reader-tabbar .mw-reader-source-tabs{margin-left:0;padding-left:0;border-left:0}
+.mw .mw-reader-tabbar>.mw-reader-meta{margin-left:auto;min-width:0;gap:8px;font-size:11px;padding:4px 0}
+.mw .mw-reader-tabbar .mw-reader-facts{gap:7px}
+.mw .mw-reader-tabbar .mw-reader-facts strong{font-weight:400}
+.mw .mw-reader-tabbar .mw-reader-state{padding:4px 8px;font-size:11px}
+.mw .mw-reader-tabbar .mw-reader-facts code{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.mw.mw-layout-tabs .mw-search{height:32px;min-height:32px;border:0;border-radius:var(--mw-control-radius);padding:0 10px;background:var(--mw-control-bg)}
+.mw.mw-layout-tabs .mw-search input{height:32px;min-height:32px;padding:0;border:0;background:transparent}
+@media(max-width:760px){.mw .mw-reader-tabbar>.mw-reader-meta{width:100%;margin-left:0;padding-bottom:8px}.mw .mw-reader-tabbar .mw-reader-facts{flex:1}.mw .mw-reader-tabbar .mw-reader-facts code{max-width:80px}}
+
+/* Selected issues and PRs use the same accent as navigation, without a filled row. */
+.mw.mw-layout-tabs .mw-issue-row:is(.selected,.focused){background:transparent;box-shadow:inset 2px 0 var(--mw-tab-accent);border-color:var(--mw-border)}
+.mw.mw-layout-tabs .mw-issue-row:is(.selected,.focused):hover{background:transparent}
+.mw.mw-layout-tabs .mw-issue-row:is(.selected,.focused) .mw-issue-title{color:var(--mw-tab-accent)}
+.mw.mw-layout-tabs .mw-issue-row:is(.selected,.focused) .mw-issue-title strong{color:var(--mw-tab-accent)}
+
+/* Detail tabs meet the header separator even when metadata makes the row taller. */
+.mw .mw-reader-tabbar>.mw-reader-meta{margin-bottom:0}
+.mw .mw-reader-tabbar>.mw-reader-tabs{align-self:stretch;align-items:stretch;overflow:visible}
+.mw .mw-reader-tabbar>.mw-reader-tabs>button{margin-bottom:-1px}
+
+/* Status and GitHub link share the compact toolbar control height. */
+.mw .mw-reader-tabbar .mw-reader-state{height:32px;min-height:32px;padding:0 10px;border-radius:var(--mw-control-radius);line-height:20px;align-items:center}
+.mw .mw-reader-tabbar .mw-title-reference>.mw-icon-button{height:32px;min-height:32px;width:32px;align-items:center}
+
+/* Toolbar links and status controls use shared surfaces, regardless of element type. */
+.mw .mw-reader-tabbar .mw-reader-state,
+.mw .mw-reader-tabbar .mw-title-reference>a.mw-icon-button{background:var(--mw-control-bg);background-image:none;border:0;box-shadow:none}
+.mw .mw-reader-tabbar .mw-title-reference>a.mw-icon-button:hover{background:var(--mw-control-hover);background-image:none}
+
+/* Task, review and repository sidebars share the Issue/PR list language. */
+.mw.mw-layout-tabs .mw-task-row{padding:9px 12px;gap:3px 8px!important;background:transparent;border-radius:0;border-width:0 0 1px;border-color:var(--mw-border);box-shadow:none;text-align:left;color:var(--ink)}
+.mw.mw-layout-tabs .mw-task-row strong{font-size:13px;font-weight:500;line-height:1.4;color:var(--ink);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mw.mw-layout-tabs .mw-task-row p,.mw.mw-layout-tabs .mw-task-row small{margin:4px 0 0;font-size:11px;line-height:16px;color:var(--muted)}
+.mw.mw-layout-tabs .mw-task-row>.mw-tag{border:0;border-radius:var(--mw-control-radius);padding:1px 6px;line-height:16px;min-height:18px;background:var(--mw-control-bg);color:var(--muted);font-size:10px;font-weight:400;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.mw.mw-layout-tabs .mw-task-row>.mw-tag.red{color:var(--mw-danger-text,#ac3434)}
+.mw.mw-layout-tabs .mw-task-row:is(.selected,.focused),.mw.mw-layout-tabs .mw-task-row:is(.selected,.focused):hover{background:transparent;box-shadow:inset 2px 0 var(--mw-tab-accent);border-left:0}
+.mw.mw-layout-tabs .mw-task-row:is(.selected,.focused) strong{color:var(--mw-tab-accent)}
+.mw.mw-layout-tabs .mw-task-icon{background:transparent;color:var(--muted)}

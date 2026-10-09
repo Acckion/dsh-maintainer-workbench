@@ -178,7 +178,7 @@ try {
       await actionPage
         .getByLabel("选择仓库", { exact: true })
         .selectOption(repo.id);
-      await actionPage.getByRole("button", { name: /^Issues & PRs/ }).click();
+      await actionPage.getByRole("button", { name: /^Pull Requests/ }).click();
       await actionPage
         .locator('[id="mw-item-openclaw/openclaw#166828"]')
         .click();
@@ -221,7 +221,7 @@ try {
         )
         .first()
         .selectOption(repo.id);
-      await page.getByRole("button", { name: /^Issues & PRs/ }).click();
+      await page.getByRole("button", { name: /^Pull Requests/ }).click();
       await page.locator('[id="mw-item-openclaw/openclaw#166828"]').click();
       const flow = page.getByRole("region", {
           name: "事项处理流程",

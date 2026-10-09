@@ -48,7 +48,13 @@ export async function verifyTheme(page, dir, width) {
     await page.getByRole('button',{name:new RegExp('^'+name+'(?:\\s|$)')}).click();await dark('.mw');
     await page.screenshot({path:join(dir,`theme-${name}-${width}.png`)});
   }
-  await page.getByRole('button',{name:'Issues & PRs',exact:false}).click();
+  const header=page.locator('.mw-header-controls');
+  await page.locator('.mw-layout-tabs').evaluate(el=>el.style.setProperty('--dsh-frame-leading-clearance','160px'));
+  assert.equal(await header.evaluate(el=>getComputedStyle(el).paddingInlineStart),'178px');
+  await page.locator('.mw-layout-tabs').evaluate(el=>el.style.setProperty('--dsh-frame-leading-clearance','84px'));
+  assert.equal(await header.evaluate(el=>getComputedStyle(el).paddingInlineStart),'102px');
+  await page.locator('.mw-layout-tabs').evaluate(el=>el.style.removeProperty('--dsh-frame-leading-clearance'));
+  await page.getByRole('button',{name:/^Pull Requests/}).click();
   await page.locator('[id="mw-item-fixture/queue#135"]').click();
   if(width>760)await page.getByRole('button',{name:'Diff',exact:true}).click();
   else await page.locator('select[aria-label="GitHub 原始内容"]').selectOption('files');
@@ -61,6 +67,7 @@ export async function verifyTheme(page, dir, width) {
   await page.locator('.mw').evaluate(el=>el.removeAttribute('data-mw-host'));
   await page.emulateMedia({colorScheme:'light'});
   if(width<=760)await page.getByRole('button',{name:'返回来源列表',exact:true}).click();
+  await page.getByRole('button',{name:/^Issues(?: \d+)?$/}).click();
   await page.locator('[id="mw-item-fixture/queue#128"]').click();
   console.log(`Theme switching, top-layer dialogs, panels and Diff passed at ${width}px`);
 }

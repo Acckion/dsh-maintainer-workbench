@@ -104,7 +104,7 @@ export function App({
   const [showQuickTasks, setShowQuickTasks] = useState(false);
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
-  const [type, setType] = useState("all");
+  const [type, setType] = useState("issue");
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
   const [readerRequest, setReaderRequest] = useState<{
@@ -179,7 +179,7 @@ export function App({
     setFocused(undefined);
     setJobFocus(undefined);
     setFilter("all");
-    setType("all");
+    setType("issue");
     setPublishAction(undefined);
     setReviewNote("");
     try {
@@ -525,7 +525,8 @@ export function App({
     }
   }
   const nav = [
-    { id: "inbox", label: "Issues & PRs", icon: Inbox, count: open.length },
+    { id: "inbox", label: "Issues", icon: Inbox, count: open.filter((i) => i.type === "issue").length },
+    { id: "inbox", label: "Pull Requests", icon: GitPullRequest, count: open.filter((i) => i.type === "pr").length },
     { id: "organize", label: "Repository", icon: FileCheck2, count: 0 },
     {
       id: "tasks",
@@ -594,16 +595,21 @@ export function App({
           <nav className="mw-global-tabs" aria-label="工作台页面">
             {nav.map((n) => (
               <button
-                key={n.id}
+                key={n.label}
                 aria-current={
-                  page === n.id || (n.id === "tasks" && page === "reviews")
+                  (page === n.id && (n.id !== "inbox" || type === (n.label === "Issues" ? "issue" : "pr"))) || (n.id === "tasks" && page === "reviews")
                     ? "page"
                     : undefined
                 }
-                className={`${page === n.id || (n.id === "tasks" && page === "reviews") ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
+                className={`${(page === n.id && (n.id !== "inbox" || type === (n.label === "Issues" ? "issue" : "pr"))) || (n.id === "tasks" && page === "reviews") ? "active" : ""} ${n.id === "repository-settings" ? "mw-repo-settings-tab" : ""}`}
                 onClick={() => {
                   navigationGeneration.current += 1;
                   navigate(n.id);
+                  if (n.id === "inbox") {
+                    setType(n.label === "Issues" ? "issue" : "pr");
+                    setSelected([]);
+                    setListLimit(50);
+                  }
                   setFocused(undefined);
                   setJobFocus(undefined);
                   setSearchValue("");
@@ -764,28 +770,6 @@ export function App({
                     tabIndex={-1}
                     className="mw-list-panel"
                   >
-                    <div className="mw-panel-top">
-                      <div className="mw-tabs">
-                        <button
-                          className={type === "all" ? "active" : ""}
-                          onClick={() => setType("all")}
-                        >
-                          全部 <span>{open.length}</span>
-                        </button>
-                        <button
-                          className={type === "issue" ? "active" : ""}
-                          onClick={() => setType("issue")}
-                        >
-                          Issues
-                        </button>
-                        <button
-                          className={type === "pr" ? "active" : ""}
-                          onClick={() => setType("pr")}
-                        >
-                          Pull Requests
-                        </button>
-                      </div>
-                    </div>
                     <div className="mw-toolbar">
                       <label className="mw-search">
                         <Search size={16} />
@@ -799,42 +783,6 @@ export function App({
                       <InboxFilter value={filter} onChange={setFilter} />
                     </div>
                     <div className="mw-batch">
-                      <label>
-                        <input
-                          type="checkbox"
-                          aria-label="选择当前列表"
-                          checked={
-                            filtered.length > 0 &&
-                            filtered
-                              .slice(0, listLimit)
-                              .every((i) => selected.includes(i.id))
-                          }
-                          onChange={(e) =>
-                            setSelected(
-                              e.target.checked
-                                ? [
-                                    ...new Set([
-                                      ...selected,
-                                      ...filtered
-                                        .slice(0, listLimit)
-                                        .map((i) => i.id),
-                                    ]),
-                                  ]
-                                : selected.filter(
-                                    (id) =>
-                                      !filtered
-                                        .slice(0, listLimit)
-                                        .some((i) => i.id === id),
-                                  ),
-                            )
-                          }
-                        />
-                        <span>
-                          {selected.length
-                            ? `已选 ${selected.length} 项`
-                            : `${filtered.length} 条记录`}
-                        </span>
-                      </label>
                       <div>
                         <BatchWorkflow
                           issues={issues.filter((issue) =>
@@ -940,12 +888,12 @@ export function App({
                                 <span>
                                   #{i.number} · {i.author}
                                 </span>
-                                {i.labels
+                                <span className="mw-issue-labels" aria-label="标签">{i.labels
                                   .filter((l) => !/^p[0-3]$/i.test(l))
                                   .slice(0, 2)
                                   .map((l) => (
                                     <Tag key={l}>{l}</Tag>
-                                  ))}
+                                  ))}</span>
                                 <span className="mw-issue-comments">
                                   {i.comments} 条讨论
                                 </span>
@@ -1184,7 +1132,7 @@ export function App({
                             ? "暂时没有待审核结果"
                             : "还没有维护任务"
                         }
-                        text="当前筛选下没有任务，可切换筛选或从 Issues & PRs 开始处理。"
+                        text="当前筛选下没有任务，可切换筛选或从 Issues 或 Pull Requests 开始处理。"
                       />
                     )}
                     {listJobs.length > listLimit && (
