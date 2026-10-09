@@ -42,10 +42,10 @@
     }
   },
   "scripts": {
-    "dev": "tsx watch src/server/dev.ts",
+    "dev": "node --use-system-ca --import tsx --watch src/server/dev.ts",
     "build": "node scripts/build.mjs",
     "prepare": "npm run build",
-    "start": "node dist/server.js",
+    "start": "node --use-system-ca dist/server.js",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test && npm run build",

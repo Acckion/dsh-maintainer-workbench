@@ -23,6 +23,8 @@ npm start
 
 独立预览使用 `.data/`，与原生运行的数据隔离。首次启动为空工作区，连接仓库后支持真实 GitHub 资料的分诊、调查与 PR 分析；代码修改必须在原生 Harness 中运行。`npm run dev` 只监视服务端代码，前端修改后运行 `npm run build`。
 
+`npm start` / `npm run dev` / `npm run harness` 默认启用 `--use-system-ca`（Harness 启动器通过 `NODE_OPTIONS` 传给宿主进程），以便在安装了拦截 HTTPS 根证书（企业代理或安全工具）的机器上连接 GitHub；若改用其他方式启动 Harness（例如已安装的 Harness 桌面版）后导入仓库提示「证书验证失败」，请用 `NODE_OPTIONS=--use-system-ca` 启动，或改用错误提示中的 `NODE_EXTRA_CA_CERTS` 方案。
+
 ## 从零完成一次真实维护
 
 1. **配置模型**：只在 Harness 的「设置 → 模型」配置一次默认模型、提供方和凭据。本插件每次真实任务开始读取宿主默认模型与推理设置；原生界面不重复提供 API Key、端点和模型输入。单个聊天的临时模型选择不等于全局默认。独立预览保留自己的兼容 API 配置。
