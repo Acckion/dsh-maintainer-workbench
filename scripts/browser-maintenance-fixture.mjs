@@ -55,6 +55,7 @@ try {
       await page.getByLabel('维护者取舍', { exact: true }).selectOption('accepted');
       await page.getByRole('button', { name: '保存类型与验收计划', exact: true }).click();
       await page.getByText('已保存事项类型与验收计划', { exact: true }).waitFor();
+      await page.getByText('补充要求与下一步操作', { exact: true }).click();
       await page.getByRole('button', { name: '下一步：实施变更', exact: true }).click();
       await page.getByText(/已派发下一阶段/).waitFor();
       assert.equal(store.jobs().find(item => item.kind === 'fix')?.issueSnapshot.plan?.goal, 'Fixture offline sync');

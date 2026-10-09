@@ -398,13 +398,13 @@ function Result({
           ))}
         </section>
       )}
-      <section>
-        <h4>
-          对外回复
+      <details className="mw-response-draft">
+        <summary>
+          回复草稿
           {result.responseDraft.trim() && (
             <span className="mw-muted"> · 草稿，尚未发布</span>
           )}
-        </h4>
+        </summary>
         {result.responseDraft.trim() ? (
           <>
             <div className="mw-draft">{result.responseDraft}</div>
@@ -415,7 +415,7 @@ function Result({
             暂无需要向作者发布的内容，可继续处理下一阶段。
           </p>
         )}
-      </section>
+      </details>
     </div>
   );
 }
@@ -1844,12 +1844,12 @@ export function App({
   function renderStageActions(stage: "triage" | "execution" | "review") {
     if (!displayedIssue || stage === "review") return null;
     const kinds: JobKind[] = stage === "triage"
-      ? [displayedIssue.type === "pr" ? "preflight" : "triage"]
+      ? (displayedIssue.type === "pr" ? ["preflight", "review"] : ["triage"])
       : displayedIssue.type === "pr" ? ["review", "ci"] : ["investigate", "fix"];
     return kinds.map(kind => (
       <button key={kind} className="mw-button" disabled={!!busy}
         onClick={() => void enqueue(kind, [displayedIssue.id])}>
-        {kindNames[kind]}
+        {kind === "review" ? "启动代码审查" : kindNames[kind]}
       </button>
     ));
   }
@@ -1903,18 +1903,6 @@ export function App({
             ))}
           </div>
         )}
-        {stage === "triage" && (
-          <WorkflowPanel
-            hideSummary
-            issue={displayedIssue}
-            job={latest}
-            history={history}
-            busy={!!busy}
-            act={(path, data, message) =>
-              action("workflow", path, data, message)
-            }
-          />
-        )}
         {latest?.error && <div className="mw-callout red">{latest.error}</div>}
         {latest?.result ? (
           <Result result={latest.result} classification={stage === "triage"} />
@@ -1922,6 +1910,19 @@ export function App({
           <Empty
             title={stage === "triage" ? "尚无分诊结果" : "尚无执行结果"}
             text="选择上方操作启动对应阶段；切换页签不会调用模型。"
+          />
+        )}
+        {stage === "triage" && (
+          <WorkflowPanel
+            hideSummary
+            compact
+            issue={displayedIssue}
+            job={latest}
+            history={history}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
           />
         )}
         {stage === "execution" && latest && (

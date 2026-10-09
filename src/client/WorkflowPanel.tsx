@@ -36,12 +36,14 @@ export function WorkflowPanel({
   busy,
   act,
   hideSummary = false,
+  compact = false,
 }: {
   issue: Issue;
   job?: Job;
   history: Job[];
   busy: boolean;
   hideSummary?: boolean;
+  compact?: boolean;
   act: (path: string, data: unknown, message: string) => Promise<unknown>;
 }) {
   const [instructions, setInstructions] = useState("");
@@ -138,8 +140,9 @@ export function WorkflowPanel({
       "已派发下一阶段，自动交接现有证据",
     );
   return (
-    <section className="mw-workflow">
-      <div className="mw-section-title">
+    <section className={compact ? "mw-triage-followup" : "mw-workflow"}>
+      {compact && <p className="mw-muted">{job?.status === "completed" ? "分析报告已保存" : "尚未完成分析"}{issue.type === "pr" && <> · {history.some(j => j.kind === "review") ? "已创建代码审查任务，可在 Execution 查看" : "尚未启动代码审查"}</>}</p>}
+      {!compact && <div className="mw-section-title">
         处理流程{" "}
         <span className="mw-tag">
           {issue.state === "closed"
@@ -153,7 +156,7 @@ export function WorkflowPanel({
                   ? "待预检"
                   : "待分诊"))}
         </span>
-      </div>
+      </div>}
       {!issue.origin && issue.type === "issue" && issue.state === "open" && (
         <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
       )}
@@ -174,7 +177,7 @@ export function WorkflowPanel({
             "先判断处理方向，再按需要调查、实施和验证。"}
         </p>
       )}
-      <RemoteProgress key={issue.id} issue={issue} busy={busy} act={act} />
+      {!compact && <RemoteProgress key={issue.id} issue={issue} busy={busy} act={act} />}
       {validation && validation.state !== "passed" && (
         <div className="mw-callout amber">
           <strong>{validation.reason}</strong>
@@ -220,7 +223,7 @@ export function WorkflowPanel({
           )}
           {a.stage === "preflight" && a.risks.length > 0 && (
             <>
-              <h4>本次审查重点</h4>
+              <h4>需核对事项</h4>
               <ul>
                 {a.risks.map((s, i) => (
                   <li key={i}>{s}</li>
@@ -372,8 +375,10 @@ export function WorkflowPanel({
       {blocker && <p className="mw-callout amber">{blocker}</p>}
       {issue.state === "open" && (
         <>
+          <details>
+          <summary>补充要求与下一步操作</summary>
           <label>
-            下一阶段目标、验收条件或修订意见（填写后随下一阶段派发）
+            给下一次 Agent 任务补充要求
             <textarea
               rows={3}
               value={instructions}
@@ -396,7 +401,8 @@ export function WorkflowPanel({
               </button>
             )}
           </div>
-          <details>
+          </details>
+          {!compact && <details>
             <summary>其他阶段与快捷操作</summary>
             <div className="mw-workflow-actions">
               {(issue.type === "pr"
@@ -425,7 +431,7 @@ export function WorkflowPanel({
                 </button>
               ))}
             </div>
-          </details>
+          </details>}
           {issue.type === "issue" && (
             <div className="mw-workflow-actions">
               {[
