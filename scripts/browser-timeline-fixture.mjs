@@ -270,6 +270,30 @@ try {
           .getByRole("button", { name: "补足审查证据", exact: true })
           .isEnabled(),
       );
+      assert.equal(await panel.locator(".mw-stage-history").count(), 0);
+      if (width === 1440) {
+        const title = await panel.locator("header h3").boundingBox();
+        const action = await panel
+          .getByRole("button", { name: "补足审查证据", exact: true })
+          .boundingBox();
+        const more = await panel
+          .locator("header .mw-assistant-more>summary")
+          .boundingBox();
+        const box = await panel.boundingBox();
+        const center = (r) => r.y + r.height / 2;
+        assert.ok(
+          Math.abs(center(title) - center(action)) <= 1,
+          "title and action must align",
+        );
+        assert.ok(
+          Math.abs(center(more) - center(action)) <= 1,
+          "more and action must align",
+        );
+        assert.ok(
+          title.y - box.y < 24,
+          "stage title must have compact top spacing",
+        );
+      }
       await page.screenshot({
         path: join(root, `timeline-next-action-${width}.png`),
         fullPage: true,

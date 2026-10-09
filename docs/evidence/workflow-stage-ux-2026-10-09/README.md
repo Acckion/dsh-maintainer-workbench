@@ -12,3 +12,9 @@ Synthetic PR fixture, not live GitHub execution. Integrated master `2dad9e1`.
 - Maintenance fixture: desktop/mobile passed, including theme and plan operations.
 
 Screenshots are demonstration data captured from the browser fixture.
+
+Header refinement: reduced panel top padding to 16px, aligned title/action/menu
+centers, and removed the duplicate future-stage notice. Historical read-only
+notice uses the neutral surface color. Browser fixture measures desktop header
+alignment (within 1px) and compact spacing, and checks that future stages do not
+render a historical notice. Typecheck and build passed after this refinement.

@@ -64,11 +64,9 @@ export function StagePanel({
         </span>
         {actions && <div className="mw-workflow-actions">{actions}</div>}
       </header>
-      {viewingHistory && (
+      {viewingHistory && selected.status !== "future" && (
         <p className="mw-stage-history">
-          {selected.status === "future"
-            ? "下一步预览 · 尚未执行"
-            : "正在查看历史阶段或尝试 · 只读 · 当前任务继续保留"}
+          正在查看历史阶段或尝试 · 只读 · 当前任务继续保留
         </p>
       )}
       {selected.attemptIds.length > 1 && (

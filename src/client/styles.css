@@ -569,10 +569,10 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 .mw-workflow-next{color:var(--mw-accent,#217b68)}
 .mw-workflow-actions{display:flex;gap:8px;flex-wrap:wrap;flex-shrink:0;max-width:45%;align-items:flex-start;margin:0}
 .mw-workflow-actions .mw-assistant-more{position:relative}.mw-workflow-actions .mw-assistant-more>div{z-index:3;right:0;left:auto}
-.mw-stage-panel{padding:22px 24px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--mw-border,#dce5df);border-radius:12px;background:var(--mw-surface,#fff)}
+.mw-stage-panel{padding:16px 24px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--mw-border,#dce5df);border-radius:12px;background:var(--mw-surface,#fff)}
 .mw-stage-panel>header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:0}
 .mw-stage-panel p,.mw-stage-result p{overflow-wrap:anywhere;line-height:1.8}.mw-stage-panel>label{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0}
-.mw-stage-history{padding:9px 12px;border-left:3px solid var(--mw-warning-border,#977329);background:var(--mw-warning-surface,#fff7e8);color:var(--mw-warning-text,#80601c)}
+.mw-stage-history{padding:9px 12px;border-radius:8px;background:var(--mw-surface-soft,#f5f6f7);color:var(--mw-muted,#63786e)}
 .mw-stage-view-controls{display:flex;gap:16px;margin:10px 0 16px}.mw-stage-view-controls button[aria-pressed=true]{font-weight:700;text-decoration:underline;text-underline-offset:4px}
 .mw-stage-result h4{margin-top:16px}.mw-stage-result details{margin-top:16px}.mw-stage-result li,.mw-stage-panel li{line-height:1.8;overflow-wrap:anywhere}
 .mw-stage-activity{border-top:1px solid var(--mw-border,#dce5df);margin-top:24px;padding-top:14px;font-size:12px}.mw-stage-activity li{margin-top:8px;overflow-wrap:anywhere}
@@ -807,3 +807,6 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw button:disabled{opacity:.4;cursor:not-allowed}
 
 .mw-timeline-node button[aria-pressed=true] .mw-timeline-dot{background:#2563eb;border-color:#2563eb;color:#fff}
+
+.mw-stage-panel>header>.mw-workflow-actions{align-items:center}
+.mw-stage-panel>header .mw-assistant-more>summary{margin:0;padding:6px 10px;line-height:20px;min-height:32px}
