@@ -208,3 +208,18 @@ REGRESSION_PASSED
 - 浏览器夹具验证实际 settings.section 注册、模型菜单/保存/重开/跨分类草稿/冲突/失败恢复/移除模型恢复/键盘与外部点击关闭；截图在本机临时验收目录，不包含真实凭据。
 - 原生 SDK 联调使用模拟 Messages 服务和独立合成仓库，10 次请求：插件默认 Pro，分诊覆盖 Flash；真实 Bash 完成修复及先失败后通过回归，验证记录与补丁绑定，暂停/继续输入桥接通过。首次在外层受限沙盒中被 sandbox-exec 拒绝；允许沙盒执行器启动后重测通过，未改为无沙盒运行。不是收费模型效果验收。证据：[model-routing-2026-10-09.json](evidence/model-routing-2026-10-09.json)。
 - 真实 macOS Harness 0.2.0-rc.2 已安装 v0.4.0：模型菜单读取当前已配置的提供方与模型，搜索与 Escape 关闭、8 个阶段选择、审查模型草稿及其推理等级、恢复草稿实测通过。未保存不同模型到用户实际配置，未发起收费调用。已安装 client/plugin 构建与验收版本字节一致；旧包/配置/SQLite 备份保留在本机忽略目录。
+
+### Workflow timeline integration with master (2026-10-09)
+
+Integrated master through `908e7c3`, preserving version 0.4.0, orchestration,
+model routing, native settings autosave and isolated dirty-workspace tasks.
+Current-stage processing advice remains available; historical stages remain
+read-only and the standalone overview remains removed.
+
+Validation: `npm run check` passed (344 tests, typecheck and build). Timeline
+and maintenance browser fixtures passed at 1440px and 390px; native settings
+browser fixture passed, including autosave/retry, model selection, workspace
+management and light/dark layouts. The dirty-workspace browser fixture passed
+through isolated task execution and frozen patch generation. Navigation fixtures
+cover source-list restoration and asynchronous dispatch/review races; their
+batch operation entry now opens the latest master's advanced operations menu.
