@@ -1,18 +1,18 @@
-import { assertReviewEvidence } from "./review-evidence.ts";
-import { resolveGitHubAuth } from "./github-auth.ts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import type { Issue, Job, Repo } from "./types.ts";
-import type { Store } from "./store.ts";
-import { GitHub } from "./github.ts";
-import { collectPatch, git, validateCheckout } from "./git.ts";
+import { lightweight } from "./artifacts.ts";
 import {
   assertDeliveryCurrent,
   resolveDelivery,
   type DeliveryTarget,
 } from "./delivery.ts";
-import { lightweight } from "./artifacts.ts";
+import { collectPatch, git, validateCheckout } from "./git.ts";
+import { resolveGitHubAuth } from "./github-auth.ts";
+import { GitHub } from "./github.ts";
+import { assertReviewEvidence } from "./review-evidence.ts";
 import { revision } from "./revision.ts";
+import type { Store } from "./store.ts";
+import type { Issue, Job, Repo } from "./types.ts";
 const urlSchema = z.object({ html_url: z.string().url() });
 export type PublishAction =
   | "comment"
@@ -75,6 +75,7 @@ function assertInputCurrent(store: Store, job: Job, repo: Repo): void {
     !currentIssue ||
     !currentRepo ||
     currentIssue.repoId !== job.repoId ||
+    (job.caseId && job.caseId !== currentIssue.processing?.id) ||
     currentIssue.number !== job.issueSnapshot.number ||
     currentRepo.fullName !== repo.fullName ||
     currentRepo.defaultBranch !== repo.defaultBranch ||
@@ -255,6 +256,7 @@ export async function publish(
           status: "published",
           urls: recovered,
           remoteUpdatedAt: live.updated_at,
+          startedAt: prior?.startedAt ?? prior?.at,
           at: new Date().toISOString(),
         },
       },
@@ -332,6 +334,10 @@ export async function publish(
           urls,
           error,
           remoteUpdatedAt,
+          startedAt:
+            status === "publishing"
+              ? new Date().toISOString()
+              : current.publications?.[action]?.startedAt,
           at: new Date().toISOString(),
         },
       },
@@ -604,11 +610,6 @@ export async function publish(
           linkedPullRequests: [
             ...new Set([...(issue.linkedPullRequests ?? []), ...urls]),
           ],
-          workflow: {
-            stage: "track",
-            reason: "草稿 PR 已创建，等待审查及远端合并；事项尚未解决",
-            updatedAt: new Date().toISOString(),
-          },
         });
     }
     return urls;

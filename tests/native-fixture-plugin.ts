@@ -29,7 +29,16 @@ export async function apply(ctx: Context) {
       workbench.enqueue(['fixture/native#1'], 'validate', { sourceJobId: implementation.id });
       await workbench.drain();
     }
-    await writeFile(join(dir, 'result.json'), JSON.stringify({ ...workbench.snapshot(), contextProbe: { pruned: ctx.toolResultPruner.pruneContent([{ type: 'text', text: 'HEAD' + 'x'.repeat(12000) + 'TAIL' }]) } }, null, 2)); console.log('NATIVE_FIXTURE_RESULT', store.jobs()[0].status, store.jobs()[0].error ?? '');
+    const inputIssue={...store.issues()[0],id:'fixture/native#3',number:3,title:'Input bridge fixture'};
+    store.put('issues',inputIssue);
+    const inputId=workbench.enqueue([inputIssue.id],'investigate',{instructions:'INPUT_BRIDGE_FIXTURE'}).created[0];
+    await workbench.drain();
+    const paused=store.jobs().find(job=>job.id===inputId)!;
+    const state=store.processing.current(inputIssue.id)!,wait=state.waits.find(w=>w.type==='user_input'&&w.state==='open');
+    let continuedId:string|undefined;
+    if(wait){workbench.processing.submitInput(inputIssue.id,wait.id,{behavior:'Keep queue order'},state.version);continuedId=workbench.resume(inputId).created[0];await workbench.drain();}
+    const inputProbe={pausedStatus:paused.status,question:wait?.questions?.[0].question,continuedStatus:store.jobs().find(job=>job.id===continuedId)?.status,differentWorktree:paused.worktree!==store.jobs().find(job=>job.id===continuedId)?.worktree,running:workbench.snapshot().capabilities.running};
+    await writeFile(join(dir, 'result.json'), JSON.stringify({ ...workbench.snapshot(), inputProbe, contextProbe: { pruned: ctx.toolResultPruner.pruneContent([{ type: 'text', text: 'HEAD' + 'x'.repeat(12000) + 'TAIL' }]) } }, null, 2)); console.log('NATIVE_FIXTURE_RESULT', store.jobs()[0].status, store.jobs()[0].error ?? '');
   });
   ctx.effect(() => () => workbench.close());
 }

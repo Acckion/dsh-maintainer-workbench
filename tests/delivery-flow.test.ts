@@ -34,7 +34,7 @@ async function setup(t:TestContext, validationStatus:'passed'|'failed'|'not_run'
 
 test('failed or incomplete validation stays in attention and routes back to corrective work',async t=>{
   const f=await setup(t,'failed');const state=f.w.snapshot();const item=state.issues.find(i=>i.id===f.issue.id)!;
-  assert.equal(f.check.status,'completed');assert.equal(item.workflow?.stage,'blocked');assert.match(item.workflow?.reason??'',/验证失败/);
+  assert.equal(f.check.status,'completed');assert.equal(item.processing?.phase,'blocked');assert.match(item.processing?.reason??'',/验证失败/);
   assert.match(renderToStaticMarkup(React.createElement(Attention,{state,open:()=>{}})),/1 个需要判断/);
   const markup=renderToStaticMarkup(React.createElement(WorkflowPanel,{issue:item,job:f.check,history:state.jobs,busy:false,act:async()=>{}}));
   assert.match(markup,/下一步：实施变更/);assert.doesNotMatch(markup,/下一步：代码审查/);

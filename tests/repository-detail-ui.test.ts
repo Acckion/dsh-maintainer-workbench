@@ -32,7 +32,7 @@ test('diff coordinates preserve old/new locations across deletions, additions an
 
 test('embedded task details expose the complete Agent panel without a modal or background Summary fetch', () => {
   const issue: Issue = { id: 'r#2', repoId: 'r', number: 2, type: 'pr', title: 'Task', body: 'Original', author: 'author', labels: [], state: 'open', comments: 0, updatedAt: '', url: '' };
-  const html = renderToStaticMarkup(React.createElement(RepositoryDetail, { issue, repository: 'r', hasGitHub: true, embedded: true, initialTab: 'agent', agentPanel: React.createElement('button', null, '审核产物'), close() {} }));
+  const html = renderToStaticMarkup(React.createElement(RepositoryDetail, { issue, repository: 'r', hasGitHub: true, embedded: true, initialTab: 'assistant', agentPanel: React.createElement('button', null, '审核产物'), close() {} }));
   assert.doesNotMatch(html, /<dialog/);
   assert.match(html, /<section class="mw-reader-embedded"/);
   assert.match(html, /审核产物/);
