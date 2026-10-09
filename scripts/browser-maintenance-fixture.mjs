@@ -1,6 +1,6 @@
 // Real client + real local API/store. GitHub responses and Agent output are fixtures.
 // No user workspace, paid model request, or external GitHub mutation is used.
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import { verifyTheme } from './browser-theme-check.mjs';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
@@ -232,7 +232,7 @@ try {
       await page.screenshot({ path: join(dir, `maintenance-${width}.png`), fullPage: true });
       await page.getByRole('button',{name:'全局设置',exact:true}).click();
       await page.getByRole('button',{name:'工作区',exact:true}).click();
-      await page.getByRole('heading',{name:'任务工作区',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'任务隔离目录',exact:true}).waitFor();
       await page.getByRole('button',{name:'检查与预览',exact:true}).click();
       await page.getByLabel('工作区处置预览',{exact:true}).waitFor();
       await page.getByRole('button',{name:'确认清理此工作区',exact:true}).click();
@@ -240,6 +240,16 @@ try {
       assert.equal(w.workspaces.list().find(item=>item.id===cleanupId).status,'removed');assert.equal(await git(cleanupPath,['rev-parse',store.get('jobs',cleanupId).branch]),cleanupSha);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       await page.screenshot({path:join(dir,`workspace-cleanup-${width}.png`),fullPage:true});
+      await page.getByRole('button',{name:'仓库设置',exact:true}).click();
+      await page.getByRole('heading',{name:'仓库设置',exact:true}).waitFor();
+      const selectedBefore=await page.getByRole('combobox',{name:'选择仓库'}).inputValue();
+      const globalBefore=store.settings().syncLimit;
+      await page.getByLabel('同步记录上限（0 表示无上限）',{exact:true}).fill('77');
+      await expect.poll(()=>store.repos().find(r=>r.id===selectedBefore)?.policy?.syncLimit).toBe(77);
+      assert.equal(store.settings().syncLimit,globalBefore,'repository policy does not change global defaults');
+      assert.equal(await page.getByRole('button',{name:'保存仓库策略',exact:true}).count(),0);
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+      await page.screenshot({path:join(dir,`repository-settings-${width}.png`),fullPage:true});
       console.log(`Maintenance browser fixture PASS ${width}px; evidence ${dir}`);
     } catch (error) { await page.screenshot({ path: join(dir, `maintenance-failure-${width}.png`), fullPage: true }); console.error(`Browser failure evidence: ${dir}`); throw error; } finally { await page.close(); await new Promise(resolve => server.close(resolve)); await w.close(); }
   }
