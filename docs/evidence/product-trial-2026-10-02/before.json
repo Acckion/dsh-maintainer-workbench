@@ -1,0 +1,1704 @@
+{
+  "checkedAt": "2026-10-02T03:15:50.035Z",
+  "mode": "Installed package and real Harness tools; scripted local model and GitHub metadata fixture",
+  "repo": {
+    "path": "maintainer-trial-cycling",
+    "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+    "remoteExists": false
+  },
+  "elapsedMs": 6951,
+  "steps": [
+    {
+      "action": "Connect synthetic repository through product sync API",
+      "api": "/sync",
+      "durationMs": 17
+    },
+    {
+      "action": "Bind owned local clone (trial setup only)",
+      "api": "/bind",
+      "durationMs": 21
+    },
+    {
+      "action": "Batch classify three reports",
+      "api": "/classify",
+      "durationMs": 8
+    },
+    {
+      "action": "Dispatch investigate",
+      "api": "/jobs",
+      "durationMs": 10
+    },
+    {
+      "action": "Dispatch fix",
+      "api": "/jobs",
+      "durationMs": 10
+    },
+    {
+      "action": "Dispatch validate",
+      "api": "/jobs",
+      "durationMs": 9
+    },
+    {
+      "action": "Dispatch fix",
+      "api": "/jobs",
+      "durationMs": 9
+    },
+    {
+      "action": "Dispatch validate",
+      "api": "/jobs",
+      "durationMs": 8
+    },
+    {
+      "action": "Dispatch review",
+      "api": "/jobs",
+      "durationMs": 8
+    },
+    {
+      "action": "Accept final independent review locally",
+      "api": "/review",
+      "durationMs": 14
+    }
+  ],
+  "jobOrder": [
+    {
+      "kind": "triage",
+      "status": "completed",
+      "id": "7d70ec93-121a-44fa-9422-38394d638af0"
+    },
+    {
+      "kind": "triage",
+      "status": "completed",
+      "id": "b7559b33-9738-4222-aacd-d33dbe936256"
+    },
+    {
+      "kind": "triage",
+      "status": "completed",
+      "id": "608bc01f-f0fc-405e-9ab4-64cf4e96c322"
+    },
+    {
+      "kind": "investigate",
+      "status": "completed",
+      "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285"
+    },
+    {
+      "kind": "fix",
+      "status": "awaiting_review",
+      "id": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06"
+    },
+    {
+      "kind": "validate",
+      "status": "completed",
+      "id": "d19bd7b8-4263-4737-b699-87e7ef96bc9c"
+    },
+    {
+      "kind": "fix",
+      "status": "awaiting_review",
+      "id": "b5ddf765-b244-4f49-8e03-0b16941c1a98"
+    },
+    {
+      "kind": "validate",
+      "status": "completed",
+      "id": "82b69988-36bf-4d56-9b4f-5dfea6d275b2"
+    },
+    {
+      "kind": "review",
+      "status": "awaiting_review",
+      "id": "56a193cb-a856-43ed-a856-582efd86cc80"
+    }
+  ],
+  "observations": {
+    "failedValidation": {
+      "status": "completed",
+      "testStatus": "failed",
+      "workflow": {
+        "stage": "validate",
+        "reason": "合成骑行示例的受控维护试用",
+        "updatedAt": "2026-10-02T03:15:48.154Z"
+      }
+    },
+    "finalReview": {
+      "status": "approved",
+      "stage": "review",
+      "patchPresent": true,
+      "codePublicationSupportedForThisJob": false
+    },
+    "originalImplementationJobId": "b5ddf765-b244-4f49-8e03-0b16941c1a98",
+    "sourceCheckoutUnchanged": true
+  },
+  "jobs": [
+    {
+      "handoff": [
+        {
+          "stale": false,
+          "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+          "kind": "triage",
+          "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "ride summary",
+            "impact": "non-finite output",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "按阶段核验"
+          }
+        },
+        {
+          "stale": false,
+          "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+          "kind": "investigate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "investigate",
+            "facts": [
+              "Zero duration divides zero by zero"
+            ],
+            "hypotheses": [],
+            "reproduction": "node --test tests/zero-duration.test.mjs",
+            "rootCause": "Unguarded division in summarizeRide",
+            "impact": "Non-finite average speed",
+            "proposedChanges": [
+              "Handle empty/zero-duration segments"
+            ],
+            "acceptanceCriteria": [
+              "Finite zero speed",
+              "Full suite passes"
+            ],
+            "blockers": []
+          }
+        },
+        {
+          "stale": false,
+          "id": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+          "kind": "fix",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "fix",
+            "changes": [
+              "Guard zero-duration average"
+            ],
+            "acceptanceCriteria": [
+              "Finite output",
+              "All regressions pass"
+            ],
+            "limitations": [
+              "Only the reported symptom was tested; complete validation is required"
+            ],
+            "tests": [
+              {
+                "command": "npm run test:zero",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test:zero\n> node --test tests/zero-duration.test.mjs\n\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.615773\n"
+              }
+            ]
+          }
+        },
+        {
+          "stale": false,
+          "id": "d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+          "kind": "validate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "validate",
+            "environment": "Node24 owned fixture",
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "failed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\n✖ negative or non-finite segment values are rejected (0.845128ms)\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.67357\n\n✖ failing tests:\n\ntest at tests/summary.test.mjs:8:1\n✖ negative or non-finite segment values are rejected (0.845128ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: /non-negative finite/,\n    operator: 'throws',\n    diff: 'simple'\n  }\n[exit code: 1]"
+              }
+            ],
+            "blockers": [
+              "Invalid input regression still fails"
+            ]
+          }
+        },
+        {
+          "stale": false,
+          "id": "b5ddf765-b244-4f49-8e03-0b16941c1a98",
+          "kind": "fix",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "fix",
+            "changes": [
+              "Reject invalid segment values and preserve zero-duration handling"
+            ],
+            "acceptanceCriteria": [
+              "Finite output",
+              "All regressions pass"
+            ],
+            "limitations": [
+              "Scripted provider; not model-quality evidence"
+            ],
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.747311ms)\n✔ negative or non-finite segment values are rejected (0.403966ms)\n✔ empty or zero-duration input yields finite zero speed (0.664337ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 54.677461\n"
+              }
+            ]
+          }
+        },
+        {
+          "stale": false,
+          "id": "82b69988-36bf-4d56-9b4f-5dfea6d275b2",
+          "kind": "validate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "validate",
+            "environment": "Node24 owned fixture",
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.702263ms)\n✔ negative or non-finite segment values are rejected (0.409134ms)\n✔ empty or zero-duration input yields finite zero speed (0.71333ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.105479\n"
+              }
+            ],
+            "blockers": []
+          }
+        }
+      ],
+      "sourceJobId": "82b69988-36bf-4d56-9b4f-5dfea6d275b2",
+      "id": "56a193cb-a856-43ed-a856-582efd86cc80",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "review",
+      "status": "approved",
+      "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1",
+        "analysis": {
+          "summary": "合成骑行示例的受控维护试用",
+          "category": "bug",
+          "priority": "P2",
+          "confidence": 0,
+          "labels": [],
+          "missingInfo": [],
+          "duplicateOf": null,
+          "duplicateReason": "",
+          "evidence": [
+            {
+              "source": "覆盖范围",
+              "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+            }
+          ],
+          "nextSteps": [],
+          "responseDraft": "本地演示草稿，未经发布。",
+          "tests": []
+        },
+        "analysisRevision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+        "workflow": {
+          "stage": "validate",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:49.702Z"
+        }
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:49.744Z",
+      "updatedAt": "2026-10-02T03:15:50.027Z",
+      "startedAt": "2026-10-02T03:15:49.745Z",
+      "worktree": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/56a193cb-a856-43ed-a856-582efd86cc80",
+      "branch": "maintainer/review-1-56a193cb",
+      "sessionId": "maintainer-56a193cb-a856-43ed-a856-582efd86cc80",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"review\",\"findings\":[],\"verdict\":\"no_findings\",\"blockers\":[]}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "review",
+        "findings": [],
+        "verdict": "no_findings",
+        "blockers": []
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "maintenance",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          },
+          {
+            "source": "Harness tool/result · seq 19",
+            "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"trial-call-14\"},\"toolCallId\":\"trial-call-14\",\"content\":[{\"type\":\"text\",\"text\":\"<path><PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/56a193cb-a856-43ed-a856-582efd86cc80/src/summary.mjs</path>\\n<type>file</type>\\n<content>\\n1: export function summarizeRide(segments) {\\n2:   for (const segment of segments) if (![segment.distanceMeters, segment.movingSeconds].every(value => Number.isFinite(value) && value >= 0)) throw new RangeError(\\\"segment values must be non-negative finite numbers\\\");\\n3:   const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\\n4:   const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\\n5:   return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\\n6: }\\n\\n(End of file - total 6 lines)\\n</content>\"}],\"isError\":false,\"id\":\"039165b9-f700-44ae-9d3b-caafb5a067e4\"},\"meta\":{\"path\":\"<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/56a193cb-a856-43ed-a856-582efd86cc80/src/summary.mjs\",\"offset\":1,\"lines\":[{\"number\":1,\"text\":\"export function summarizeRide(segments) {\"},{\"number\":2,\"text\":\"  for (const segment of segments) if (![segment.distanceMeters, segment.movingSeconds].every(value => Number.isFinite(value) && value >= 0)) throw new RangeError(\\\"segment values must be non-negative finite numbers\\\");\"},{\"number\":3,\"text\":\"  const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\"},{\"number\":4,\"text\":\"  const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\"},{\"number\":5,\"text\":\"  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\"},{\"number\":6,\"text\":\"}\"}],\"totalLines\":6,\"lang\":\"js\"}}"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": []
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "diff --git a/src/summary.mjs b/src/summary.mjs\nindex 03aabf2..775b189 100644\n--- a/src/summary.mjs\n+++ b/src/summary.mjs\n@@ -1,5 +1,6 @@\n export function summarizeRide(segments) {\n+  for (const segment of segments) if (![segment.distanceMeters, segment.movingSeconds].every(value => Number.isFinite(value) && value >= 0)) throw new RangeError(\"segment values must be non-negative finite numbers\");\n   const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\n   const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\n-  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: distanceMeters / movingSeconds * 3.6 };\n+  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\n }",
+      "finishedAt": "2026-10-02T03:15:49.904Z",
+      "reviewNote": "Controlled local trial; no external publishing",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [
+        {
+          "stale": false,
+          "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+          "kind": "triage",
+          "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "ride summary",
+            "impact": "non-finite output",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "按阶段核验"
+          }
+        },
+        {
+          "stale": false,
+          "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+          "kind": "investigate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "investigate",
+            "facts": [
+              "Zero duration divides zero by zero"
+            ],
+            "hypotheses": [],
+            "reproduction": "node --test tests/zero-duration.test.mjs",
+            "rootCause": "Unguarded division in summarizeRide",
+            "impact": "Non-finite average speed",
+            "proposedChanges": [
+              "Handle empty/zero-duration segments"
+            ],
+            "acceptanceCriteria": [
+              "Finite zero speed",
+              "Full suite passes"
+            ],
+            "blockers": []
+          }
+        },
+        {
+          "stale": false,
+          "id": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+          "kind": "fix",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "fix",
+            "changes": [
+              "Guard zero-duration average"
+            ],
+            "acceptanceCriteria": [
+              "Finite output",
+              "All regressions pass"
+            ],
+            "limitations": [
+              "Only the reported symptom was tested; complete validation is required"
+            ],
+            "tests": [
+              {
+                "command": "npm run test:zero",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test:zero\n> node --test tests/zero-duration.test.mjs\n\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.615773\n"
+              }
+            ]
+          }
+        },
+        {
+          "stale": false,
+          "id": "d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+          "kind": "validate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "validate",
+            "environment": "Node24 owned fixture",
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "failed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\n✖ negative or non-finite segment values are rejected (0.845128ms)\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.67357\n\n✖ failing tests:\n\ntest at tests/summary.test.mjs:8:1\n✖ negative or non-finite segment values are rejected (0.845128ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: /non-negative finite/,\n    operator: 'throws',\n    diff: 'simple'\n  }\n[exit code: 1]"
+              }
+            ],
+            "blockers": [
+              "Invalid input regression still fails"
+            ]
+          }
+        },
+        {
+          "stale": false,
+          "id": "b5ddf765-b244-4f49-8e03-0b16941c1a98",
+          "kind": "fix",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "fix",
+            "changes": [
+              "Reject invalid segment values and preserve zero-duration handling"
+            ],
+            "acceptanceCriteria": [
+              "Finite output",
+              "All regressions pass"
+            ],
+            "limitations": [
+              "Scripted provider; not model-quality evidence"
+            ],
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.747311ms)\n✔ negative or non-finite segment values are rejected (0.403966ms)\n✔ empty or zero-duration input yields finite zero speed (0.664337ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 54.677461\n"
+              }
+            ]
+          }
+        }
+      ],
+      "sourceJobId": "b5ddf765-b244-4f49-8e03-0b16941c1a98",
+      "id": "82b69988-36bf-4d56-9b4f-5dfea6d275b2",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "validate",
+      "status": "completed",
+      "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1",
+        "analysis": {
+          "summary": "合成骑行示例的受控维护试用",
+          "category": "bug",
+          "priority": "P2",
+          "confidence": 0,
+          "labels": [],
+          "missingInfo": [],
+          "duplicateOf": null,
+          "duplicateReason": "",
+          "evidence": [
+            {
+              "source": "覆盖范围",
+              "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+            }
+          ],
+          "nextSteps": [],
+          "responseDraft": "本地演示草稿，未经发布。",
+          "tests": []
+        },
+        "analysisRevision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+        "workflow": {
+          "stage": "review",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:48.963Z"
+        }
+      },
+      "attempt": 2,
+      "createdAt": "2026-10-02T03:15:49.213Z",
+      "updatedAt": "2026-10-02T03:15:49.702Z",
+      "startedAt": "2026-10-02T03:15:49.215Z",
+      "worktree": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/82b69988-36bf-4d56-9b4f-5dfea6d275b2",
+      "branch": "maintainer/validate-1-82b69988",
+      "sessionId": "maintainer-82b69988-36bf-4d56-9b4f-5dfea6d275b2",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"validate\",\"environment\":\"Node24 owned fixture\",\"tests\":[{\"command\":\"npm test\",\"status\":\"passed\",\"output\":\"text\\n\\n> maintainer-trial-cycling@0.0.0 test\\n> node --test tests/*.test.mjs\\n\\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.702263ms)\\n✔ negative or non-finite segment values are rejected (0.409134ms)\\n✔ empty or zero-duration input yields finite zero speed (0.71333ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 3\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 55.105479\\n\"}],\"blockers\":[]}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "validate",
+        "environment": "Node24 owned fixture",
+        "tests": [
+          {
+            "command": "npm test",
+            "status": "passed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.702263ms)\n✔ negative or non-finite segment values are rejected (0.409134ms)\n✔ empty or zero-duration input yields finite zero speed (0.71333ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.105479\n"
+          }
+        ],
+        "blockers": []
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "maintenance",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          },
+          {
+            "source": "Harness tool/result · seq 17",
+            "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"trial-call-12\"},\"toolCallId\":\"trial-call-12\",\"content\":[{\"type\":\"text\",\"text\":\"\\n> maintainer-trial-cycling@0.0.0 test\\n> node --test tests/*.test.mjs\\n\\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.702263ms)\\n✔ negative or non-finite segment values are rejected (0.409134ms)\\n✔ empty or zero-duration input yields finite zero speed (0.71333ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 3\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 55.105479\\n\"}],\"isError\":false,\"id\":\"817290cd-bce5-464a-8b03-0c31df1c25a1\"}}"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": [
+          {
+            "command": "npm test",
+            "status": "passed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.702263ms)\n✔ negative or non-finite segment values are rejected (0.409134ms)\n✔ empty or zero-duration input yields finite zero speed (0.71333ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.105479\n"
+          }
+        ]
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "diff --git a/src/summary.mjs b/src/summary.mjs\nindex 03aabf2..775b189 100644\n--- a/src/summary.mjs\n+++ b/src/summary.mjs\n@@ -1,5 +1,6 @@\n export function summarizeRide(segments) {\n+  for (const segment of segments) if (![segment.distanceMeters, segment.movingSeconds].every(value => Number.isFinite(value) && value >= 0)) throw new RangeError(\"segment values must be non-negative finite numbers\");\n   const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\n   const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\n-  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: distanceMeters / movingSeconds * 3.6 };\n+  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\n }",
+      "finishedAt": "2026-10-02T03:15:49.702Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [
+        {
+          "stale": false,
+          "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+          "kind": "triage",
+          "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "ride summary",
+            "impact": "non-finite output",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "按阶段核验"
+          }
+        },
+        {
+          "stale": false,
+          "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+          "kind": "investigate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "investigate",
+            "facts": [
+              "Zero duration divides zero by zero"
+            ],
+            "hypotheses": [],
+            "reproduction": "node --test tests/zero-duration.test.mjs",
+            "rootCause": "Unguarded division in summarizeRide",
+            "impact": "Non-finite average speed",
+            "proposedChanges": [
+              "Handle empty/zero-duration segments"
+            ],
+            "acceptanceCriteria": [
+              "Finite zero speed",
+              "Full suite passes"
+            ],
+            "blockers": []
+          }
+        },
+        {
+          "stale": false,
+          "id": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+          "kind": "fix",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "fix",
+            "changes": [
+              "Guard zero-duration average"
+            ],
+            "acceptanceCriteria": [
+              "Finite output",
+              "All regressions pass"
+            ],
+            "limitations": [
+              "Only the reported symptom was tested; complete validation is required"
+            ],
+            "tests": [
+              {
+                "command": "npm run test:zero",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test:zero\n> node --test tests/zero-duration.test.mjs\n\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.615773\n"
+              }
+            ]
+          }
+        },
+        {
+          "stale": false,
+          "id": "d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+          "kind": "validate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "validate",
+            "environment": "Node24 owned fixture",
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "failed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\n✖ negative or non-finite segment values are rejected (0.845128ms)\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.67357\n\n✖ failing tests:\n\ntest at tests/summary.test.mjs:8:1\n✖ negative or non-finite segment values are rejected (0.845128ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: /non-negative finite/,\n    operator: 'throws',\n    diff: 'simple'\n  }\n[exit code: 1]"
+              }
+            ],
+            "blockers": [
+              "Invalid input regression still fails"
+            ]
+          }
+        }
+      ],
+      "sourceJobId": "d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+      "instructions": "Address the invalid-input failure from full regression; reject non-finite and negative values, then run npm test",
+      "id": "b5ddf765-b244-4f49-8e03-0b16941c1a98",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "fix",
+      "status": "awaiting_review",
+      "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1",
+        "analysis": {
+          "summary": "合成骑行示例的受控维护试用",
+          "category": "bug",
+          "priority": "P2",
+          "confidence": 0,
+          "labels": [],
+          "missingInfo": [],
+          "duplicateOf": null,
+          "duplicateReason": "",
+          "evidence": [
+            {
+              "source": "覆盖范围",
+              "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+            }
+          ],
+          "nextSteps": [],
+          "responseDraft": "本地演示草稿，未经发布。",
+          "tests": []
+        },
+        "analysisRevision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+        "workflow": {
+          "stage": "validate",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:48.154Z"
+        }
+      },
+      "attempt": 2,
+      "createdAt": "2026-10-02T03:15:48.415Z",
+      "updatedAt": "2026-10-02T03:15:48.963Z",
+      "startedAt": "2026-10-02T03:15:48.416Z",
+      "worktree": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/b5ddf765-b244-4f49-8e03-0b16941c1a98",
+      "branch": "maintainer/fix-1-b5ddf765",
+      "sessionId": "maintainer-b5ddf765-b244-4f49-8e03-0b16941c1a98",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"fix\",\"changes\":[\"Reject invalid segment values and preserve zero-duration handling\"],\"acceptanceCriteria\":[\"Finite output\",\"All regressions pass\"],\"limitations\":[\"Scripted provider; not model-quality evidence\"],\"tests\":[{\"command\":\"npm test\",\"status\":\"passed\",\"output\":\"text\\n\\n> maintainer-trial-cycling@0.0.0 test\\n> node --test tests/*.test.mjs\\n\\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.747311ms)\\n✔ negative or non-finite segment values are rejected (0.403966ms)\\n✔ empty or zero-duration input yields finite zero speed (0.664337ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 3\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 54.677461\\n\"}]}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "fix",
+        "changes": [
+          "Reject invalid segment values and preserve zero-duration handling"
+        ],
+        "acceptanceCriteria": [
+          "Finite output",
+          "All regressions pass"
+        ],
+        "limitations": [
+          "Scripted provider; not model-quality evidence"
+        ],
+        "tests": [
+          {
+            "command": "npm test",
+            "status": "passed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.747311ms)\n✔ negative or non-finite segment values are rejected (0.403966ms)\n✔ empty or zero-duration input yields finite zero speed (0.664337ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 54.677461\n"
+          }
+        ]
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "maintenance",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          },
+          {
+            "source": "Harness tool/result · seq 17",
+            "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"trial-call-10\"},\"toolCallId\":\"trial-call-10\",\"content\":[{\"type\":\"text\",\"text\":\"\\n> maintainer-trial-cycling@0.0.0 test\\n> node --test tests/*.test.mjs\\n\\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.747311ms)\\n✔ negative or non-finite segment values are rejected (0.403966ms)\\n✔ empty or zero-duration input yields finite zero speed (0.664337ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 3\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 54.677461\\n\"}],\"isError\":false,\"id\":\"12acaa7b-bb3d-41db-97f6-dea71524240f\"}}"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": [
+          {
+            "command": "npm test",
+            "status": "passed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.747311ms)\n✔ negative or non-finite segment values are rejected (0.403966ms)\n✔ empty or zero-duration input yields finite zero speed (0.664337ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 54.677461\n"
+          }
+        ]
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "diff --git a/src/summary.mjs b/src/summary.mjs\nindex 03aabf2..775b189 100644\n--- a/src/summary.mjs\n+++ b/src/summary.mjs\n@@ -1,5 +1,6 @@\n export function summarizeRide(segments) {\n+  for (const segment of segments) if (![segment.distanceMeters, segment.movingSeconds].every(value => Number.isFinite(value) && value >= 0)) throw new RangeError(\"segment values must be non-negative finite numbers\");\n   const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\n   const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\n-  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: distanceMeters / movingSeconds * 3.6 };\n+  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\n }",
+      "finishedAt": "2026-10-02T03:15:48.963Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [
+        {
+          "stale": false,
+          "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+          "kind": "triage",
+          "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "ride summary",
+            "impact": "non-finite output",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "按阶段核验"
+          }
+        },
+        {
+          "stale": false,
+          "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+          "kind": "investigate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "investigate",
+            "facts": [
+              "Zero duration divides zero by zero"
+            ],
+            "hypotheses": [],
+            "reproduction": "node --test tests/zero-duration.test.mjs",
+            "rootCause": "Unguarded division in summarizeRide",
+            "impact": "Non-finite average speed",
+            "proposedChanges": [
+              "Handle empty/zero-duration segments"
+            ],
+            "acceptanceCriteria": [
+              "Finite zero speed",
+              "Full suite passes"
+            ],
+            "blockers": []
+          }
+        },
+        {
+          "stale": false,
+          "id": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+          "kind": "fix",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "fix",
+            "changes": [
+              "Guard zero-duration average"
+            ],
+            "acceptanceCriteria": [
+              "Finite output",
+              "All regressions pass"
+            ],
+            "limitations": [
+              "Only the reported symptom was tested; complete validation is required"
+            ],
+            "tests": [
+              {
+                "command": "npm run test:zero",
+                "status": "passed",
+                "output": "text\n\n> maintainer-trial-cycling@0.0.0 test:zero\n> node --test tests/zero-duration.test.mjs\n\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.615773\n"
+              }
+            ]
+          }
+        }
+      ],
+      "sourceJobId": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+      "id": "d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "validate",
+      "status": "completed",
+      "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1",
+        "analysis": {
+          "summary": "合成骑行示例的受控维护试用",
+          "category": "bug",
+          "priority": "P2",
+          "confidence": 0,
+          "labels": [],
+          "missingInfo": [],
+          "duplicateOf": null,
+          "duplicateReason": "",
+          "evidence": [
+            {
+              "source": "覆盖范围",
+              "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+            }
+          ],
+          "nextSteps": [],
+          "responseDraft": "本地演示草稿，未经发布。",
+          "tests": []
+        },
+        "analysisRevision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+        "workflow": {
+          "stage": "review",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:47.394Z"
+        }
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:47.620Z",
+      "updatedAt": "2026-10-02T03:15:48.154Z",
+      "startedAt": "2026-10-02T03:15:47.621Z",
+      "worktree": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+      "branch": "maintainer/validate-1-d19bd7b8",
+      "sessionId": "maintainer-d19bd7b8-4263-4737-b699-87e7ef96bc9c",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"validate\",\"environment\":\"Node24 owned fixture\",\"tests\":[{\"command\":\"npm test\",\"status\":\"failed\",\"output\":\"text\\n\\n> maintainer-trial-cycling@0.0.0 test\\n> node --test tests/*.test.mjs\\n\\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\\n✖ negative or non-finite segment values are rejected (0.845128ms)\\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 2\\nℹ fail 1\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 55.67357\\n\\n✖ failing tests:\\n\\ntest at tests/summary.test.mjs:8:1\\n✖ negative or non-finite segment values are rejected (0.845128ms)\\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\\n      at Test.runInAsyncScope (node:async_hooks:227:14)\\n      at Test.run (node:internal/test_runner/test:1382:25)\\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\\n      at Test.postRun (node:internal/test_runner/test:1522:19)\\n      at Test.run (node:internal/test_runner/test:1447:12)\\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\\n    generatedMessage: false,\\n    code: 'ERR_ASSERTION',\\n    actual: undefined,\\n    expected: /non-negative finite/,\\n    operator: 'throws',\\n    diff: 'simple'\\n  }\\n[exit code: 1]\"}],\"blockers\":[\"Invalid input regression still fails\"]}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "validate",
+        "environment": "Node24 owned fixture",
+        "tests": [
+          {
+            "command": "npm test",
+            "status": "failed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\n✖ negative or non-finite segment values are rejected (0.845128ms)\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.67357\n\n✖ failing tests:\n\ntest at tests/summary.test.mjs:8:1\n✖ negative or non-finite segment values are rejected (0.845128ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: /non-negative finite/,\n    operator: 'throws',\n    diff: 'simple'\n  }\n[exit code: 1]"
+          }
+        ],
+        "blockers": [
+          "Invalid input regression still fails"
+        ]
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "maintenance",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [
+          "Invalid input regression still fails"
+        ],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          },
+          {
+            "source": "Harness tool/result · seq 17",
+            "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"trial-call-8\"},\"toolCallId\":\"trial-call-8\",\"content\":[{\"type\":\"text\",\"text\":\"\\n> maintainer-trial-cycling@0.0.0 test\\n> node --test tests/*.test.mjs\\n\\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\\n✖ negative or non-finite segment values are rejected (0.845128ms)\\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\\nℹ tests 3\\nℹ suites 0\\nℹ pass 2\\nℹ fail 1\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 55.67357\\n\\n✖ failing tests:\\n\\ntest at tests/summary.test.mjs:8:1\\n✖ negative or non-finite segment values are rejected (0.845128ms)\\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\\n      at Test.runInAsyncScope (node:async_hooks:227:14)\\n      at Test.run (node:internal/test_runner/test:1382:25)\\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\\n      at Test.postRun (node:internal/test_runner/test:1522:19)\\n      at Test.run (node:internal/test_runner/test:1447:12)\\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\\n    generatedMessage: false,\\n    code: 'ERR_ASSERTION',\\n    actual: undefined,\\n    expected: /non-negative finite/,\\n    operator: 'throws',\\n    diff: 'simple'\\n  }\\n[exit code: 1]\"}],\"isError\":false,\"id\":\"b40c40ee-51f3-4e1e-ab36-858d1acd7ec1\"}}"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": [
+          {
+            "command": "npm test",
+            "status": "failed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test\n> node --test tests/*.test.mjs\n\n✔ synthetic segments use meters, seconds, and distance-weighted average speed (0.848773ms)\n✖ negative or non-finite segment values are rejected (0.845128ms)\n✔ empty or zero-duration input yields finite zero speed (0.65342ms)\nℹ tests 3\nℹ suites 0\nℹ pass 2\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 55.67357\n\n✖ failing tests:\n\ntest at tests/summary.test.mjs:8:1\n✖ negative or non-finite segment values are rejected (0.845128ms)\n  AssertionError [ERR_ASSERTION]: Missing expected exception.\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/d19bd7b8-4263-4737-b699-87e7ef96bc9c/tests/summary.test.mjs:9:158)\n      at Test.runInAsyncScope (node:async_hooks:227:14)\n      at Test.run (node:internal/test_runner/test:1382:25)\n      at Test.processPendingSubtests (node:internal/test_runner/test:960:18)\n      at Test.postRun (node:internal/test_runner/test:1522:19)\n      at Test.run (node:internal/test_runner/test:1447:12)\n      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {\n    generatedMessage: false,\n    code: 'ERR_ASSERTION',\n    actual: undefined,\n    expected: /non-negative finite/,\n    operator: 'throws',\n    diff: 'simple'\n  }\n[exit code: 1]"
+          }
+        ]
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "diff --git a/src/summary.mjs b/src/summary.mjs\nindex 03aabf2..3f9c2d1 100644\n--- a/src/summary.mjs\n+++ b/src/summary.mjs\n@@ -1,5 +1,5 @@\n export function summarizeRide(segments) {\n   const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\n   const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\n-  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: distanceMeters / movingSeconds * 3.6 };\n+  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\n }",
+      "finishedAt": "2026-10-02T03:15:48.154Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [
+        {
+          "stale": false,
+          "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+          "kind": "triage",
+          "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "ride summary",
+            "impact": "non-finite output",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "按阶段核验"
+          }
+        },
+        {
+          "stale": false,
+          "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+          "kind": "investigate",
+          "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "investigate",
+            "facts": [
+              "Zero duration divides zero by zero"
+            ],
+            "hypotheses": [],
+            "reproduction": "node --test tests/zero-duration.test.mjs",
+            "rootCause": "Unguarded division in summarizeRide",
+            "impact": "Non-finite average speed",
+            "proposedChanges": [
+              "Handle empty/zero-duration segments"
+            ],
+            "acceptanceCriteria": [
+              "Finite zero speed",
+              "Full suite passes"
+            ],
+            "blockers": []
+          }
+        }
+      ],
+      "sourceJobId": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+      "id": "f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "fix",
+      "status": "awaiting_review",
+      "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1",
+        "analysis": {
+          "summary": "合成骑行示例的受控维护试用",
+          "category": "bug",
+          "priority": "P2",
+          "confidence": 0,
+          "labels": [],
+          "missingInfo": [],
+          "duplicateOf": null,
+          "duplicateReason": "",
+          "evidence": [
+            {
+              "source": "覆盖范围",
+              "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+            }
+          ],
+          "nextSteps": [],
+          "responseDraft": "本地演示草稿，未经发布。",
+          "tests": []
+        },
+        "analysisRevision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+        "workflow": {
+          "stage": "investigate",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:46.617Z"
+        }
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:46.811Z",
+      "updatedAt": "2026-10-02T03:15:47.394Z",
+      "startedAt": "2026-10-02T03:15:46.812Z",
+      "worktree": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+      "branch": "maintainer/fix-1-f5de2a9e",
+      "sessionId": "maintainer-f5de2a9e-1b56-4b7b-9401-0031d9ebaf06",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"fix\",\"changes\":[\"Guard zero-duration average\"],\"acceptanceCriteria\":[\"Finite output\",\"All regressions pass\"],\"limitations\":[\"Only the reported symptom was tested; complete validation is required\"],\"tests\":[{\"command\":\"npm run test:zero\",\"status\":\"passed\",\"output\":\"text\\n\\n> maintainer-trial-cycling@0.0.0 test:zero\\n> node --test tests/zero-duration.test.mjs\\n\\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\\nℹ tests 1\\nℹ suites 0\\nℹ pass 1\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 65.615773\\n\"}]}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "fix",
+        "changes": [
+          "Guard zero-duration average"
+        ],
+        "acceptanceCriteria": [
+          "Finite output",
+          "All regressions pass"
+        ],
+        "limitations": [
+          "Only the reported symptom was tested; complete validation is required"
+        ],
+        "tests": [
+          {
+            "command": "npm run test:zero",
+            "status": "passed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test:zero\n> node --test tests/zero-duration.test.mjs\n\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.615773\n"
+          }
+        ]
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "maintenance",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          },
+          {
+            "source": "Harness tool/result · seq 17",
+            "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"trial-call-6\"},\"toolCallId\":\"trial-call-6\",\"content\":[{\"type\":\"text\",\"text\":\"\\n> maintainer-trial-cycling@0.0.0 test:zero\\n> node --test tests/zero-duration.test.mjs\\n\\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\\nℹ tests 1\\nℹ suites 0\\nℹ pass 1\\nℹ fail 0\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 65.615773\\n\"}],\"isError\":false,\"id\":\"807b0b8a-1352-442a-8ce3-2b082c895494\"}}"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": [
+          {
+            "command": "npm run test:zero",
+            "status": "passed",
+            "output": "text\n\n> maintainer-trial-cycling@0.0.0 test:zero\n> node --test tests/zero-duration.test.mjs\n\n✔ empty or zero-duration input yields finite zero speed (0.612118ms)\nℹ tests 1\nℹ suites 0\nℹ pass 1\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 65.615773\n"
+          }
+        ]
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "diff --git a/src/summary.mjs b/src/summary.mjs\nindex 03aabf2..3f9c2d1 100644\n--- a/src/summary.mjs\n+++ b/src/summary.mjs\n@@ -1,5 +1,5 @@\n export function summarizeRide(segments) {\n   const distanceMeters = segments.reduce((sum, segment) => sum + segment.distanceMeters, 0);\n   const movingSeconds = segments.reduce((sum, segment) => sum + segment.movingSeconds, 0);\n-  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: distanceMeters / movingSeconds * 3.6 };\n+  return { distanceKm: distanceMeters / 1000, movingMinutes: movingSeconds / 60, averageSpeedKmh: movingSeconds > 0 ? distanceMeters / movingSeconds * 3.6 : 0 };\n }",
+      "finishedAt": "2026-10-02T03:15:47.394Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [
+        {
+          "stale": false,
+          "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+          "kind": "triage",
+          "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "合成骑行示例的受控维护试用",
+            "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "本地演示草稿，未经发布。",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "ride summary",
+            "impact": "non-finite output",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "按阶段核验"
+          }
+        }
+      ],
+      "sourceJobId": "7d70ec93-121a-44fa-9422-38394d638af0",
+      "id": "4afaee54-0acd-4e75-9f9d-1773afcb7285",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "investigate",
+      "status": "completed",
+      "revision": "d5490cb8b5c81d509312cb93713d96842f6e19b871e9f42542ad8cd1043debc3",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1",
+        "analysis": {
+          "summary": "合成骑行示例的受控维护试用",
+          "category": "bug",
+          "priority": "P2",
+          "confidence": 0,
+          "labels": [],
+          "missingInfo": [],
+          "duplicateOf": null,
+          "duplicateReason": "",
+          "evidence": [
+            {
+              "source": "覆盖范围",
+              "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+            }
+          ],
+          "nextSteps": [],
+          "responseDraft": "本地演示草稿，未经发布。",
+          "tests": []
+        },
+        "analysisRevision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+        "workflow": {
+          "stage": "investigate",
+          "reason": "合成骑行示例的受控维护试用",
+          "updatedAt": "2026-10-02T03:15:45.926Z"
+        }
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:46.274Z",
+      "updatedAt": "2026-10-02T03:15:46.617Z",
+      "startedAt": "2026-10-02T03:15:46.275Z",
+      "worktree": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/4afaee54-0acd-4e75-9f9d-1773afcb7285",
+      "branch": "maintainer/investigate-1-4afaee54",
+      "sessionId": "maintainer-4afaee54-0acd-4e75-9f9d-1773afcb7285",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"investigate\",\"facts\":[\"Zero duration divides zero by zero\"],\"hypotheses\":[],\"reproduction\":\"node --test tests/zero-duration.test.mjs\",\"rootCause\":\"Unguarded division in summarizeRide\",\"impact\":\"Non-finite average speed\",\"proposedChanges\":[\"Handle empty/zero-duration segments\"],\"acceptanceCriteria\":[\"Finite zero speed\",\"Full suite passes\"],\"blockers\":[]}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "investigate",
+        "facts": [
+          "Zero duration divides zero by zero"
+        ],
+        "hypotheses": [],
+        "reproduction": "node --test tests/zero-duration.test.mjs",
+        "rootCause": "Unguarded division in summarizeRide",
+        "impact": "Non-finite average speed",
+        "proposedChanges": [
+          "Handle empty/zero-duration segments"
+        ],
+        "acceptanceCriteria": [
+          "Finite zero speed",
+          "Full suite passes"
+        ],
+        "blockers": []
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "maintenance",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          },
+          {
+            "source": "Harness tool/result · seq 17",
+            "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"trial-call-4\"},\"toolCallId\":\"trial-call-4\",\"content\":[{\"type\":\"text\",\"text\":\"✖ empty or zero-duration input yields finite zero speed (1.440501ms)\\nℹ tests 1\\nℹ suites 0\\nℹ pass 0\\nℹ fail 1\\nℹ cancelled 0\\nℹ skipped 0\\nℹ todo 0\\nℹ duration_ms 54.732645\\n\\n✖ failing tests:\\n\\ntest at tests/zero-duration.test.mjs:4:1\\n✖ empty or zero-duration input yields finite zero speed (1.440501ms)\\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\\n  \\n  NaN !== 0\\n  \\n      at TestContext.<anonymous> (file://<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/worktrees/4afaee54-0acd-4e75-9f9d-1773afcb7285/tests/zero-duration.test.mjs:5:10)\\n      at Test.runInAsyncScope (node:async_hooks:227:14)\\n      at Test.run (node:internal/test_runner/test:1382:25)\\n      at Test.start (node:internal/test_runner/test:1242:17)\\n      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {\\n    generatedMessage: true,\\n    code: 'ERR_ASSERTION',\\n    actual: NaN,\\n    expected: 0,\\n    operator: 'strictEqual',\\n    diff: 'simple'\\n  }\\n[exit code: 1]\"}],\"isError\":false,\"id\":\"8e72ff9a-43e7-484f-ad4a-6e01720057b6\"}}"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": []
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "",
+      "finishedAt": "2026-10-02T03:15:46.617Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [],
+      "id": "608bc01f-f0fc-405e-9ab4-64cf4e96c322",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#3",
+      "kind": "triage",
+      "status": "completed",
+      "revision": "3cc33d768950bd760d7119a564f66a166927b773ad33cc3dbdf7c27209ef18db",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#3",
+        "repoId": "fixture/cycling-trial",
+        "number": 3,
+        "type": "issue",
+        "title": "暂停后的数字看起来不对",
+        "body": "No input sample or reproduction steps have been provided.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/3"
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:45.724Z",
+      "updatedAt": "2026-10-02T03:15:46.023Z",
+      "startedAt": "2026-10-02T03:15:45.926Z",
+      "analysisPath": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/analysis/608bc01f-f0fc-405e-9ab4-64cf4e96c322",
+      "sessionId": "maintainer-608bc01f-f0fc-405e-9ab4-64cf4e96c322",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"triage\",\"category\":\"question\",\"priority\":\"P2\",\"labels\":[],\"module\":\"ride summary\",\"impact\":\"needs clarification\",\"missingInfo\":[\"复现步骤和输入样本\"],\"duplicateOf\":null,\"duplicateReason\":\"\",\"route\":\"needs_info\",\"routeReason\":\"缺少复现资料\"}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "triage",
+        "category": "question",
+        "priority": "P2",
+        "labels": [],
+        "module": "ride summary",
+        "impact": "needs clarification",
+        "missingInfo": [
+          "复现步骤和输入样本"
+        ],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "route": "needs_info",
+        "routeReason": "缺少复现资料"
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "question",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [
+          "复现步骤和输入样本"
+        ],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": []
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "",
+      "finishedAt": "2026-10-02T03:15:46.023Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [],
+      "id": "b7559b33-9738-4222-aacd-d33dbe936256",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#2",
+      "kind": "triage",
+      "status": "completed",
+      "revision": "73e1271f260c54d5ff2b26c4211384526f403bdcbcea668d4eabbf5aaacfdb1b",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#2",
+        "repoId": "fixture/cycling-trial",
+        "number": 2,
+        "type": "issue",
+        "title": "请说明汇总字段的单位",
+        "body": "Document meters/seconds inputs and km/minutes/kmh outputs.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/2"
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:45.723Z",
+      "updatedAt": "2026-10-02T03:15:45.954Z",
+      "startedAt": "2026-10-02T03:15:45.723Z",
+      "analysisPath": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/analysis/b7559b33-9738-4222-aacd-d33dbe936256",
+      "sessionId": "maintainer-b7559b33-9738-4222-aacd-d33dbe936256",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"triage\",\"category\":\"docs\",\"priority\":\"P2\",\"labels\":[],\"module\":\"ride summary\",\"impact\":\"needs clarification\",\"missingInfo\":[],\"duplicateOf\":null,\"duplicateReason\":\"\",\"route\":\"implement\",\"routeReason\":\"按阶段核验\"}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "triage",
+        "category": "docs",
+        "priority": "P2",
+        "labels": [],
+        "module": "ride summary",
+        "impact": "needs clarification",
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "route": "implement",
+        "routeReason": "按阶段核验"
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "docs",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": []
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "",
+      "finishedAt": "2026-10-02T03:15:45.954Z",
+      "artifactState": "current"
+    },
+    {
+      "handoff": [],
+      "id": "7d70ec93-121a-44fa-9422-38394d638af0",
+      "repoId": "fixture/cycling-trial",
+      "issueId": "fixture/cycling-trial#1",
+      "kind": "triage",
+      "status": "completed",
+      "revision": "b4c888adcff6c1924c668e0005b93ddfffb25dce36dea580215b7255ff3dbae4",
+      "baseSha": "ac32738fb7e5e0af40d2b2ef459b0ec63e6f6be2",
+      "issueSnapshot": {
+        "id": "fixture/cycling-trial#1",
+        "repoId": "fixture/cycling-trial",
+        "number": 1,
+        "type": "issue",
+        "title": "零时长分段导致平均速度为 NaN",
+        "body": "For an empty ride or a zero-duration segment, averageSpeedKmh must be finite 0. Investigate, implement, then run the complete suite.",
+        "author": "synthetic-fixture",
+        "labels": [],
+        "state": "open",
+        "comments": 0,
+        "updatedAt": "2026-10-02T00:00:00Z",
+        "url": "https://github.com/fixture/cycling-trial/issues/1"
+      },
+      "attempt": 1,
+      "createdAt": "2026-10-02T03:15:45.721Z",
+      "updatedAt": "2026-10-02T03:15:45.926Z",
+      "startedAt": "2026-10-02T03:15:45.722Z",
+      "analysisPath": "<PLUGIN_ROOT>/.data/cycling-workflow-trial/data/analysis/7d70ec93-121a-44fa-9422-38394d638af0",
+      "sessionId": "maintainer-7d70ec93-121a-44fa-9422-38394d638af0",
+      "rawOutput": "{\"schemaVersion\":1,\"summary\":\"合成骑行示例的受控维护试用\",\"coverage\":\"Owned synthetic repository; scripted provider; actual Git and commands\",\"evidence\":[],\"nextSteps\":[],\"responseDraft\":\"本地演示草稿，未经发布。\",\"stage\":\"triage\",\"category\":\"bug\",\"priority\":\"P2\",\"labels\":[],\"module\":\"ride summary\",\"impact\":\"non-finite output\",\"missingInfo\":[],\"duplicateOf\":null,\"duplicateReason\":\"\",\"route\":\"investigate\",\"routeReason\":\"按阶段核验\"}",
+      "artifact": {
+        "schemaVersion": 1,
+        "summary": "合成骑行示例的受控维护试用",
+        "coverage": "Owned synthetic repository; scripted provider; actual Git and commands",
+        "evidence": [],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "stage": "triage",
+        "category": "bug",
+        "priority": "P2",
+        "labels": [],
+        "module": "ride summary",
+        "impact": "non-finite output",
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "route": "investigate",
+        "routeReason": "按阶段核验"
+      },
+      "result": {
+        "summary": "合成骑行示例的受控维护试用",
+        "category": "bug",
+        "priority": "P2",
+        "confidence": 0,
+        "labels": [],
+        "missingInfo": [],
+        "duplicateOf": null,
+        "duplicateReason": "",
+        "evidence": [
+          {
+            "source": "覆盖范围",
+            "detail": "Owned synthetic repository; scripted provider; actual Git and commands"
+          }
+        ],
+        "nextSteps": [],
+        "responseDraft": "本地演示草稿，未经发布。",
+        "tests": []
+      },
+      "engine": "Harness / deepseek-official/deepseek-flash",
+      "patch": "",
+      "finishedAt": "2026-10-02T03:15:45.925Z",
+      "artifactState": "current"
+    }
+  ],
+  "modelCalls": 15,
+  "modelStages": [
+    {
+      "stage": "triage",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "triage",
+      "issue": 2,
+      "toolResult": false
+    },
+    {
+      "stage": "triage",
+      "issue": 3,
+      "toolResult": false
+    },
+    {
+      "stage": "investigate",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "investigate",
+      "issue": 1,
+      "toolResult": true
+    },
+    {
+      "stage": "fix",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "fix",
+      "issue": 1,
+      "toolResult": true
+    },
+    {
+      "stage": "validate",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "validate",
+      "issue": 1,
+      "toolResult": true
+    },
+    {
+      "stage": "fix",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "fix",
+      "issue": 1,
+      "toolResult": true
+    },
+    {
+      "stage": "validate",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "validate",
+      "issue": 1,
+      "toolResult": true
+    },
+    {
+      "stage": "review",
+      "issue": 1,
+      "toolResult": false
+    },
+    {
+      "stage": "review",
+      "issue": 1,
+      "toolResult": true
+    }
+  ],
+  "paidModelCalls": 0,
+  "externalWrites": 0,
+  "uiVerified": false,
+  "uiBlocker": "Cloud browser URL policy denied localhost; no bypass attempted",
+  "limitations": [
+    "Provider responses and patch helpers are scripted; not AI-quality measurement",
+    "Action counts are API-driven trial steps, not measured human clicks or thinking time",
+    "Remote sync metadata is a fixture; no real GitHub repository or publication"
+  ]
+}

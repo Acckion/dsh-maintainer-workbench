@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "mode": "real Harness agent with deterministic local model",
+  "realModelQualityMeasured": false,
+  "host": {
+    "provider": "deepseek-official",
+    "model": "deepseek-flash",
+    "agentPreset": "standard",
+    "adapterRegistered": true
+  },
+  "coveredStages": [
+    "fix",
+    "triage"
+  ],
+  "fixStatus": "awaiting_review",
+  "triageStatus": "completed",
+  "metadataHasWorktree": false,
+  "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+  "toolEvidence": [
+    {
+      "source": "Harness tool/result · seq 16",
+      "detail": "{\"turn\":1,\"step\":1,\"message\":{\"role\":\"tool\",\"source\":{\"kind\":\"tool\",\"callId\":\"fixture-call-1\"},\"toolCallId\":\"fixture-call-1\",\"content\":[{\"type\":\"text\",\"text\":\"BASELINE_FAILED_AS_EXPECTED\\nREGRESSION_PASSED\\n\\n\"}],\"isError\":false,\"id\":\"ed96f7b7-0a4c-4f16-8c1f-7d964ca30059\"}}"
+    }
+  ]
+}

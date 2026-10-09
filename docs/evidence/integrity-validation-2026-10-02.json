@@ -1,0 +1,47 @@
+{
+  "checkedAt": "2026-10-02T02:23:33.891Z",
+  "sourceCommit": "853bc5a75cc2823e407d8a0a6123cabca85d3985",
+  "sourceTree": "3d1953629e2ef7cc74235de287a0e275a587b92f",
+  "runtime": {
+    "node": "v24.19.0",
+    "harness": "0.1.7-alpha.1"
+  },
+  "checks": {
+    "typecheck": "passed",
+    "tests": {
+      "passed": 54,
+      "failed": 0,
+      "skipped": 0
+    },
+    "build": "passed",
+    "nativeIntegration": "passed",
+    "independentReview": "54 tests and typecheck passed"
+  },
+  "native": {
+    "model": "deterministic local Messages fixture; no paid API",
+    "host": {
+      "provider": "deepseek-official",
+      "model": "deepseek-flash",
+      "agentPreset": "standard",
+      "adapterRegistered": true
+    },
+    "fix": {
+      "status": "awaiting_review",
+      "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+      "toolOutputMarkers": [
+        "BASELINE_FAILED_AS_EXPECTED",
+        "REGRESSION_PASSED"
+      ]
+    },
+    "metadata": {
+      "status": "completed",
+      "hasCodeWorktree": false,
+      "hasAnalysisWorkspace": true
+    }
+  },
+  "limits": [
+    "Does not measure real model quality or success rate",
+    "No external GitHub writes or publication",
+    "Upstream 0.2.0-rc.2 compatibility not evaluated"
+  ]
+}

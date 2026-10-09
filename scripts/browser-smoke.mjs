@@ -1,7 +1,11 @@
 // Run against a freshly started, empty development instance; never seeds product data.
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  // CI images may provide system Chromium without Playwright's downloaded bundle.
+  executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH,
+});
 try {
   const page = await browser.newPage({ viewport: { width: 1512, height: 982 } });
   await page.goto(process.env.WORKBENCH_TEST_URL ?? 'http://127.0.0.1:4317');

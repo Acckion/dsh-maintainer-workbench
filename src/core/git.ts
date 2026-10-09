@@ -6,11 +6,12 @@ import { resolve, join } from 'node:path';
 import { mkdir, realpath, rename, rm, mkdtemp } from 'node:fs/promises';
 import type { Job, Repo } from './types.ts';
 const exec = promisify(execFile);
-export async function git(cwd: string, args: string[], authenticate = false, signal?: AbortSignal, timeout = 30000): Promise<string> { const auth = authenticate ? await resolveGitHubAuth() : undefined; return (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, timeout, signal, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(auth?.token ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:' + auth.token).toString('base64'), GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {}) } })).stdout.trimEnd(); }
+export async function git(cwd: string, args: string[], authenticate = false, signal?: AbortSignal, timeout = 30000, preserveOutput = false): Promise<string> { const auth = authenticate ? await resolveGitHubAuth() : undefined; const output = (await exec('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', ...args], { cwd, timeout, signal, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(auth?.token ? { GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: 'AUTHORIZATION: basic ' + Buffer.from('x-access-token:' + auth.token).toString('base64'), GIT_CONFIG_KEY_1: 'credential.helper', GIT_CONFIG_VALUE_1: '' } : {}) } })).stdout; return preserveOutput ? output : output.trimEnd(); }
 export async function validateCheckout(path: string, repo: Repo): Promise<string> {
   const canonical = await realpath(path);
   const root = await git(canonical, ['rev-parse', '--show-toplevel']);
   if (await realpath(root) !== canonical) throw new Error('请选择 Git 仓库根目录');
+  if (repo.mode === 'local') return canonical;
   const origin = await git(canonical, ['remote', 'get-url', 'origin']);
   const normalized = origin.replace(/\.git$/, '').replace(/\/$/, '');
   if (![ `https://github.com/${repo.fullName}`, `git@github.com:${repo.fullName}`, `ssh://git@github.com/${repo.fullName}` ].some(s => s.toLowerCase() === normalized.toLowerCase())) throw new Error('本地 origin 与所选 GitHub 仓库不匹配');
@@ -27,10 +28,21 @@ export async function prepareWorktree(repo: Repo, job: Job, dataDir: string): Pr
   await git(repo.localPath, ['worktree', 'add', '-b', branch, path, job.baseSha]);
   return { path, branch };
 }
-export async function collectPatch(path: string, base = 'HEAD'): Promise<string> {
+export async function collectPatch(path: string, base = 'HEAD', preserveWhitespace = false): Promise<string> {
   // Only the plugin-owned worktree index is changed. Untracked new files are included.
   await git(path, ['add', '--all']);
-  return git(path, ['diff', '--cached', '--no-ext-diff', '--no-textconv', base, '--']);
+  const patch = await git(path, ['diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', base, '--'], false, undefined, 30000, true);
+  // Binary blocks need their closing blank line; trimming can silently drop the last file.
+  // Retain the existing text-only representation so historical approvals stay comparable.
+  return preserveWhitespace || patch.includes('GIT binary patch\n') ? patch : patch.trimEnd();
+}
+
+/** Rebuild apply input without changing historical text-patch identities. */
+export async function applicationPatch(path: string, base: string, expected: string): Promise<string> {
+  const patch = await collectPatch(path, base, true);
+  const identity = patch.includes('GIT binary patch\n') ? patch : patch.trimEnd();
+  if (identity !== expected) throw new Error('交接补丁或基础版本已变化');
+  return patch;
 }
 
 /** Plugin-owned clone, used only when no user checkout is bound. Clone never executes repository scripts. */

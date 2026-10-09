@@ -5,7 +5,7 @@ const root = resolve(import.meta.dirname, '..');
 const data = resolve(process.env.MAINTAINER_DATA_DIR ?? resolve(root, '.data/native'));
 await mkdir(data, { recursive: true });
 const overlay = resolve(data, 'harness-dev.patch.yml');
-await writeFile(overlay, `- id: hmr\n  disabled: true\n- insert:\n    - id: maintainer-local\n      name: ${JSON.stringify(resolve(root, 'dist/plugin.js'))}\n`);
+await writeFile(overlay, `- id: hmr\n  disabled: true\n- insert:\n    - id: maintainer-tool-pruner\n      name: "@deepseek-ai/dsh-compaction-tool-result-pruner"\n      config:\n        thresholdChars: 3000\n        headChars: 1600\n        tailChars: 600\n    - id: maintainer-compaction\n      name: "@deepseek-ai/dsh-compaction-basic"\n      config:\n        auto: false\n        headroomTokens: 4096\n        maxTokens: 2048\n        retainTokens: 2000\n        maxOverflowRetries: 1\n    - id: maintainer-local\n      name: ${JSON.stringify(resolve(root, 'dist/plugin.js'))}\n`);
 // Normal launch preserves DSH_HOME and all host-managed credentials/providers.
 // Isolation is explicit, useful for development and tests only.
 const isolated = process.argv.includes('--isolated');

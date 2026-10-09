@@ -1,5 +1,11 @@
 import type { RepositoryProfile } from './types.ts';
 import { git } from './git.ts';
+/** Saved discovery evidence stays complete; code agents read authoritative files on demand. */
+export function repositoryPromptProfile(profile: RepositoryProfile | undefined): Omit<RepositoryProfile, 'sources'> & { sourcePaths: string[] } | undefined {
+  if (!profile) return undefined;
+  const { sources, ...summary } = profile;
+  return { ...summary, sourcePaths: sources.map(source => source.path), warnings: [...summary.warnings, 'Source contents are omitted from this prompt. Read relevant files and complete scoped AGENTS.md instructions from the pinned checkout before reviewing or editing; command entries are discovery hints, not execution evidence.'] };
+}
 // A repository is recognized from its own tracked files, never from its name.
 export function contextPaths(files: string[]): string[] {
   const patterns = [/^AGENTS(?:\.override)?\.md$/i, /^README(?:\.[a-z-]+)?\.md$/i, /^(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|pom\.xml|build\.gradle(?:\.kts)?|Package\.swift|project\.yml|CMakeLists\.txt|Makefile|composer\.json|Gemfile|pubspec\.yaml|\.swiftlint\.yml)$/i, /^\.github\/workflows\/[^/]+\.ya?ml$/, /(?:^|\/)AGENTS(?:\.override)?\.md$/, /(?:^|\/)(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|Package\.swift)$/];

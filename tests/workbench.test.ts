@@ -35,6 +35,45 @@ test('cancelled work never overwrites cancellation with completed; retry keeps o
   assert.equal(store.jobs()[1].attempt, 2); await workbench.close();
 });
 
+test('terminal and format-retry jobs clear stale approval waits while preserving inspectable evidence', async () => {
+  const store = new Store(':memory:'); seedFixture(store); const issue = store.issues()[0];
+  let stop!: () => void;
+  let entered!: () => void; const ready = new Promise<void>(resolve => { entered = resolve; });
+  const runner: Runner = async ({ progress, signal }) => {
+    progress('等待宿主审批', undefined, '等待权限审批'); entered();
+    await new Promise<void>((resolve) => { stop = resolve; signal.addEventListener('abort', () => resolve(), { once: true }); });
+    signal.throwIfAborted();
+    throw new Error('fixture failure');
+  };
+  const workbench = new Workbench(store, '/tmp/maintainer-state-evidence', runner, undefined, false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump();
+  await ready;
+  assert.equal(store.get<Job>('jobs', id)?.waitingReason, '等待权限审批');
+  workbench.cancel(id); await workbench.drain();
+  const cancelled = store.get<Job>('jobs', id)!;
+  assert.equal(cancelled.status, 'cancelled'); assert.equal(cancelled.waitingReason, undefined);
+
+  const recoverable: Job = { ...cancelled, id: 'format-recovery-source', status: 'failed', waitingReason: '等待权限审批', rawOutput: '{"summary":"partial"}', analysisPath: '/tmp/saved-analysis', formatRecovery: { baseSha: cancelled.baseSha, patchHash: 'saved-output-fixture' }, error: 'invalid JSON' };
+  store.put('jobs', recoverable); workbench.retry(recoverable.id);
+  const retry = store.jobs().find(job => job.id !== recoverable.id && job.formatOnly)!;
+  assert.ok(retry); assert.equal(retry.status, 'queued'); assert.equal(retry.waitingReason, undefined);
+  assert.equal(retry.rawOutput, recoverable.rawOutput); assert.equal(retry.analysisPath, recoverable.analysisPath);
+  stop?.(); await workbench.close();
+});
+
+test('failed jobs clear approval waits without dropping raw output evidence', async () => {
+  const store = new Store(':memory:'); seedFixture(store); const issue = store.issues()[0];
+  const runner: Runner = async ({ progress, recordOutput }) => {
+    progress('等待宿主审批', undefined, '等待权限审批'); recordOutput?.('{"partial":true}');
+    throw new Error('fixture failure');
+  };
+  const workbench = new Workbench(store, '/tmp/maintainer-failed-wait', runner, undefined, false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump(); await workbench.drain();
+  const failed = store.get<Job>('jobs', id)!;
+  assert.equal(failed.status, 'failed'); assert.equal(failed.waitingReason, undefined);
+  assert.equal(failed.rawOutput, '{"partial":true}'); await workbench.close();
+});
+
 test('concurrency cap and timeout apply to the actual worker lifecycle', async () => {
   const { workbench, store } = fixture(false);
   workbench.updateSettings({ ...store.settings(), concurrency: 1, timeoutMs: 1000 });
@@ -56,10 +95,23 @@ test('stale issue input cannot approve an old result', async () => {
 test('restart preserves queued tasks but does not replay a running modification', async () => {
   const { store, workbench, issue } = fixture(false);
   const id = workbench.enqueue([issue.id], 'fix').created[0];
-  store.put('jobs', { ...store.get<Job>('jobs', id)!, status: 'running' });
+  store.put('jobs', { ...store.get<Job>('jobs', id)!, status: 'running', waitingReason: '等待权限审批', rawOutput: '{"partial":true}', worktree: '/tmp/preserved-worktree', formatRecovery: { baseSha: 'fixture-base', patchHash: 'fixture-patch' } });
   const recovered = new Workbench(store, '/tmp/maintainer-tests', undefined, undefined, false);
-  assert.equal(store.get<Job>('jobs', id)?.status, 'failed');
-  assert.match(store.get<Job>('jobs', id)?.error ?? '', /进程中断/); await recovered.close();
+  const job = store.get<Job>('jobs', id)!;
+  assert.equal(job.status, 'failed'); assert.equal(job.waitingReason, undefined);
+  assert.match(job.error ?? '', /进程中断/); assert.equal(job.rawOutput, '{"partial":true}');
+  assert.equal(job.worktree, '/tmp/preserved-worktree'); assert.deepEqual(job.formatRecovery, { baseSha: 'fixture-base', patchHash: 'fixture-patch' });
+  await recovered.close();
+});
+
+test('a rejected artifact cannot seed a new stage, while retry creates a fresh attempt', async () => {
+  const { store, workbench, issue } = fixture(false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump(); await workbench.drain();
+  await workbench.review(id, 'reject', '需要补充 v2 证据');
+  assert.throws(() => workbench.enqueue([issue.id], 'investigate', { sourceJobId: id }), /交接来源/);
+  workbench.retry(id); workbench.pump(); await workbench.drain();
+  assert.equal(store.jobs().at(-1)?.status, 'completed'); assert.equal(store.jobs().at(-1)?.attempt, 2);
+  await workbench.close();
 });
 
 test('HTTP rejects cross-origin mutations and malformed batch input', async () => {
@@ -69,6 +121,17 @@ test('HTTP rejects cross-origin mutations and malformed batch input', async () =
   assert.equal((await fetch(url + '/jobs', { method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' }, body: '{}' })).status, 403);
   assert.equal((await fetch(url + '/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"issueIds":[],"kind":"invalid"}' })).status, 400);
   assert.equal((await fetch(url + '/state')).status, 200);
+  await new Promise<void>(r => server.close(() => r())); await workbench.close();
+});
+
+test('HTTP refuses a rejected task as a stage handoff source', async () => {
+  const { workbench, issue } = fixture(false);
+  const id = workbench.enqueue([issue.id], 'triage').created[0]; workbench.pump(); await workbench.drain();
+  await workbench.review(id, 'reject', '需要更多复现证据');
+  const server = createServer(handler(workbench, localRejection)); await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/maintainer/api/jobs`;
+  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ issueIds: [issue.id], kind: 'investigate', sourceJobId: id }) });
+  assert.equal(response.status, 400); assert.match((await response.json() as { error: string }).error, /交接来源/);
   await new Promise<void>(r => server.close(() => r())); await workbench.close();
 });
 
@@ -143,6 +206,7 @@ test('fix -> real failing/passing test -> review -> commit/push -> draft PR requ
   const requests: { url: string; body?: unknown }[] = [];
   const fake: typeof fetch = async (input, init) => {
     const url = String(input); requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (url.includes('/commits/')) return Response.json({ sha });
     if (url.includes('/issues/')) return Response.json({ updated_at: issue.updatedAt });
     if (url.includes('?state=')) return Response.json([]);
     return Response.json({ html_url: 'https://github.com/fixture/local/pull/2' });
@@ -174,7 +238,7 @@ test('comment publication recovers an ambiguous POST without posting a duplicate
   const { publish } = await import('../src/core/publish.ts');
   const { workbench, store, issue } = fixture();
   const id = workbench.enqueue([issue.id], 'triage').created[0]; await workbench.drain(); await workbench.review(id, 'approve', '');
-  const original = store.repos()[0]; const repo = { ...original, mode: 'github' as const, fullName: 'fixture/repo' };
+  const repo = store.repos()[0];
   let posted = '', writes = 0;
   const fake: typeof fetch = async (input, init) => {
     if (String(input).includes('/comments')) {
@@ -185,7 +249,7 @@ test('comment publication recovers an ambiguous POST without posting a duplicate
   };
   const old = process.env.GITHUB_TOKEN; process.env.GITHUB_TOKEN = 'fixture-only';
   try {
-    await assert.rejects(publish(store, store.get<Job>('jobs', id)!, repo, 'comment', new GitHub('', fake)), /lost response/);
+    await assert.rejects(publish(store, store.get<Job>('jobs', id)!, repo, 'comment', new GitHub('', fake)), /写入结果尚未确认/);
     const urls = await publish(store, store.get<Job>('jobs', id)!, repo, 'comment', new GitHub('', fake));
     assert.equal(writes, 1); assert.equal(urls.length, 1); assert.equal(store.get<Job>('jobs', id)!.publications?.comment?.status, 'published');
   } finally { if (old === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = old; await workbench.close(); }
@@ -196,4 +260,32 @@ test('a second worker cannot take the same data directory', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'maintainer-lock-'));
   const release = lockDirectory(directory); assert.throws(() => lockDirectory(directory), /正在被进程/); release();
   const next = lockDirectory(directory); next();
+});
+
+
+test('explicit rerun preserves completed records and reuses an already queued rerun', async () => {
+  const { workbench, store, issue } = fixture(false);
+  const first = workbench.enqueue([issue.id], 'triage').created[0];
+  assert.throws(() => workbench.rerun(first), /仍在执行/);
+  workbench.pump(); await workbench.drain();
+  const original = structuredClone(store.jobs().find(j => j.id === first));
+  assert.deepEqual(workbench.enqueue([issue.id], 'triage'), { created: [], reused: [first] });
+  const rerun = workbench.rerun(first);
+  assert.equal(rerun.created.length, 1);
+  assert.notEqual(rerun.created[0], first);
+  assert.deepEqual(store.jobs().find(j => j.id === first), original);
+  assert.deepEqual(workbench.rerun(first), { created: [], reused: rerun.created });
+  assert.equal(store.jobs().length, 2);
+  await workbench.close();
+});
+
+test('primary handoff survives more than eight newer historical reports', async () => {
+ const {workbench,store,issue}=fixture(false);
+ const first=workbench.enqueue([issue.id],'triage').created[0];workbench.pump();await workbench.drain();
+ const source=store.jobs().find(j=>j.id===first)!;
+ for(let i=0;i<10;i++)store.put('jobs',{...source,id:`later-${i}`});
+ const dispatched=workbench.enqueue([issue.id],'investigate',{sourceJobId:first}).created[0];
+ const next=store.jobs().find(j=>j.id===dispatched)!;
+ assert.ok(next.handoff?.some(h=>h.id===first));assert.ok(next.handoff!.length<=8);
+ await workbench.close();
 });

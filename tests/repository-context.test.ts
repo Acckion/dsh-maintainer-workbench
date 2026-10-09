@@ -4,8 +4,24 @@ import { mkdtemp, mkdir, writeFile, symlink, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { git, prepareManagedCheckout, prepareWorktree } from '../src/core/git.ts';
-import { localRepositoryProfile, repositoryProfile } from '../src/core/repository-context.ts';
+import { localRepositoryProfile, repositoryProfile, repositoryPromptProfile } from '../src/core/repository-context.ts';
 import type { Repo, Job } from '../src/core/types.ts';
+
+test('code prompt omits bulky source excerpts but preserves pinned discovery evidence and read instructions', () => {
+  const sources = Array.from({ length: 12 }, (_, i) => ({ path: `docs/${i}.md`, content: 'large-source-excerpt '.repeat(300) }));
+  const profile = repositoryProfile('pinned-sha', ['package.json', 'src/helper.ts', 'src/helper.test.ts'], sources);
+  const saved = JSON.stringify(profile);
+  const prompt = repositoryPromptProfile(profile)!;
+  assert.equal(prompt.revision, 'pinned-sha');
+  assert.deepEqual(prompt.sourcePaths, sources.map(s => s.path));
+  assert.deepEqual(prompt.testPaths, profile.testPaths);
+  assert.deepEqual(prompt.commands, profile.commands);
+  assert.ok(prompt.warnings.some(w => w.includes('complete scoped AGENTS.md')));
+  assert.ok(!JSON.stringify(prompt).includes('large-source-excerpt'));
+  assert.ok(JSON.stringify(prompt).length < saved.length / 10);
+  assert.equal(JSON.stringify(profile), saved);
+  assert.equal(repositoryPromptProfile(undefined), undefined);
+});
 
 test('repository understanding discovers multiple stacks and declared commands without repository-name rules', () => {
   const js = repositoryProfile('a', ['package.json', 'src/main.ts', 'tests/main.test.ts', '.github/workflows/ci.yml'], [{ path: 'package.json', content: JSON.stringify({ scripts: { test: 'vitest run', build: 'tsc', deploy: 'publish-production' } }) }]);

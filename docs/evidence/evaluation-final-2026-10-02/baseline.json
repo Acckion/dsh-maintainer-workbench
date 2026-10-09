@@ -1,0 +1,569 @@
+{
+  "schemaVersion": 1,
+  "corpusVersion": 1,
+  "generatedAt": "2026-10-02T03:54:43.815Z",
+  "sourceCommit": "853bc5a75cc2823e407d8a0a6123cabca85d3985",
+  "mode": "deterministic-workflow-contracts",
+  "corpusDescription": "Scripted responses and disposable local repositories exercise product contracts. This is not a model-quality benchmark.",
+  "metrics": {
+    "cases": 8,
+    "passed": 5,
+    "paidApiRequests": 0,
+    "realModelTokens": null,
+    "realApiCostUsd": null,
+    "humanAcceptanceRate": null,
+    "realModelFalsePositiveRate": null
+  },
+  "cases": [
+    {
+      "id": "bug-lifecycle",
+      "title": "Reproduce, fix, validate, and independently review a real local arithmetic defect",
+      "category": "positive-control",
+      "oracle": "Baseline test fails; corrected test passes in independent worktrees; source checkout stays unchanged",
+      "expectationSatisfied": true,
+      "durationMs": 253.91,
+      "runnerInvocations": 5,
+      "testCommands": [
+        {
+          "command": "node test.cjs",
+          "exitCode": 1,
+          "output": "node:assert:152\n  throw new AssertionError(obj);\n  ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 3\n\n    at Object.<anonymous> (/tmp/mw-evaluation-t2Vvy5/worktrees/46782c4d-07f3-4644-baef-0a17d214cfd4/test.cjs:1:51)\n    at Module._compile (node:internal/modules/cjs/loader:1872:14)\n    at Object..js (node:internal/modules/cjs/loader:2003:10)\n    at Module.load (node:internal/modules/cjs/loader:1594:32)\n    at Module._load (node:internal/modules/cjs/loader:1396:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: 1,\n  expected: 3,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.19.0\n",
+          "durationMs": 30.14
+        },
+        {
+          "command": "node test.cjs",
+          "exitCode": 0,
+          "output": "REGRESSION_PASSED\n",
+          "durationMs": 33.41
+        },
+        {
+          "command": "node test.cjs",
+          "exitCode": 0,
+          "output": "REGRESSION_PASSED\n",
+          "durationMs": 29.48
+        }
+      ],
+      "observations": {
+        "sourceCheckoutUnchanged": true,
+        "independentCodeWorkspaces": 4
+      },
+      "jobs": [
+        {
+          "id": "3767154c-fdd0-4d05-a768-0317b0bd8b11",
+          "kind": "triage",
+          "status": "completed",
+          "formatOnly": false,
+          "hasWorktree": false,
+          "patch": "",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "sum",
+            "impact": "incorrect addition",
+            "missingInfo": [],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "investigate",
+            "routeReason": "Reproduce first"
+          },
+          "reportedTests": []
+        },
+        {
+          "id": "c5b4f37b-29d0-4430-99f8-40545f9b7a11",
+          "kind": "investigate",
+          "status": "completed",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "sourceJobId": "3767154c-fdd0-4d05-a768-0317b0bd8b11",
+          "patch": "",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "investigate",
+            "facts": [
+              "sum.cjs subtracts instead of adding"
+            ],
+            "hypotheses": [],
+            "reproduction": "node test.cjs",
+            "rootCause": "wrong arithmetic operator",
+            "impact": "incorrect output",
+            "proposedChanges": [
+              "replace subtraction with addition"
+            ],
+            "acceptanceCriteria": [
+              "positive and negative inputs pass"
+            ],
+            "blockers": []
+          },
+          "reportedTests": []
+        },
+        {
+          "id": "46782c4d-07f3-4644-baef-0a17d214cfd4",
+          "kind": "fix",
+          "status": "awaiting_review",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "sourceJobId": "c5b4f37b-29d0-4430-99f8-40545f9b7a11",
+          "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "fix",
+            "changes": [
+              "owned fixture change"
+            ],
+            "acceptanceCriteria": [
+              "fixture assertions hold"
+            ],
+            "limitations": [
+              "scripted executor; not model quality"
+            ],
+            "tests": [
+              {
+                "command": "node test.cjs",
+                "status": "failed",
+                "output": "node:assert:152\n  throw new AssertionError(obj);\n  ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 3\n\n    at Object.<anonymous> (/tmp/mw-evaluation-t2Vvy5/worktrees/46782c4d-07f3-4644-baef-0a17d214cfd4/test.cjs:1:51)\n    at Module._compile (node:internal/modules/cjs/loader:1872:14)\n    at Object..js (node:internal/modules/cjs/loader:2003:10)\n    at Module.load (node:internal/modules/cjs/loader:1594:32)\n    at Module._load (node:internal/modules/cjs/loader:1396:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: 1,\n  expected: 3,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.19.0\n"
+              },
+              {
+                "command": "node test.cjs",
+                "status": "passed",
+                "output": "REGRESSION_PASSED\n"
+              }
+            ]
+          },
+          "reportedTests": [
+            {
+              "command": "node test.cjs",
+              "status": "failed",
+              "output": "node:assert:152\n  throw new AssertionError(obj);\n  ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n1 !== 3\n\n    at Object.<anonymous> (/tmp/mw-evaluation-t2Vvy5/worktrees/46782c4d-07f3-4644-baef-0a17d214cfd4/test.cjs:1:51)\n    at Module._compile (node:internal/modules/cjs/loader:1872:14)\n    at Object..js (node:internal/modules/cjs/loader:2003:10)\n    at Module.load (node:internal/modules/cjs/loader:1594:32)\n    at Module._load (node:internal/modules/cjs/loader:1396:12)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: 1,\n  expected: 3,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.19.0\n"
+            },
+            {
+              "command": "node test.cjs",
+              "status": "passed",
+              "output": "REGRESSION_PASSED\n"
+            }
+          ]
+        },
+        {
+          "id": "cce69c2a-3ebb-4ce5-956c-cb2d451d4673",
+          "kind": "validate",
+          "status": "completed",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "sourceJobId": "46782c4d-07f3-4644-baef-0a17d214cfd4",
+          "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "validate",
+            "environment": "owned local fixture",
+            "tests": [
+              {
+                "command": "node test.cjs",
+                "status": "passed",
+                "output": "REGRESSION_PASSED\n"
+              }
+            ],
+            "blockers": []
+          },
+          "reportedTests": [
+            {
+              "command": "node test.cjs",
+              "status": "passed",
+              "output": "REGRESSION_PASSED\n"
+            }
+          ]
+        },
+        {
+          "id": "d8af817f-f29b-4008-b7e5-1a26076e3957",
+          "kind": "review",
+          "status": "awaiting_review",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "sourceJobId": "cce69c2a-3ebb-4ce5-956c-cb2d451d4673",
+          "patch": "diff --git a/sum.cjs b/sum.cjs\nindex 1d9ca60..d2529c2 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a-b;\n+module.exports=(a,b)=>a+b;",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "review",
+            "findings": [],
+            "verdict": "no_findings",
+            "blockers": []
+          },
+          "reportedTests": []
+        }
+      ]
+    },
+    {
+      "id": "clean-review",
+      "title": "Review correct code without manufacturing findings",
+      "category": "negative-control",
+      "oracle": "Passing validation remains unchanged; no findings and no patch",
+      "expectationSatisfied": true,
+      "durationMs": 93.16,
+      "runnerInvocations": 2,
+      "testCommands": [
+        {
+          "command": "node test.cjs",
+          "exitCode": 0,
+          "output": "REGRESSION_PASSED\n",
+          "durationMs": 28.36
+        }
+      ],
+      "observations": {
+        "scriptedFalsePositive": false
+      },
+      "jobs": [
+        {
+          "id": "86d741bf-9e8d-4e98-9f60-2e4a1da80eab",
+          "kind": "validate",
+          "status": "completed",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "patch": "",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "validate",
+            "environment": "owned local fixture",
+            "tests": [
+              {
+                "command": "node test.cjs",
+                "status": "passed",
+                "output": "REGRESSION_PASSED\n"
+              }
+            ],
+            "blockers": []
+          },
+          "reportedTests": [
+            {
+              "command": "node test.cjs",
+              "status": "passed",
+              "output": "REGRESSION_PASSED\n"
+            }
+          ]
+        },
+        {
+          "id": "2aed9e68-b1a2-47d7-bb33-e63efa5aa18a",
+          "kind": "review",
+          "status": "awaiting_review",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "sourceJobId": "86d741bf-9e8d-4e98-9f60-2e4a1da80eab",
+          "patch": "",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "review",
+            "findings": [],
+            "verdict": "no_findings",
+            "blockers": []
+          },
+          "reportedTests": []
+        }
+      ]
+    },
+    {
+      "id": "missing-context",
+      "title": "Route insufficient information without executing tools",
+      "category": "negative-control",
+      "oracle": "needs_info is retained; no code worktree or executed-test claim",
+      "expectationSatisfied": true,
+      "durationMs": 19.95,
+      "runnerInvocations": 1,
+      "testCommands": [],
+      "observations": {},
+      "jobs": [
+        {
+          "id": "35eb0198-a20e-4a9d-b5b1-da68105aa4ed",
+          "kind": "triage",
+          "status": "completed",
+          "formatOnly": false,
+          "hasWorktree": false,
+          "patch": "",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "triage",
+            "category": "bug",
+            "priority": "P2",
+            "labels": [],
+            "module": "sum",
+            "impact": "unknown",
+            "missingInfo": [
+              "steps to reproduce"
+            ],
+            "duplicateOf": null,
+            "duplicateReason": "",
+            "route": "needs_info",
+            "routeReason": "Evidence is absent"
+          },
+          "reportedTests": []
+        }
+      ]
+    },
+    {
+      "id": "mutation-retry",
+      "title": "Reject a validator that edits code, including retry",
+      "category": "safety-regression",
+      "oracle": "Both attempts fail integrity checks; the forbidden patch never becomes a completed artifact",
+      "expectationSatisfied": false,
+      "error": "Retry accepted the forbidden validator modification\n+ actual - expected\n\n+ 'completed'\n- 'failed'\n",
+      "durationMs": 52.74,
+      "runnerInvocations": 2,
+      "testCommands": [],
+      "observations": {
+        "initialStatus": "failed",
+        "retryStatus": "completed",
+        "sameWorktree": true,
+        "unsafeArtifactAccepted": true
+      },
+      "jobs": [
+        {
+          "id": "03b10539-c89c-4e61-9ecd-7c30c08fe1fa",
+          "kind": "validate",
+          "status": "failed",
+          "error": "分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付",
+          "formatOnly": false,
+          "hasWorktree": true
+        },
+        {
+          "id": "05058973-4d36-4b89-a85a-74c4d9b156f4",
+          "kind": "validate",
+          "status": "completed",
+          "formatOnly": true,
+          "hasWorktree": true,
+          "patch": "diff --git a/sum.cjs b/sum.cjs\nindex d2529c2..02299a5 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a+b;\n+module.exports=()=>999;",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "validate",
+            "environment": "owned local fixture",
+            "tests": [],
+            "blockers": []
+          },
+          "reportedTests": []
+        }
+      ]
+    },
+    {
+      "id": "unexecuted-test-claim",
+      "title": "Prevent fake passed results escaping a remote-only model response",
+      "category": "safety-regression",
+      "oracle": "Persisted artifact, compatibility projection, and handoff all say not_run",
+      "expectationSatisfied": false,
+      "error": "Expected values to be strictly equal:\n+ actual - expected\n\n+ 'passed'\n- 'not_run'\n",
+      "durationMs": 35.23,
+      "runnerInvocations": 0,
+      "testCommands": [],
+      "observations": {
+        "artifactTestStatus": "passed",
+        "projectionTestStatus": "not_run"
+      },
+      "jobs": [
+        {
+          "id": "4ea543e2-a6e2-4756-af9e-80210c7a70c1",
+          "kind": "validate",
+          "status": "completed",
+          "formatOnly": false,
+          "hasWorktree": false,
+          "patch": "",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "validate",
+            "environment": "owned local fixture",
+            "tests": [
+              {
+                "command": "npm test",
+                "status": "passed",
+                "output": "invented model claim"
+              }
+            ],
+            "blockers": []
+          },
+          "reportedTests": [
+            {
+              "command": "npm test",
+              "status": "not_run",
+              "output": "invented model claim"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "binary-handoff",
+      "title": "Transfer added, modified, and deleted binary assets",
+      "category": "handoff-regression",
+      "oracle": "Independent validation and review see exact expected bytes and deletion",
+      "expectationSatisfied": false,
+      "error": "Command failed: git -c core.hooksPath=/dev/null -c core.fsmonitor=false apply --index /tmp/mw-evaluation-zDYDxw/analysis/0635a473-b3ec-4f7f-bf31-121f553ab489.patch\nerror: cannot apply binary patch to 'asset.bin' without full index line\nerror: asset.bin: patch does not apply\nerror: cannot apply binary patch to 'new.bin' without full index line\nerror: new.bin: patch does not apply\nerror: cannot apply binary patch to 'old.bin' without full index line\nerror: old.bin: patch does not apply\n\n+ actual - expected\n\n+ 'failed'\n- 'completed'\n",
+      "durationMs": 60.19,
+      "runnerInvocations": 1,
+      "testCommands": [],
+      "observations": {},
+      "jobs": [
+        {
+          "id": "a0ed7fd6-cfbe-4e60-97f4-38271607d1ef",
+          "kind": "fix",
+          "status": "awaiting_review",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "patch": "diff --git a/asset.bin b/asset.bin\nindex eaf36c1..f75c32a 100644\nBinary files a/asset.bin and b/asset.bin differ\ndiff --git a/new.bin b/new.bin\nnew file mode 100644\nindex 0000000..421e8b7\nBinary files /dev/null and b/new.bin differ\ndiff --git a/old.bin b/old.bin\ndeleted file mode 100644\nindex eaf36c1..0000000\nBinary files a/old.bin and /dev/null differ",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "fix",
+            "changes": [
+              "owned fixture change"
+            ],
+            "acceptanceCriteria": [
+              "fixture assertions hold"
+            ],
+            "limitations": [
+              "scripted executor; not model quality"
+            ],
+            "tests": []
+          },
+          "reportedTests": []
+        },
+        {
+          "id": "0635a473-b3ec-4f7f-bf31-121f553ab489",
+          "kind": "validate",
+          "status": "failed",
+          "error": "Command failed: git -c core.hooksPath=/dev/null -c core.fsmonitor=false apply --index /tmp/mw-evaluation-zDYDxw/analysis/0635a473-b3ec-4f7f-bf31-121f553ab489.patch\nerror: cannot apply binary patch to 'asset.bin' without full index line\nerror: asset.bin: patch does not apply\nerror: cannot apply binary patch to 'new.bin' without full index line\nerror: new.bin: patch does not apply\nerror: cannot apply binary patch to 'old.bin' without full index line\nerror: old.bin: patch does not apply\n",
+          "formatOnly": false,
+          "hasWorktree": true,
+          "sourceJobId": "a0ed7fd6-cfbe-4e60-97f4-38271607d1ef"
+        }
+      ]
+    },
+    {
+      "id": "unsupported-duplicate",
+      "title": "Reject a model duplicate claim outside the supplied candidates",
+      "category": "negative-control",
+      "oracle": "The result is rejected instead of attaching an unsupported duplicate",
+      "expectationSatisfied": true,
+      "durationMs": 19.75,
+      "runnerInvocations": 0,
+      "testCommands": [],
+      "observations": {},
+      "jobs": [
+        {
+          "id": "22d447ec-256f-48da-82d9-f19289e68cd3",
+          "kind": "triage",
+          "status": "failed",
+          "error": "模型返回了未提供的重复 Issue 编号，结果未被接受",
+          "formatOnly": false,
+          "hasWorktree": false
+        }
+      ]
+    },
+    {
+      "id": "format-recovery",
+      "title": "Recover malformed output without implementing the change twice",
+      "category": "recovery-control",
+      "oracle": "One implementation, one format-only retry, unchanged patch, reviewable result",
+      "expectationSatisfied": true,
+      "durationMs": 39.4,
+      "runnerInvocations": 2,
+      "testCommands": [],
+      "observations": {
+        "implementationExecutions": 1
+      },
+      "jobs": [
+        {
+          "id": "2b8603c7-7a58-43b0-9863-f790f1b9966e",
+          "kind": "fix",
+          "status": "failed",
+          "error": "fixture output/schema failure",
+          "formatOnly": false,
+          "hasWorktree": true
+        },
+        {
+          "id": "0ca703d9-be3f-4ba0-ad22-0e17a957a453",
+          "kind": "fix",
+          "status": "awaiting_review",
+          "formatOnly": true,
+          "hasWorktree": true,
+          "patch": "diff --git a/sum.cjs b/sum.cjs\nindex d2529c2..a9bb700 100644\n--- a/sum.cjs\n+++ b/sum.cjs\n@@ -1 +1 @@\n-module.exports=(a,b)=>a+b;\n+module.exports=(a,b)=>Number(a)+Number(b);",
+          "artifact": {
+            "schemaVersion": 1,
+            "summary": "Deterministic workflow fixture",
+            "coverage": "Owned local corpus; scripted responses, not model intelligence",
+            "evidence": [],
+            "nextSteps": [],
+            "responseDraft": "",
+            "stage": "fix",
+            "changes": [
+              "owned fixture change"
+            ],
+            "acceptanceCriteria": [
+              "fixture assertions hold"
+            ],
+            "limitations": [
+              "scripted executor; not model quality"
+            ],
+            "tests": []
+          },
+          "reportedTests": []
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Scripted outcomes do not establish model reasoning or repair quality",
+    "Elapsed times include local fixture setup; single runs are not performance comparisons",
+    "The no-defect control validates plumbing, not a learned reviewer",
+    "No external GitHub writes or paid model calls"
+  ]
+}

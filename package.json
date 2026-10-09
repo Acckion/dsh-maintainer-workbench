@@ -1,6 +1,6 @@
 {
   "name": "dsh-maintainer-workbench",
-  "version": "0.1.0",
+  "version": "0.1.6",
   "description": "Repository maintenance workbench for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
@@ -22,7 +22,9 @@
     "docs/VALIDATION.md",
     "docs/ACCEPTANCE.md",
     "docs/evidence",
-    "docs/product"
+    "docs/product",
+    "docs/EVALUATION.md",
+    "scripts/verify-document-patch.mjs"
   ],
   "dsh": {
     "bundle": {
@@ -45,12 +47,15 @@
     "prepare": "npm run build",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "harness": "node scripts/harness.mjs",
     "test:browser": "node scripts/browser-smoke.mjs",
+    "test:browser:navigation": "node scripts/browser-navigation-fixture.mjs",
     "test:native": "node scripts/native-fixture.mjs",
-    "harness:isolated": "node scripts/harness.mjs --isolated"
+    "harness:isolated": "node scripts/harness.mjs --isolated",
+    "evaluate": "node scripts/evaluate.mjs",
+    "test:browser:maintenance": "node --import tsx scripts/browser-maintenance-fixture.mjs"
   },
   "engines": {
     "node": ">=24"
@@ -64,7 +69,9 @@
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "lucide-react": "^0.468.0",
-    "zod": "^3.24.0"
+    "zod": "^3.24.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
   },
   "devDependencies": {
     "@deepseek-ai/dsh": "0.2.1-alpha.1",
