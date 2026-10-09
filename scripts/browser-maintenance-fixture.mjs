@@ -17,6 +17,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 try {
   for (const width of [1440, 390]) {
     const dir = await mkdtemp(join(tmpdir(), 'maintainer-browser-')), store = new Store(':memory:'); seedFixture(store);
+    const longTitleItem=store.issues()[0];store.put('issues',{...longTitleItem,url:'https://github.com/fixture/queue/issues/128'});
     const github = new GitHub('', async () => { throw Error('Unexpected external request'); });
     const w = new Workbench(store, dir, fixtureRunner, github, false), repo = store.repos()[0];
     const pr = { ...store.issues()[3], type: 'pr', headSha: 'b'.repeat(40), prBaseSha: repo.headSha }; store.put('issues', pr);
@@ -56,7 +57,11 @@ try {
       const selectPanel=async(name)=>{if(width>760)await page.getByRole('button',{name,exact:true}).click();else await page.locator('select[aria-label="AI 功能"]').selectOption(name.toLowerCase());};
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.locator('.mw-reader-topline').count(), 0);
-      assert.equal(await page.locator('.mw-reader-tabbar > .mw-reader-top-actions').count(), 1);
+      await page.locator('.mw-reader-header h2').evaluate(el=>{const text=[...el.childNodes].find(n=>n.nodeType===Node.TEXT_NODE && n.textContent.trim());text.textContent='[Bug]: plugin load is CPU-bound on module compilation - one heavy channel plugin entry costs 5-13 seconds cold and three channel plugins use most of the startup budget '.repeat(2);});
+      const refNumber=await page.locator('.mw-title-reference>span').boundingBox();
+      const refLink=await page.locator('.mw-title-reference>a').boundingBox();
+      assert.ok(Math.abs((refNumber.y+refNumber.height/2)-(refLink.y+refLink.height/2))<3, 'number and GitHub link stay on the same line with long titles');
+      assert.equal(await page.locator('.mw-reader-meta > .mw-reader-top-actions').count(), 1);
       const listTab = await page.getByRole('button',{name:'Issues',exact:true}).boundingBox();
       const searchBox = await page.getByLabel('搜索问题',{exact:true}).boundingBox();
       assert.ok(listTab.height <= 40, 'inbox tabs use compact height');
