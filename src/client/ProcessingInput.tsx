@@ -6,7 +6,11 @@ export function ProcessingInput({
   issue,
   busy,
   act,
+  runId,
+  embedded = false,
 }: {
+  runId?: string;
+  embedded?: boolean;
   issue: Issue;
   busy: boolean;
   act: (path: string, data: unknown, message: string) => Promise<unknown>;
@@ -14,7 +18,12 @@ export function ProcessingInput({
   return (
     <>
       {issue.processing?.waits
-        .filter((w) => w.type === "user_input" && w.state === "open")
+        .filter(
+          (w) =>
+            w.type === "user_input" &&
+            w.state === "open" &&
+            (!runId || !w.requestedByRunId || w.requestedByRunId === runId),
+        )
         .map((wait) => (
           <InputForm
             key={wait.id}
@@ -22,6 +31,7 @@ export function ProcessingInput({
             issue={issue}
             busy={busy}
             act={act}
+            embedded={embedded}
           />
         ))}
     </>
@@ -32,7 +42,9 @@ function InputForm({
   issue,
   busy,
   act,
+  embedded,
 }: {
+  embedded?: boolean;
   wait: ProcessingWait;
   issue: Issue;
   busy: boolean;
@@ -41,7 +53,7 @@ function InputForm({
   const [values, setValues] = useState<Record<string, string>>({});
   return (
     <form
-      className="mw-callout amber"
+      className={embedded ? "mw-stage-input" : "mw-callout amber"}
       onSubmit={(event) => {
         event.preventDefault();
         void act(
@@ -57,7 +69,7 @@ function InputForm({
       }}
     >
       <div>
-        <strong>需要补充信息</strong>
+        {!embedded && <strong>需要补充信息</strong>}
         <p>{wait.reason}</p>
         {wait.questions?.map((field) => (
           <label key={field.id}>

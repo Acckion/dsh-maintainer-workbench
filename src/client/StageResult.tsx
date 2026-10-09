@@ -173,15 +173,17 @@ export function StageResult({
           </p>
         </details>
       )}
-      <details>
-        <summary>分析依据 · {job.result?.evidence.length ?? 0}</summary>
-        {job.result?.evidence.map((e, index) => (
-          <article key={index}>
-            <strong>{e.source}</strong>
-            <p>{e.detail}</p>
-          </article>
-        ))}
-      </details>
+      {!!job.result?.evidence.length && (
+        <details>
+          <summary>分析依据 · {job.result?.evidence.length ?? 0}</summary>
+          {job.result?.evidence.map((e, index) => (
+            <article key={index}>
+              <strong>{e.source}</strong>
+              <p>{e.detail}</p>
+            </article>
+          ))}
+        </details>
+      )}
     </section>
   );
 }

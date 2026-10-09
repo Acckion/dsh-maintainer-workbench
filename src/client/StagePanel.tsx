@@ -26,12 +26,13 @@ interface Props {
     job?: Job,
     readOnly?: boolean,
     decision?: boolean,
+    execution?: boolean,
   ) => ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
   evidence?: (job?: Job) => ReactNode;
   context?: () => ReactNode;
-  progress?: string;
   actions?: ReactNode;
+  instructions?: ReactNode;
 }
 export function StagePanel({
   selected,
@@ -48,9 +49,19 @@ export function StagePanel({
   track,
   evidence,
   context,
-  progress,
   actions,
+  instructions,
 }: Props) {
+  const activeWait = !readOnly
+    ? issue.processing?.waits.find(
+        (w) =>
+          w.state === "open" &&
+          ["host_permission", "user_input", "environment_ready"].includes(
+            w.type,
+          ) &&
+          (!w.requestedByRunId || w.requestedByRunId === attempt?.id),
+      )
+    : undefined;
   return (
     <section className="mw-stage-panel" aria-label="选中阶段">
       <header>
@@ -58,9 +69,17 @@ export function StagePanel({
         <span
           className={`mw-tag ${selected.status === "blocked" ? "amber" : ""}`}
         >
-          {attempt && selected.stage === attempt.kind
-            ? jobNodeState(attempt).result
-            : selected.result}
+          {activeWait
+            ? (
+                {
+                  host_permission: "等待授权",
+                  user_input: "等待补充信息",
+                  environment_ready: "等待执行环境",
+                } as Record<string, string>
+              )[activeWait.type]
+            : attempt && selected.stage === attempt.kind
+              ? jobNodeState(attempt).result
+              : selected.result}
         </span>
         {actions && <div className="mw-workflow-actions">{actions}</div>}
       </header>
@@ -96,63 +115,36 @@ export function StagePanel({
           </select>
         </label>
       )}
-      <p className="mw-stage-focus">{timeline.profile.focus.join(" · ")}</p>
-      {attempt && (
-        <>
-          <details className="mw-stage-source">
-            <summary>来源与版本</summary>
-            <p className="mw-muted">
-              来源提交 {attempt.baseSha.slice(0, 12)} · {attempt.createdAt}
-              {attempt.artifactState === "stale"
-                ? " · 已过期，不能用于当前交付"
-                : ""}
-            </p>
-          </details>
-          <div className="mw-stage-view-controls">
-            <button
-              type="button"
-              className="mw-text-button"
-              aria-label="查看阶段结果"
-              aria-pressed={selection.detail === "result"}
-              onClick={() =>
-                choose({ ...selection, nodeId: selected.id, detail: "result" })
-              }
-            >
-              结论与证据
-            </button>
-            <button
-              type="button"
-              className="mw-text-button"
-              aria-label="查看执行详情"
-              aria-pressed={selection.detail === "execution"}
-              onClick={() =>
-                choose({
-                  ...selection,
-                  nodeId: selected.id,
-                  detail: "execution",
-                })
-              }
-            >
-              执行记录
-            </button>
-          </div>
-        </>
-      )}
-      {progress && !viewingHistory && (
-        <p className="mw-stage-live" role="status">
-          {progress}
+      {attempt?.artifactState === "stale" && (
+        <p className="mw-stage-history">
+          此结果对应旧版本，不能用于当前审批或交付。
         </p>
       )}
-      {!timeline.historical &&
-        !(
-          selected.stage === "decision" &&
-          issue.type === "issue" &&
-          timeline.profile.category !== "question"
-        ) &&
-        context?.()}
+      {selection.detail === "execution" &&
+        attempt &&
+        !readOnly &&
+        (["waiting_input", "waiting_environment"].includes(attempt.status) ||
+          !!activeWait) &&
+        render("work", attempt, false)}
+      {selection.detail === "execution" &&
+        attempt &&
+        (attempt.result || attempt.artifact) &&
+        ![
+          "running",
+          "queued",
+          "waiting_input",
+          "waiting_environment",
+          "failed",
+          "cancelled",
+        ].includes(attempt.status) && (
+          <p className="mw-muted" role="status">
+            结果已生成，可通过下方“查看结果”返回结论。
+          </p>
+        )}
       {selected.status === "future" && !attempt ? (
         <>
           <p>此阶段尚未执行；点击节点不会启动任务。</p>
+          {instructions}
           <ul>
             {selected.conditions.map((c) => (
               <li key={c}>{c}</li>
@@ -170,7 +162,7 @@ export function StagePanel({
           输入版本已变化，请通过下一步重新核对。此前的结论和执行记录可在前面的阶段查看。
         </p>
       ) : selection.detail === "execution" && attempt ? (
-        render("work", attempt, readOnly)
+        render("work", attempt, readOnly, false, true)
       ) : selected.stage === "decision" && readOnly ? (
         <section>
           <p>已保存的维护者决定</p>
@@ -220,16 +212,57 @@ export function StagePanel({
           readOnly,
         )
       )}
+      {attempt && (
+        <div className="mw-stage-view-controls">
+          <button
+            type="button"
+            className="mw-text-button"
+            aria-label={
+              selection.detail === "execution" ? "查看阶段结果" : "查看执行详情"
+            }
+            onClick={() =>
+              choose({
+                ...selection,
+                nodeId: selected.id,
+                detail:
+                  selection.detail === "execution" ? "result" : "execution",
+              })
+            }
+          >
+            {selection.detail === "execution"
+              ? attempt.result || attempt.artifact
+                ? "查看结果"
+                : "返回处理进度"
+              : "执行详情"}
+          </button>
+        </div>
+      )}
+      {!timeline.historical &&
+        context &&
+        !(
+          selected.stage === "decision" &&
+          issue.type === "issue" &&
+          timeline.profile.category !== "question"
+        ) && (
+          <details className="mw-stage-context">
+            <summary>处理建议与计划</summary>
+            {context()}
+          </details>
+        )}
       {selected.stage === "decision" &&
         selected.id === timeline.currentNodeId &&
         attempt &&
         evidence?.(attempt)}
-      {selected.waits.length > 0 && (
+      {selected.waits.some((w) => w.state !== "open") && (
         <details>
-          <summary>本阶段等待 · {selected.waits.length}</summary>
-          {selected.waits.map((w) => (
-            <p key={w.id}>{w.reason}</p>
-          ))}
+          <summary>
+            等待记录 · {selected.waits.filter((w) => w.state !== "open").length}
+          </summary>
+          {selected.waits
+            .filter((w) => w.state !== "open")
+            .map((w) => (
+              <p key={w.id}>{w.reason}</p>
+            ))}
         </details>
       )}
     </section>

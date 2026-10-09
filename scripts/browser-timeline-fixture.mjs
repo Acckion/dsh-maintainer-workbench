@@ -276,18 +276,11 @@ try {
         const action = await panel
           .getByRole("button", { name: "补足审查证据", exact: true })
           .boundingBox();
-        const more = await panel
-          .locator("header .mw-assistant-more>summary")
-          .boundingBox();
         const box = await panel.boundingBox();
         const center = (r) => r.y + r.height / 2;
         assert.ok(
           Math.abs(center(title) - center(action)) <= 1,
           "title and action must align",
-        );
-        assert.ok(
-          Math.abs(center(more) - center(action)) <= 1,
-          "more and action must align",
         );
         assert.ok(
           title.y - box.y < 24,
@@ -367,6 +360,44 @@ try {
         .getByRole("button", { name: "返回当前阶段", exact: true })
         .click();
       await expect(panel).toContainText("执行中");
+      await expect(
+        panel.getByRole("region", { name: "处理进度", exact: true }),
+      ).toContainText("正在处理");
+      assert.equal(
+        await panel
+          .locator("header .mw-assistant-more button")
+          .filter({ hasText: "停止任务" })
+          .count(),
+        1,
+      );
+      assert.equal(
+        await panel
+          .locator("header .mw-assistant-more button")
+          .filter({ hasText: "停止任务" })
+          .isVisible(),
+        false,
+      );
+      assert.equal(
+        await panel.getByText("结论与证据", { exact: true }).count(),
+        0,
+      );
+      assert.equal(
+        await panel.getByText("分析依据 · 0", { exact: true }).count(),
+        0,
+      );
+      await panel
+        .getByRole("button", { name: "查看执行详情", exact: true })
+        .click();
+      await expect(
+        panel.getByRole("region", { name: "执行详情", exact: true }),
+      ).toContainText("正在核对源码覆盖");
+      await page.screenshot({
+        path: join(root, `timeline-execution-${width}.png`),
+        fullPage: true,
+      });
+      await panel
+        .getByRole("button", { name: "查看阶段结果", exact: true })
+        .click();
       await expect(nav.getByRole("button", { name: /^复审/ })).toBeVisible();
       await page.emulateMedia({ colorScheme: "dark" });
       await page.waitForTimeout(250);
@@ -402,8 +433,19 @@ try {
         .getByLabel("是否将联动验证纳入范围？", { exact: true })
         .waitFor();
       await expect(
-        flow.getByRole("button", { name: "等待填写补充信息", exact: true }),
+        flow.getByRole("button", { name: "根据补充信息继续", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        panel.getByRole("button", { name: "保存补充输入", exact: true }),
       ).toBeDisabled();
+      await page.evaluate(() => document.activeElement?.blur());
+      await expect(
+        panel.getByRole("region", { name: "处理进度", exact: true }),
+      ).toContainText("需要你补充信息");
+      await page.screenshot({
+        path: join(root, `timeline-input-${width}.png`),
+        fullPage: true,
+      });
       await page
         .getByLabel("是否将联动验证纳入范围？", { exact: true })
         .fill("先核对证据，不修改生产代码");

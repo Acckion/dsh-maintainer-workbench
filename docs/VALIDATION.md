@@ -223,3 +223,12 @@ management and light/dark layouts. The dirty-workspace browser fixture passed
 through isolated task execution and frozen patch generation. Navigation fixtures
 cover source-list restoration and asynchronous dispatch/review races; their
 batch operation entry now opens the latest master's advanced operations menu.
+
+### State-focused stage content (2026-10-09)
+
+Integrated master `525260a`. `npm run check` passed (356 tests, typecheck and
+build). Timeline, maintenance and navigation browser fixtures passed at desktop
+1440px and mobile 390px. State presentation, actionable input, hidden cancel,
+raw execution evidence and historical read-only behavior are covered. Results
+arriving while reading execution details preserve the selected view. Evidence
+and synthetic-data screenshots: `docs/evidence/workflow-progress-2026-10-09/`.

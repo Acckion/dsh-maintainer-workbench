@@ -46,7 +46,6 @@ import type { HostWorkspaces } from "./host-workspaces.ts";
 import { GlobalSettings } from "./GlobalSettings.tsx";
 
 import { API, request } from "./api.ts";
-import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
 import { InboxFilter } from "./InboxFilter.tsx";
 import { IssuePlanning } from "./IssuePlanning.tsx";
 import { flushItemDraft } from "./item-draft.ts";
@@ -75,13 +74,19 @@ import { ReviewActions } from "./ReviewActions.tsx";
 import { ReviewFindingControls } from "./ReviewFindingControls.tsx";
 
 import { WorkflowDetail } from "./WorkflowDetail.tsx";
+import { StageProgress } from "./StageProgress.tsx";
+import { StageExecutionDetails } from "./StageExecutionDetails.tsx";
 import { StageResult } from "./StageResult.tsx";
 import { taskGroups, type TaskFilter } from "./task-presentation.ts";
 export function App({
   openSession,
   host = false,
   hostWorkspaces,
-}: { hostWorkspaces?:HostWorkspaces; openSession?: (id: string) => void; host?: boolean } = {}) {
+}: {
+  hostWorkspaces?: HostWorkspaces;
+  openSession?: (id: string) => void;
+  host?: boolean;
+} = {}) {
   const [state, setState] = useState<Snapshot>();
   const [page, setPage] = useState<Page>("inbox");
   const [repoId, setRepoId] = useState(() => {
@@ -525,8 +530,18 @@ export function App({
     }
   }
   const nav = [
-    { id: "inbox", label: "Issues", icon: Inbox, count: open.filter((i) => i.type === "issue").length },
-    { id: "inbox", label: "Pull Requests", icon: GitPullRequest, count: open.filter((i) => i.type === "pr").length },
+    {
+      id: "inbox",
+      label: "Issues",
+      icon: Inbox,
+      count: open.filter((i) => i.type === "issue").length,
+    },
+    {
+      id: "inbox",
+      label: "Pull Requests",
+      icon: GitPullRequest,
+      count: open.filter((i) => i.type === "pr").length,
+    },
     { id: "organize", label: "Repository", icon: FileCheck2, count: 0 },
     {
       id: "tasks",
@@ -597,7 +612,10 @@ export function App({
               <button
                 key={n.label}
                 aria-current={
-                  (page === n.id && (n.id !== "inbox" || type === (n.label === "Issues" ? "issue" : "pr"))) || (n.id === "tasks" && page === "reviews")
+                  (page === n.id &&
+                    (n.id !== "inbox" ||
+                      type === (n.label === "Issues" ? "issue" : "pr"))) ||
+                  (n.id === "tasks" && page === "reviews")
                     ? "page"
                     : undefined
                 }
@@ -888,12 +906,17 @@ export function App({
                                 <span>
                                   #{i.number} · {i.author}
                                 </span>
-                                <span className="mw-issue-labels" aria-label="标签">{i.labels
-                                  .filter((l) => !/^p[0-3]$/i.test(l))
-                                  .slice(0, 2)
-                                  .map((l) => (
-                                    <Tag key={l}>{l}</Tag>
-                                  ))}</span>
+                                <span
+                                  className="mw-issue-labels"
+                                  aria-label="标签"
+                                >
+                                  {i.labels
+                                    .filter((l) => !/^p[0-3]$/i.test(l))
+                                    .slice(0, 2)
+                                    .map((l) => (
+                                      <Tag key={l}>{l}</Tag>
+                                    ))}
+                                </span>
                                 <span className="mw-issue-comments">
                                   {i.comments} 条讨论
                                 </span>
@@ -1195,52 +1218,58 @@ export function App({
                 </section>
               )}
               {page === "repository-settings" && (
-                <div className="mw-repository-settings"><RepositoryPolicy
-                  key={repoId}
-                  state={state}
-                  repoId={repoId}
-                  busy={!!busy}
-                  save={(value) =>
-                    action("policy", "/policy", value, "仓库策略已保存")
-                  }
-                /></div>
+                <div className="mw-repository-settings">
+                  <RepositoryPolicy
+                    key={repoId}
+                    state={state}
+                    repoId={repoId}
+                    busy={!!busy}
+                    save={(value) =>
+                      action("policy", "/policy", value, "仓库策略已保存")
+                    }
+                  />
+                </div>
               )}
-              {page === "settings" && <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} />}
+              {page === "settings" && (
+                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} />
+              )}
               {page === "repository-settings" && (
-                <div className="mw-repository-settings"><SettingsView
-                  key={page}
-                  scope="repository"
-                  state={state}
-                  repoId={repoId}
-                  busy={!!busy}
-                  prepare={() =>
-                    void action(
-                      "prepare",
-                      "/prepare",
-                      { repoId },
-                      "独立仓库已准备完成",
-                    )
-                  }
-                  save={(s) =>
-                    void action("settings", "/settings", s, "设置已保存")
-                  }
-                  credentials={(c) =>
-                    void action(
-                      "credentials",
-                      "/credentials",
-                      c,
-                      "连接配置已保存",
-                    )
-                  }
-                  bind={(path) =>
-                    void action(
-                      "bind",
-                      "/bind",
-                      { repoId, localPath: path },
-                      "工作区绑定成功",
-                    )
-                  }
-                /></div>
+                <div className="mw-repository-settings">
+                  <SettingsView
+                    key={page}
+                    scope="repository"
+                    state={state}
+                    repoId={repoId}
+                    busy={!!busy}
+                    prepare={() =>
+                      void action(
+                        "prepare",
+                        "/prepare",
+                        { repoId },
+                        "独立仓库已准备完成",
+                      )
+                    }
+                    save={(s) =>
+                      void action("settings", "/settings", s, "设置已保存")
+                    }
+                    credentials={(c) =>
+                      void action(
+                        "credentials",
+                        "/credentials",
+                        c,
+                        "连接配置已保存",
+                      )
+                    }
+                    bind={(path) =>
+                      void action(
+                        "bind",
+                        "/bind",
+                        { repoId, localPath: path },
+                        "工作区绑定成功",
+                      )
+                    }
+                  />
+                </div>
               )}
               {page === "settings" && (
                 <section className="mw-repository-manager mw-repository-table">
@@ -1604,13 +1633,7 @@ export function App({
             ? () => void openPublishPreview("comment")
             : undefined
         }
-        initialTab={
-          page === "inbox"
-            ? "overview"
-            : job?.kind === "review"
-              ? "review"
-              : "work"
-        }
+        initialTab="overview"
         issue={displayedIssue}
         repository={
           state?.repos.find((r) => r.id === displayedIssue.repoId)?.fullName ??
@@ -1650,11 +1673,21 @@ export function App({
         jobs={jobs}
         job={job}
         legacyTab={tab}
-        audit={state?.audit}
         render={renderStage}
         track={renderTrack}
         evidence={renderLinkedEvidence}
         context={renderProcessingAdvice}
+        instructions={
+          <ItemInstructions
+            issueId={displayedIssue.id}
+            onChange={(value) =>
+              setAssistantInstructions((current) => ({
+                ...current,
+                [displayedIssue.id]: value,
+              }))
+            }
+          />
+        }
         actions={renderWorkflowActions}
       />
     );
@@ -1685,9 +1718,10 @@ export function App({
 
   function renderStage(
     stage: AgentTab,
-    selectedJob = job,
+    selectedJob?: typeof job,
     readOnly = false,
     decision = false,
+    execution = false,
   ) {
     const job = selectedJob;
     if (!displayedIssue) return null;
@@ -1731,157 +1765,75 @@ export function App({
           </details>
         </>
       );
-    if (stage === "work")
+    if (stage === "work") {
+      if (!execution)
+        return (
+          <StageProgress
+            job={job}
+            issue={displayedIssue}
+            audit={state?.audit ?? []}
+            readOnly={readOnly}
+            openSession={openSession}
+            input={
+              !readOnly && (
+                <ProcessingInput
+                  issue={displayedIssue}
+                  runId={job?.id}
+                  embedded
+                  busy={!!busy}
+                  act={(path, data, message) =>
+                    action("workflow", path, data, message)
+                  }
+                />
+              )
+            }
+          />
+        );
       return (
-        <section className="mw-item-work">
-          {!readOnly && (
-            <ProcessingInput
-              issue={displayedIssue}
-              busy={!!busy}
-              act={(path, data, message) =>
-                action("workflow", path, data, message)
-              }
-            />
-          )}
-          <details className="mw-processing-tools">
-            <summary>处理记录与操作追踪</summary>
-            {!readOnly && (
-              <ProcessingHistory
-                issue={displayedIssue}
-                busy={!!busy}
-                act={(path, data, message) =>
-                  action("workflow", path, data, message)
+        <StageExecutionDetails
+          job={job}
+          audit={state?.audit ?? []}
+          openEvidence={(id) => openEvidenceJob(id, "log")}
+          openSession={openSession}
+          tools={
+            <details className="mw-processing-tools">
+              <summary>处理记录与操作追踪</summary>
+              {!readOnly && (
+                <ProcessingHistory
+                  issue={displayedIssue}
+                  busy={!!busy}
+                  act={(path, data, message) =>
+                    action("workflow", path, data, message)
+                  }
+                />
+              )}
+              <OperationTracker
+                record={operationRecords[repoId]}
+                jobs={jobs}
+                close={() =>
+                  setOperationRecords((records) => {
+                    const next = { ...records };
+                    delete next[repoId];
+                    return next;
+                  })
                 }
+                open={(id) => {
+                  navigationGeneration.current += 1;
+                  rememberOrigin(id);
+                  navigate("tasks", repoId, true);
+                  setTaskFilter("all");
+                  setFocused(undefined);
+                  setJobFocus(id);
+                  setReaderRequest(undefined);
+                  setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
+                  moveFocusToDetail();
+                }}
               />
-            )}
-            <OperationTracker
-              record={operationRecords[repoId]}
-              jobs={jobs}
-              close={() =>
-                setOperationRecords((records) => {
-                  const next = { ...records };
-                  delete next[repoId];
-                  return next;
-                })
-              }
-              open={(id) => {
-                navigationGeneration.current += 1;
-                rememberOrigin(id);
-                navigate("tasks", repoId, true);
-                setTaskFilter("all");
-                setFocused(undefined);
-                setJobFocus(id);
-                setReaderRequest(undefined);
-                setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
-                moveFocusToDetail();
-              }}
-            />
-          </details>
-          {job ? (
-            <>
-              <button
-                className="mw-text-button"
-                onClick={() => openEvidenceJob(job.id, "log")}
-              >
-                查看执行记录
-              </button>
-              {job.error && <p role="alert">{job.error}</p>}
-              {job.result && <p>{job.result.summary}</p>}
-              {job.sessionId && openSession && (
-                <button
-                  className="mw-button"
-                  onClick={() => openSession(job.sessionId!)}
-                >
-                  打开 Harness 会话
-                </button>
-              )}
-              {job.evidenceGate && !job.evidenceGate.allowed && (
-                <p className="mw-callout red">
-                  证据待补齐：{job.evidenceGate.reasons.join("；")}
-                </p>
-              )}
-              <details>
-                <summary>分析依据 · {job.result?.evidence.length ?? 0}</summary>
-                {job.result?.evidence.map((item, index) => (
-                  <article className="mw-evidence" key={index}>
-                    <strong>{item.source}</strong>
-                    <p>{item.detail}</p>
-                  </article>
-                ))}
-              </details>
-              {job.toolDiagnostics && (
-                <details>
-                  <summary>工具与执行环境</summary>
-                  <p>
-                    {job.toolDiagnostics.provider}/{job.toolDiagnostics.model} ·{" "}
-                    {job.toolDiagnostics.preset} ·{" "}
-                    {job.toolDiagnostics.permission}
-                  </p>
-                  <p>挂载工具：{job.toolDiagnostics.mountedTools.join(", ")}</p>
-                  <p>
-                    请求 {job.toolDiagnostics.requests.length} · 调用{" "}
-                    {job.toolDiagnostics.calls} · 宿主结果{" "}
-                    {job.toolDiagnostics.canonicalResults} · 错误{" "}
-                    {job.toolDiagnostics.errors}
-                  </p>
-                  <p>
-                    基线 {job.baseSha} · 输入版本 {job.revision} · Token{" "}
-                    {job.tokens ?? "未采集"}
-                  </p>
-                </details>
-              )}
-              {job.rawOutput && !job.result && (
-                <details>
-                  <summary>未解析的原始输出</summary>
-                  <pre>{job.rawOutput}</pre>
-                </details>
-              )}
-              {job.executionRecords?.map((record) => (
-                <ExecutionEvidence key={record.id} job={job} record={record} />
-              ))}
-              <details>
-                <summary>运行记录</summary>
-                {state?.audit
-                  .filter((a) => a.jobId === job.id)
-                  .slice()
-                  .reverse()
-                  .map((a) => (
-                    <div className="mw-job-log" key={a.id}>
-                      <time>{date(a.at)}</time>
-                      <p>{a.detail}</p>
-                    </div>
-                  ))}
-              </details>
-            </>
-          ) : (
-            <p>暂无执行任务。</p>
-          )}
-          {!readOnly && (
-            <ItemInstructions
-              issueId={displayedIssue.id}
-              onChange={(value) =>
-                setAssistantInstructions((current) => ({
-                  ...current,
-                  [displayedIssue.id]: value,
-                }))
-              }
-            />
-          )}
-          <details>
-            <summary>处理历史 · {history.length}</summary>
-            {history.map((j) => (
-              <button
-                className="mw-task-row"
-                key={j.id}
-                onClick={() => openEvidenceJob(j.id, "evidence")}
-              >
-                {kindNames[j.kind]} · {taskStatus(j).label} ·{" "}
-                {date(j.createdAt)}
-              </button>
-            ))}
-          </details>
-        </section>
+            </details>
+          }
+        />
       );
+    }
     if (stage === "review")
       return job && (job.result || job.artifact || job.patch) ? (
         <>
