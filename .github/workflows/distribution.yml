@@ -116,7 +116,7 @@ jobs:
           elif [ "$status" = 404 ]; then
             # Immutable commit tags prevent older concurrent builds from moving
             # the master alias backwards. Every commit can still be published.
-            npm publish dsh-maintainer-workbench.tgz --access public --tag "commit-$SOURCE_SHA" --ignore-scripts --provenance
+            npm publish ./dsh-maintainer-workbench.tgz --access public --tag "commit-$SOURCE_SHA" --ignore-scripts --provenance
           else
             echo "npm registry lookup failed: HTTP $status" >&2
             exit 1
