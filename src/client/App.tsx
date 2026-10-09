@@ -650,7 +650,7 @@ export function App({
                 <p>
                   {repo.localKind === "folder"
                     ? "普通文件夹：可执行只读仓库检查。"
-                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：可只读检查；隔离修改暂需提交后执行" : "工作区干净，可执行隔离任务"}`}
+                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：任务基于已提交版本在独立 worktree 执行，本地修改保留" : "工作区干净，可执行隔离任务"}`}
                 </p>
                 <p>
                   {repo.githubName

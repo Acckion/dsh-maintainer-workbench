@@ -87,15 +87,8 @@ export class TaskService extends ServiceBase {
         !(issue.organizeMode === "audit" && kind === "investigate")
       )
         throw new Error("无 Git 提交的目录当前仅支持只读仓库检查");
-      if (
-        !lightweight(kind) &&
-        repo.mode === "local" &&
-        repo.dirty &&
-        !(issue.organizeMode === "audit" && kind === "investigate")
-      )
-        throw new Error(
-          "当前工作区有未提交修改；隔离修改任务需先提交，只读检查仍可使用",
-        );
+      // Code tasks run in a fresh worktree pinned to baseSha. The source
+      // checkout's index and uncommitted files are never task input.
       if (
         (["preflight", "ci"].includes(kind) ||
           (kind === "review" && !options.sourceJobId)) &&
