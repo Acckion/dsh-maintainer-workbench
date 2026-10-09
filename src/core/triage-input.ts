@@ -9,7 +9,7 @@ export function triageInput(repo: Repo, issue: Issue, related: Issue[], context:
     if (Array.isArray(raw)) comments = raw.slice(-5).map(c => ({author:c.user?.login ?? c.author,body:String(c.body ?? '').slice(0,800)}));
   } catch { /* Missing context is reported explicitly, never passed as broken JSON. */ }
   return {
-    repository: {name:repo.githubName ?? repo.fullName,languages:repo.profile?.languages,roots:repo.profile?.roots.slice(0,12)},
+    repository: {name:repo.githubName ?? repo.fullName,languages:repo.profile?.languages,roots:repo.profile?.roots.slice(0,12),guidance:repo.profile?.sources.filter(s=>/AGENTS|CONTRIBUTING|README/.test(s.path)).slice(0,3).map(s=>({path:s.path,excerpt:s.content.slice(0,800)})),guidanceCoverage:'At most 3 cached excerpts, 800 characters each; execution must read full applicable guidance.'},
     issue:{number:issue.number,title:issue.title,body,labels:issue.labels,comments:issue.comments},
     related:related.slice(0,6).map(i=>({number:i.number,title:i.title,body:i.body.slice(0,500)})),
     comments,

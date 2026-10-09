@@ -122,6 +122,27 @@ export function handler(
         return;
       }
       const input = await body(req);
+      if (path === "/workflow/analyze") {
+        const p = z.object({ issueIds: z.array(z.string()).min(1).max(workbench.store.settings().maxJobsPerBatch), refresh:z.boolean().optional() }).parse(input);
+        send(res, 200, workbench.orchestration.analyze(p.issueIds,p.refresh)); return;
+      }
+      if (path === "/workflow/start-batch") {
+        const p = z.object({ items: z.array(z.object({ issueId: z.string(), inputKey: z.string(), plan: z.unknown() })).min(1).max(workbench.store.settings().maxJobsPerBatch) }).parse(input);
+        send(res, 200, workbench.orchestration.startBatch(p.items)); return;
+      }
+      if (path === "/workflow/wait-author") {
+        workbench.orchestration.waitAuthor(z.object({ id: z.string() }).parse(input).id);
+        send(res, 200, { ok: true }); return;
+      }
+      if (path === "/workflow/start") {
+        const p = z.object({ issueId: z.string(), inputKey: z.string(), plan: z.unknown(), route: z.enum(kinds).optional(), sourceJobId: z.string().optional(), feedback: z.string().max(4000).optional() }).parse(input);
+        send(res, 200, workbench.orchestration.start(p.issueId, p.inputKey, p.plan, p.route, p.sourceJobId, p.feedback)); return;
+      }
+      if (["/workflow/pause", "/workflow/cancel", "/workflow/resume", "/workflow/retry"].includes(path)) {
+        const p = z.object({ issueId: z.string() }).parse(input);
+        const result = path.endsWith("retry") ? workbench.orchestration.retry(p.issueId) : path.endsWith("resume") ? workbench.orchestration.resume(p.issueId) : workbench.orchestration.pause(p.issueId, path.endsWith("cancel"));
+        send(res, 200, result ?? { ok: true }); return;
+      }
       if (path === "/sync-all") {
         const names = [
           ...new Set(

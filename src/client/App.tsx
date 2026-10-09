@@ -34,6 +34,7 @@ import {
   restoreOrigin,
   type NavigationOrigin,
 } from "./navigation-origin.ts";
+import { BatchWorkflow } from "./BatchWorkflow.tsx";
 import React, {
   useCallback,
   useEffect,
@@ -683,7 +684,7 @@ export function App({
   const repo = state?.repos.find((r) => r.id === repoId);
   const issues = state?.issues.filter((i) => i.repoId === repoId) ?? [];
   const jobs = state?.jobs.filter((j) => j.repoId === repoId) ?? [];
-  const pending = reviewQueue(jobs);
+  const pending = reviewQueue(jobs).filter(j => { const run=issues.find(i=>i.id===j.issueId)?.orchestration?.run; return !run || (run.status === "review" && run.currentJobId === j.id); });
   const running = jobs.filter((j) => ["running", "queued"].includes(j.status));
   const open = issues.filter((i) => i.state === "open" && !i.origin);
   const triaged = open.filter((i) => i.type === "issue" && i.analysis);
@@ -727,7 +728,8 @@ export function App({
       `${j.issueSnapshot.title} ${j.issueSnapshot.number} ${kindNames[j.kind]}`
         .toLowerCase()
         .includes(search.toLowerCase()),
-    );
+    )
+    .filter((j, index, all) => all.findIndex(item => item.issueId === j.issueId) === index);
   async function openPublishPreview(
     publishKind: NonNullable<typeof publishAction>,
   ) {
@@ -998,8 +1000,10 @@ export function App({
               {page === "attention" && (
                 <Attention
                   state={state}
-                  open={(id) => {
+                  open={(id, issueId) => {
                     navigate("inbox", id);
+                    setFocused(issueId);
+                    setDetailOpen(false);
                   }}
                 />
               )}
@@ -1100,20 +1104,8 @@ export function App({
                         </span>
                       </label>
                       <div>
-                        <button
-                          disabled={!selected.length || !!busy}
-                          onClick={() => void enqueue("triage")}
-                        >
-                          <Sparkles size={14} />
-                          分诊 / 预检
-                        </button>
-                        <button
-                          disabled={!selected.length || !!busy}
-                          onClick={() => void enqueue("investigate")}
-                        >
-                          <Search size={14} />
-                          调查
-                        </button>
+                        <BatchWorkflow issues={issues.filter(i=>selected.includes(i.id))} busy={!!busy} act={(path,data,message)=>action("workflow-batch",path,data,message)} />
+                        <details><summary>高级操作</summary>
                         <select
                           aria-label="更多批量操作"
                           value=""
@@ -1127,7 +1119,9 @@ export function App({
                             )
                           }
                         >
-                          <option value="">更多操作</option>
+                          <option value="">单独派发阶段</option>
+                          <option value="triage">分诊 / 预检</option>
+                          <option value="investigate">调查</option>
                           <option value="fix">修复与验证</option>
                           <option value="preflight">PR 预检</option>
                           <option value="review">PR 审查</option>
@@ -1138,6 +1132,7 @@ export function App({
                           <option value="ci">诊断 CI</option>
                           <option value="docs">文档维护</option>
                         </select>
+                        </details>
                       </div>
                     </div>
                     <div className="mw-issues">
@@ -1328,7 +1323,7 @@ export function App({
                                 ? "仓库整理"
                                 : `#${j.issueSnapshot.number}`}{" "}
                               <span>·</span> {kindNames[j.kind]} <span>·</span>{" "}
-                              第 {j.attempt} 次尝试
+                              {jobs.filter(item => item.issueId === j.issueId).length} 次运行
                             </p>
                             <small>
                               {j.engine ?? "等待执行器"} · {date(j.createdAt)} ·{" "}
@@ -1888,23 +1883,7 @@ export function App({
             ? "分类、优先级与下一步路由；PR 使用快速预检。结果按版本保存，未变化时直接复用。"
             : "从调查到实施和验证，查看任务进度及执行记录。"}
         </p>
-        <div className="mw-detail-actions">
-          {(stage === "triage"
-            ? [displayedIssue.type === "pr" ? "preflight" : "triage"]
-            : displayedIssue.type === "pr"
-              ? ["review", "ci"]
-              : ["investigate", "fix"]
-          ).map((kind) => (
-            <button
-              key={kind}
-              className="mw-button"
-              disabled={!!busy}
-              onClick={() => void enqueue(kind as JobKind, [displayedIssue.id])}
-            >
-              {kindNames[kind as JobKind]}
-            </button>
-          ))}
-        </div>
+        <WorkflowPanel hideSummary issue={displayedIssue} job={latest} history={history} busy={!!busy} act={(path,data,message)=>action("workflow",path,data,message)} />
         {relevant.length > 0 && (
           <div className="mw-stage-jobs">
             {relevant.map((j) => (
@@ -1918,18 +1897,6 @@ export function App({
               </button>
             ))}
           </div>
-        )}
-        {stage === "triage" && (
-          <WorkflowPanel
-            hideSummary
-            issue={displayedIssue}
-            job={latest}
-            history={history}
-            busy={!!busy}
-            act={(path, data, message) =>
-              action("workflow", path, data, message)
-            }
-          />
         )}
         {latest?.error && <div className="mw-callout red">{latest.error}</div>}
         {latest?.result ? (
@@ -2076,7 +2043,7 @@ export function App({
                 disabled={!!busy}
                 onClick={() => void openPublishPreview("review")}
               >
-                发布已采纳发现
+                交给作者：预览审查意见
               </button>
             )}
             {job.patch && ["fix", "docs"].includes(job.kind) && (
@@ -2186,36 +2153,6 @@ export function App({
           <span>·</span>
           {date(displayedIssue.updatedAt)}
         </div>
-        {page === "inbox" && (
-          <div className="mw-detail-actions">
-            <button
-              className="mw-button primary"
-              disabled={!!busy}
-              onClick={() =>
-                void enqueue(
-                  displayedIssue.type === "pr" ? "preflight" : "triage",
-                  [displayedIssue.id],
-                )
-              }
-            >
-              <Sparkles size={14} />
-              {displayedIssue.type === "pr" ? "变更预检" : "快速分诊"}
-            </button>
-            <button
-              className="mw-button"
-              disabled={!!busy}
-              onClick={() =>
-                void enqueue(
-                  displayedIssue.type === "pr" ? "review" : "investigate",
-                  [displayedIssue.id],
-                )
-              }
-            >
-              {displayedIssue.type === "pr" ? "审查 PR" : "深入调查"}
-              <ArrowRight size={14} />
-            </button>
-          </div>
-        )}
         <div className="mw-tabs mw-detail-tabs">
           {[
             ["overview", "概览"],

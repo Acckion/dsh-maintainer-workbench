@@ -170,6 +170,7 @@ export interface Repo {
   policy?: Pick<
     Settings,
     | "syncLimit"
+    | "autoReview"
     | "autoPreflight"
     | "autoTriage"
     | "syncIntervalMinutes"
@@ -204,6 +205,8 @@ export interface PRContext {
   warnings: string[];
 }
 export interface Issue {
+  orchestration?: import("./orchestration.ts").WorkflowState;
+  processing?: { status: "plan" | "running" | "blocked" | "review" | "waiting" | "stale" | "deferred"; reason: string };
   remotePRs?: import("./remote-progress.ts").RemotePR[];
   actions?: import("./remote-progress.ts").ActionsSnapshot;
   remoteWarning?: string;
@@ -241,6 +244,7 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 export interface Job {
+  workflowRunId?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
   evidenceGate?: { allowed: boolean; reasons: string[] };
@@ -322,6 +326,7 @@ export interface Audit {
 export interface Settings {
   syncLimit?: number;
   autoPreflight?: boolean;
+  autoReview?: boolean;
   triageMaxTokens?: number;
   concurrency: number;
   maxJobsPerBatch: number;

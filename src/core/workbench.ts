@@ -1,3 +1,4 @@
+import { Orchestration } from "./orchestration.ts";
 import { documentAcceptance } from "./document-acceptance.ts";
 import { validationInstructions } from "./validation-context.ts";
 import { reviewRequiredSources } from "./review-context.ts";
@@ -67,6 +68,7 @@ const readOnlyCode = (kind: JobKind): boolean =>
 const settingsSchema = z.object({
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
   autoPreflight: z.boolean().default(false),
+  autoReview: z.boolean().default(false),
   triageMaxTokens: z.number().int().min(500).max(8000).default(1800),
   concurrency: z.number().int().min(1).max(4),
   maxJobsPerBatch: z.number().int().min(1).max(50),
@@ -81,6 +83,7 @@ const settingsSchema = z.object({
 });
 
 export class Workbench {
+  readonly orchestration: Orchestration;
   private active = new Map<string, AbortController>();
   private completions = new Set<Promise<void>>();
   private closed = false;
@@ -104,6 +107,7 @@ export class Workbench {
     private autoStart = true,
     private hostStatus?: () => HostStatus,
   ) {
+    this.orchestration = new Orchestration(this);
     for (const repo of store.repos())
       if (
         repo.syncWarning?.includes(
@@ -146,7 +150,7 @@ export class Workbench {
         }
       }
     if (autoStart) {
-      queueMicrotask(() => this.pump());
+      queueMicrotask(() => { this.orchestration.reconcile(); this.pump(); });
       this.pollTimer = setInterval(() => void this.poll(), 60000);
       this.pollTimer.unref();
     }
@@ -210,7 +214,8 @@ export class Workbench {
               interval * 60000
           )
             await this.sync(repo.githubName ?? repo.fullName);
-          this.autoTriage(repo.id);
+          this.orchestration.synced(repo.id);
+    this.autoTriage(repo.id);
         } catch (error) {
           if (!this.closed)
             this.store.audit(
@@ -293,7 +298,7 @@ export class Workbench {
             this.store.issues().some((i) => i.repoId === r.id) ||
             this.store.jobs().some((j) => j.repoId === r.id),
         ),
-      issues: this.store.issues(),
+      issues: this.store.issues().map(issue => ({ ...issue, processing: this.orchestration.view(issue) })),
       jobs: this.store
         .jobs()
         .reverse()
@@ -498,6 +503,7 @@ export class Workbench {
         this.store.put("issues", {
           ...issue,
           informationRequests,
+          orchestration: old?.orchestration,
           linkedPullRequests: old?.linkedPullRequests,
           remotePRs: old?.remotePRs,
           remoteWarning: old?.remoteWarning,
@@ -780,6 +786,7 @@ export class Workbench {
       sourceJobId?: string;
       instructions?: string;
       forceNew?: boolean;
+      workflowRunId?: string;
     } = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
@@ -842,7 +849,7 @@ export class Workbench {
         ids.length !== 1 ||
         source.issueId !== ids[0] ||
         !source.result ||
-        !["completed", "awaiting_review", "approved"].includes(source.status)
+        (!["completed", "awaiting_review", "approved"].includes(source.status) && !(options.workflowRunId && source.status === "rejected" && source.kind === "review" && ["fix","docs"].includes(kind)))
       )
         throw new Error("交接来源必须是同一事项的已完成产物");
       if (
@@ -872,6 +879,7 @@ export class Workbench {
           .issueJobs(issue.id, kind, rev)
           .find(
             (j) =>
+              j.workflowRunId === options.workflowRunId &&
               j.sourceJobId === options.sourceJobId &&
               (j.instructions ?? "") === (options.instructions ?? "") &&
               !["failed", "cancelled", "rejected"].includes(j.status),
@@ -930,6 +938,7 @@ export class Workbench {
           });
         }
         const job: Job = {
+          workflowRunId: options.workflowRunId,
           handoff,
           sourceJobId: options.sourceJobId,
           instructions: options.instructions?.slice(0, 8000),
@@ -984,6 +993,7 @@ export class Workbench {
       finishedAt: new Date().toISOString(),
     });
     this.active.get(id)?.abort(new Error("维护者取消了任务"));
+    this.orchestration.completed(this.job(id));
     this.store.audit(
       "job.cancelled",
       "由维护者取消；已生成的 worktree 保留供检查",
@@ -1051,6 +1061,7 @@ export class Workbench {
     return this.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
+      workflowRunId: job.workflowRunId,
     });
   }
   async review(
@@ -1126,6 +1137,7 @@ export class Workbench {
       status: decision === "approve" ? "approved" : "rejected",
       reviewNote: note,
     });
+    this.orchestration.reviewDecision(this.job(id), decision);
     this.store.audit(
       `job.${decision}`,
       note ||
@@ -1589,7 +1601,7 @@ export class Workbench {
     this.publishing.add(target);
     try {
       const job = this.job(id);
-      return await publish(
+      const urls = await publish(
         this.store,
         job,
         this.repo(job.repoId),
@@ -1598,6 +1610,8 @@ export class Workbench {
         undefined,
         expectedPreview,
       );
+      if (action === "review" && job.artifact?.stage === "review" && job.artifact.findings.length && this.store.get<Issue>("issues", job.issueId)?.orchestration?.run) this.orchestration.waitAuthor(job.id);
+      return urls;
     } finally {
       this.publishing.delete(id);
       this.publishing.delete(target);
@@ -1608,6 +1622,7 @@ export class Workbench {
       .object({
         syncLimit: z.number().int().min(0).max(1000000).optional(),
         autoPreflight: z.boolean().optional(),
+        autoReview: z.boolean().optional(),
         autoTriage: z.boolean(),
         syncIntervalMinutes: z.number().int().min(0).max(1440),
         timeoutMs: z.number().int().min(1000).max(1800000),
@@ -2204,6 +2219,7 @@ export class Workbench {
       );
     } finally {
       clearTimeout(timer);
+      this.orchestration.completed(this.job(job.id));
     }
   }
   async drain(): Promise<void> {

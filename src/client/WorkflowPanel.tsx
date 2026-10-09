@@ -1,3 +1,4 @@
+import { WorkflowCard } from "./WorkflowCard.tsx";
 import { validationInstructions } from "../core/validation-scope.ts";
 import { RemoteProgress } from "./RemoteProgress.tsx";
 import React, { useEffect, useState } from "react";
@@ -154,9 +155,7 @@ export function WorkflowPanel({
                   : "待分诊"))}
         </span>
       </div>
-      {!issue.origin && issue.type === "issue" && issue.state === "open" && (
-        <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
-      )}
+      <WorkflowCard issue={issue} history={history} busy={busy} act={act} />
       {job?.deliveryReviewId && (
         <p className="mw-callout">
           此产物保存了审查关联；当前有效性与限制请核对审阅摘要，发布时仍会再次检查。
@@ -369,11 +368,13 @@ export function WorkflowPanel({
           </pre>
         </details>
       )}
-      {blocker && <p className="mw-callout amber">{blocker}</p>}
+      {blocker && !issue.orchestration && <p className="mw-callout amber">{blocker}</p>}
       {issue.state === "open" && (
         <>
+          <details><summary>高级操作</summary>
+          {!issue.origin && issue.type === "issue" && <IssuePlanning issue={issue} job={job} busy={busy} act={act} />}
           <label>
-            下一阶段目标、验收条件或修订意见（填写后随下一阶段派发）
+            补充说明或修订意见（可选）
             <textarea
               rows={3}
               value={instructions}
@@ -396,8 +397,8 @@ export function WorkflowPanel({
               </button>
             )}
           </div>
-          <details>
-            <summary>其他阶段与快捷操作</summary>
+          <div>
+            <h4>单独运行指定阶段</h4>
             <div className="mw-workflow-actions">
               {(issue.type === "pr"
                 ? ["preflight", "review", "ci", "fix", "validate"]
@@ -425,7 +426,7 @@ export function WorkflowPanel({
                 </button>
               ))}
             </div>
-          </details>
+          </div>
           {issue.type === "issue" && (
             <div className="mw-workflow-actions">
               {[
@@ -450,6 +451,7 @@ export function WorkflowPanel({
               ))}
             </div>
           )}
+          </details>
         </>
       )}
       <details>

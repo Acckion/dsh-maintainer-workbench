@@ -398,3 +398,7 @@
 
 .mw-final-review-nav { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 14px; }
 .mw-final-review-nav .mw-text-button { font-size: 12px !important; }
+
+.mw-workflow-card { border:1px solid var(--border,#d4e3dc); border-radius:12px; padding:18px; margin:12px 0; background:var(--surface,#fff); }
+.mw-workflow-progress { display:flex; flex-wrap:wrap; gap:20px; padding-left:24px; color:var(--muted,#587568); }
+.mw-workflow-card details { margin:12px 0; }
