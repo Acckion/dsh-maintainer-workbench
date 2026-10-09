@@ -150,7 +150,17 @@ export function handler(
           200,
           await workbench.syncMany(
             z
-              .object({ names: z.array(z.string().max(250)).min(1).max(20) })
+              .object({
+                names: z
+                  .array(
+                    z
+                      .string()
+                      .max(250, "单个仓库地址不能超过 250 个字符")
+                      .min(1, "仓库地址不能为空"),
+                  )
+                  .min(1, "请至少输入 1 个仓库")
+                  .max(20, "一次最多 20 个仓库，请分批连接"),
+              })
               .parse(input).names,
           ),
         );

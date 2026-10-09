@@ -181,6 +181,7 @@ export interface Repo {
   fullName: string;
   description: string;
   defaultBranch: string;
+  localBranch?: string;
   headSha: string;
   localPath: string;
   mode: "github" | "local";

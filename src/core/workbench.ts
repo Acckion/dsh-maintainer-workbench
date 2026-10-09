@@ -10,6 +10,7 @@ import { prNumber } from "./remote-progress.ts";
 import { lightweight, asAnalysis, type FindingDecision } from "./artifacts.ts";
 import { githubDetail, type DetailSection } from "./github-details.ts";
 import { discoverWorkspace } from "./workspace-discovery.ts";
+import { normalizeRepoName } from "./repo-name.ts";
 import {
   organizeActions,
   organizeModes,
@@ -330,46 +331,57 @@ export class Workbench {
     this.store.put("jobs", { ...job, updatedAt: new Date().toISOString() });
   }
   async syncMany(names: string[]) {
-    const unique = [
-      ...new Set(
-        names.map((n) =>
-          n
-            .trim()
-            .replace(/^https:\/\/github\.com\//i, "")
-            .replace(/\/$/, "")
-            .replace(/\.git$/, "")
-            .toLowerCase(),
-        ),
-      ),
-    ];
-    if (
-      !unique.length ||
-      unique.length > 20 ||
-      unique.some(
-        (n) => !/^[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_.-]*$/.test(n),
-      )
-    )
+    const results: { fullName: string; repoId?: string; error?: string }[] = [];
+    const seen = new Set<string>();
+    const pending: { index: number; fullName: string }[] = [];
+    let synced = 0;
+    for (const raw of names) {
+      const fullName = normalizeRepoName(raw);
+      if (!fullName) {
+        const key = `invalid:${raw.trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        results.push({
+          fullName: raw.trim() || raw,
+          error: "不是有效的 owner/repository 或 GitHub 仓库地址",
+        });
+        continue;
+      }
+      if (seen.has(fullName)) continue;
+      seen.add(fullName);
+      if (synced >= 20) {
+        results.push({ fullName, error: "一次最多连接 20 个仓库，请分批" });
+        continue;
+      }
+      synced += 1;
+      pending.push({ index: results.length, fullName });
+      results.push({ fullName });
+    }
+    for (const { index, fullName } of pending) {
+      try {
+        await this.sync(fullName);
+        results[index] = {
+          fullName,
+          repoId: this.findRepoForRemote(fullName)?.id,
+        };
+      } catch (error) {
+        results[index] = {
+          fullName,
+          error: error instanceof Error ? error.message : "同步失败",
+        };
+      }
+    }
+    if (!results.length)
       throw new Error(
         "请输入 1–20 个有效的 owner/repository 或 GitHub 仓库地址",
       );
-    const results: { fullName: string; repoId?: string; error?: string }[] = [];
-    for (const fullName of unique) {
-      try {
-        await this.sync(fullName);
-        results.push({
-          fullName,
-          repoId: this.store
-            .repos()
-            .find((r) => r.fullName.toLowerCase() === fullName)?.id,
-        });
-      } catch (error) {
-        results.push({
-          fullName,
-          error: error instanceof Error ? error.message : "同步失败",
-        });
-      }
-    }
     return { results };
+  }
+  private findRepoForRemote(fullName: string): Repo | undefined {
+    const target = fullName.toLowerCase();
+    return this.store
+      .repos()
+      .find((r) => (r.githubName ?? r.fullName).toLowerCase() === target);
   }
   async sync(fullName: string): Promise<void> {
     const key = fullName.toLowerCase();
@@ -387,18 +399,30 @@ export class Workbench {
       .find(
         (r) =>
           (r.githubName ?? r.fullName).toLowerCase() === fullName.toLowerCase(),
-      );
+      ) ??
+      this.store
+        .repos()
+        .find((r) =>
+          (r.remoteCandidates ?? []).some(
+            (c) => c.toLowerCase() === fullName.toLowerCase(),
+          ),
+        );
     const { repo, issues } = await this.github.sync(
       fullName,
       configured?.policy?.syncLimit ?? this.store.settings().syncLimit ?? 1000,
     );
+    const target = repo.fullName.toLowerCase();
     const prev =
       this.store
         .repos()
         .find(
           (r) =>
             r.discovered &&
-            r.githubName?.toLowerCase() === repo.fullName.toLowerCase(),
+            (r.githubName?.toLowerCase() === target ||
+              (!r.githubName &&
+                (r.remoteCandidates ?? []).some(
+                  (c) => c.toLowerCase() === target,
+                ))),
         ) ?? this.store.get<Repo>("repos", repo.id);
     if (prev?.discovered) {
       const remoteId = repo.id;
@@ -408,8 +432,9 @@ export class Workbench {
         discovered: true,
         localKind: prev.localKind,
         workspacePaths: prev.workspacePaths,
-        githubName: prev.githubName,
+        githubName: prev.githubName ?? repo.fullName,
         remoteCandidates: prev.remoteCandidates,
+        localBranch: prev.localBranch,
         dirty: prev.dirty,
         headSha: prev.headSha,
       });

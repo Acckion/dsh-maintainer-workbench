@@ -907,7 +907,7 @@ export function App({
                 <p>
                   {repo.localKind === "folder"
                     ? "普通文件夹：可执行只读仓库检查。"
-                    : `当前分支：${repo.defaultBranch} · ${repo.dirty ? "有未提交修改：可只读检查；隔离修改暂需提交后执行" : "工作区干净，可执行隔离任务"}`}
+                    : `当前分支：${repo.localBranch ?? repo.defaultBranch} · ${repo.dirty ? "有未提交修改：可只读检查；隔离修改暂需提交后执行" : "工作区干净，可执行隔离任务"}`}
                 </p>
                 <p>
                   {repo.githubName
@@ -1500,7 +1500,12 @@ export function App({
                       if (r) {
                         setConnectionResults(r.results);
                         setRepoInput(
-                          state.repos.map((r) => r.fullName).join("\n"),
+                          state.repos
+                            .map((r) =>
+                              r.mode === "github" ? r.fullName : r.githubName,
+                            )
+                            .filter((n): n is string => !!n)
+                            .join("\n"),
                         );
                         setConnect(true);
                       }
@@ -1707,23 +1712,33 @@ export function App({
             onClick={(e) => e.stopPropagation()}
             onSubmit={async (e) => {
               e.preventDefault();
-              const r = await action(
-                "connect",
-                "/sync-many",
-                {
-                  names: repoInput
-                    .split(/[\n,，]+/)
-                    .map((n) => n.trim())
-                    .filter(Boolean),
-                },
-                "仓库连接检查完成",
-              );
-              if (r) {
-                setConnectionResults(r.results);
-                const connected = r.results.find(
-                  (item: { repoId?: string }) => item.repoId,
-                );
+              const names = repoInput
+                .split(/[\n,，]+/)
+                .map((n) => n.trim())
+                .filter(Boolean);
+              if (busy || !names.length) return;
+              setBusy("connect");
+              try {
+                const results: {
+                  fullName: string;
+                  repoId?: string;
+                  error?: string;
+                }[] = [];
+                for (let i = 0; i < names.length; i += 20)
+                  results.push(
+                    ...(await request("/sync-many", {
+                      names: names.slice(i, i + 20),
+                    })).results,
+                  );
+                await refresh();
+                setConnectionResults(results);
+                setToast({ text: "仓库连接检查完成" });
+                const connected = results.find((item) => item.repoId);
                 if (connected) navigate(page, connected.repoId);
+              } catch (e) {
+                setToast({ text: (e as Error).message, error: true });
+              } finally {
+                setBusy("");
               }
             }}
           >
