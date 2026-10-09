@@ -13,6 +13,7 @@ export const inputRequestSchema = z
               "输入字段不能使用保留属性名",
             ),
           question: z.string().trim().min(1).max(1000),
+          purpose: z.enum(["information", "decision", "plan_confirmation"]).optional(),
           options: z
             .array(
               z.object({
