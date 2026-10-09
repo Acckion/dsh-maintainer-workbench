@@ -4,6 +4,7 @@ import { eventDescription } from "../workflow/presentation.ts";
 import type { ProcessingCase } from "../domain/processing.ts";
 import type { ProcessingTimeline, TimelineNode } from "../domain/timeline.ts";
 import { projectTimeline } from "../workflow/timeline.ts";
+import { actionsForStage } from "../workflow/stage-actions.ts";
 import { availableActions } from "../workflow/actions.ts";
 import { StagePanel, type StageSelection } from "./StagePanel.tsx";
 import { API, request } from "./api.ts";
@@ -289,13 +290,15 @@ export function WorkflowDetail({
                   render={render}
                   track={track}
                   evidence={evidence}
-                  context={context}
+                  context={
+                    actionsForStage(timeline, selected)?.primary
+                      ? context
+                      : undefined
+                  }
                   progress={progress}
                   actions={
-                    !timeline.historical &&
-                    selected.id === timeline.currentNodeId &&
-                    (!readOnly || selected.result === "输入已更新")
-                      ? actions(currentJob, timeline.actions)
+                    actionsForStage(timeline, selected)
+                      ? actions(currentJob, actionsForStage(timeline, selected))
                       : undefined
                   }
                 />

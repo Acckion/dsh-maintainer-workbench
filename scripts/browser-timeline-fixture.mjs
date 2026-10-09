@@ -183,6 +183,10 @@ try {
         .locator('[id="mw-item-openclaw/openclaw#166828"]')
         .click();
       await actionPage
+        .getByRole("navigation", { name: "处理阶段" })
+        .getByRole("button", { name: /^补充调查/ })
+        .click();
+      await actionPage
         .getByRole("button", { name: "补足审查证据", exact: true })
         .click();
       await expect.poll(() => payload?.kind).toBe("investigate");
@@ -250,11 +254,29 @@ try {
           .count(),
         0,
       );
+      assert.equal(
+        await panel
+          .getByRole("button", { name: "补足审查证据", exact: true })
+          .count(),
+        0,
+      );
+      assert.equal(await panel.locator(".mw-stage-next").count(), 0);
+      await flow
+        .getByRole("navigation", { name: "处理阶段" })
+        .getByRole("button", { name: /^补充调查/ })
+        .click();
       assert.ok(
-        await flow
+        await panel
           .getByRole("button", { name: "补足审查证据", exact: true })
           .isEnabled(),
       );
+      await page.screenshot({
+        path: join(root, `timeline-next-action-${width}.png`),
+        fullPage: true,
+      });
+      await flow
+        .getByRole("button", { name: "返回当前阶段", exact: true })
+        .click();
       await page.locator(".mw-reader-header").evaluate((el) => {
         for (let p = el; p; p = p.parentElement)
           if (p.scrollTop) p.scrollTop = 0;

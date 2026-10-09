@@ -145,7 +145,7 @@ export function StagePanel({
           {progress}
         </p>
       )}
-      {!viewingHistory &&
+      {!timeline.historical &&
         !(
           selected.stage === "decision" &&
           issue.type === "issue" &&
@@ -226,18 +226,6 @@ export function StagePanel({
         selected.id === timeline.currentNodeId &&
         attempt &&
         evidence?.(attempt)}
-      {!viewingHistory && (
-        <aside className="mw-stage-next" aria-label="当前处理与下一步">
-          <div>
-            <p>
-              <span>下一步</span> {timeline.next}
-            </p>
-          </div>
-          {timeline.draft && (
-            <small>Draft PR · 最终交付前需核对作者的暂缓条件</small>
-          )}
-        </aside>
-      )}
       {selected.waits.length > 0 && (
         <details>
           <summary>本阶段等待 · {selected.waits.length}</summary>
