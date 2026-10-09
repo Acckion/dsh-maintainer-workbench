@@ -1,14 +1,15 @@
 import {
-  Check,
   GitBranch,
   Settings2,
   ShieldCheck,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Settings, Snapshot } from "../core/types.ts";
 import { Tag } from "./Primitives.tsx";
 import { WorkspacesPanel } from "./WorkspacesPanel.tsx";
 import { request } from "./api.ts";
+import { GlobalSettingsFields } from "./GlobalSettingsFields.tsx";
+import type { HostWorkspaces } from "./host-workspaces.ts";
 import { ModelSettings } from "./ModelSettings.tsx";
 import { settingsIdentity } from "./settings-draft.ts";
 export function GitHubConnection({
@@ -122,10 +123,14 @@ export function SettingsView({
   prepare,
   panel = "all",
   changed,
+  hostWorkspaces,
+  retryVersion = 0,
 }: {
   scope: "global" | "repository";
   state: Pick<Snapshot, "settings" | "capabilities"> & { repos?: Snapshot["repos"] };
   panel?: "all" | "models" | "automation" | "execution" | "connections" | "workspaces";
+  hostWorkspaces?: HostWorkspaces;
+  retryVersion?: number;
   changed?: (dirty: boolean) => void;
   repoId: string;
   busy: boolean;
@@ -150,6 +155,21 @@ export function SettingsView({
   useEffect(() => {
     changed?.(settingsIdentity(settings) !== settingsIdentity(state.settings));
   }, [settings, state.settings, changed]);
+  const attempted = useRef("");
+  const saveRef = useRef(save); saveRef.current = save;
+  const lastRetry = useRef(retryVersion);
+  useEffect(() => {
+    if (retryVersion === lastRetry.current) return;
+    lastRetry.current = retryVersion;
+    if (scope === "global" && !busy) saveRef.current(settings);
+  }, [retryVersion, settings, scope, busy]);
+  useEffect(() => {
+    if (scope !== "global" || busy) return;
+    const identity = settingsIdentity(settings);
+    if (identity === settingsIdentity(state.settings) || identity === attempted.current) return;
+    const timer = setTimeout(() => { attempted.current = identity; saveRef.current(settings); }, 600);
+    return () => clearTimeout(timer);
+  }, [settings, state.settings, scope, busy]);
   return (
     <div className="mw-settings-grid">
       {(scope === "repository" || panel === "all" || panel === "connections") && <section className="mw-settings-card">
@@ -159,8 +179,7 @@ export function SettingsView({
               <GitBranch size={19} />
               仓库连接
             </div>
-            <h3>{repo?.fullName ?? "尚未选择"}</h3>
-            <p>{repo?.description}</p>
+
             {state.capabilities.harness &&
               repo?.mode === "github" &&
               !repo.localPath && (
@@ -173,24 +192,21 @@ export function SettingsView({
                   自动准备仓库
                 </button>
               )}
-            <label>
-              已有本地克隆（可选）
+            <div className="mw-token-row"><label>
+              本地工作区
               <input
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
                 placeholder="/absolute/path/to/repository"
               />
             </label>
-            <p className="mw-muted">
-              调查、审查、修复与文档任务会自动克隆仓库并创建隔离工作区，无需手动填写路径。也可提前准备；大型仓库首次下载需要一些时间。
-            </p>
             <button
               className="mw-button"
               disabled={busy || !path || !repo}
               onClick={() => bind(path)}
             >
-              绑定工作区
-            </button>
+              绑定
+            </button></div>
             {repo?.profile && (
               <div className="mw-repo-profile">
                 <h4>Agent 的仓库上下文</h4>
@@ -225,6 +241,7 @@ export function SettingsView({
               <Settings2 size={19} />
               GitHub 连接
             </div>
+            <GitHubConnection refreshKey={busy} />
             <div className="mw-credential-fields">
               {!native && (
                 <>
@@ -248,7 +265,7 @@ export function SettingsView({
                   </label>
                 </>
               )}
-              <label>
+              <div className="mw-token-row"><label>
                 GitHub Token
                 <input
                   type="password"
@@ -274,16 +291,8 @@ export function SettingsView({
                   }
                 }}
               >
-                保存连接配置
+                保存
               </button>
-              <p className="mw-muted">
-                GitHub 令牌仅保存在服务端权限为 0600 的文件中，不返回浏览器。
-              </p>
-            </div>
-            <div className="mw-connection-list">
-              <GitHubConnection refreshKey={busy} />
-              <div>
-                执行环境<Tag>{native ? "Harness 原生 Agent" : "独立预览"}</Tag>
               </div>
             </div>
           </>
@@ -294,7 +303,7 @@ export function SettingsView({
         {native ? <ModelSettings settings={settings} update={setSettings} /> : <p className="mw-muted">
           Harness 模型选择仅在原生插件中可用。独立预览的模型在「执行」中配置。
         </p>}
-        {native && <button className="mw-button primary" disabled={busy} type="submit">保存设置</button>}
+
       </form>}
       {scope === "global" && (panel === "all" || panel === "automation" || panel === "execution") && (
         <form
@@ -304,202 +313,11 @@ export function SettingsView({
             save(settings);
           }}
         >
-          <div className="mw-section-title">
-            <Settings2 size={19} />
-            {panel === "automation" ? "自动化与同步" : "全局默认执行策略"}
-          </div>
-          <div className="mw-form-grid">
-            {!native && panel !== "automation" && (
-              <>
-                <label>
-                  模型提供方
-                  <input
-                    value={settings.provider}
-                    onChange={(e) =>
-                      setSettings({ ...settings, provider: e.target.value })
-                    }
-                    required
-                  />
-                </label>
-                <label>
-                  模型名称
-                  <input
-                    value={settings.model}
-                    onChange={(e) =>
-                      setSettings({ ...settings, model: e.target.value })
-                    }
-                    required
-                  />
-                </label>
-              </>
-            )}
-            {panel !== "automation" && <><label>
-              并发任务
-              <input
-                type="number"
-                min="1"
-                max="4"
-                value={settings.concurrency}
-                onChange={(e) =>
-                  setSettings({ ...settings, concurrency: +e.target.value })
-                }
-              />
-            </label>
-            <label>
-              每批任务上限
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={settings.maxJobsPerBatch}
-                onChange={(e) =>
-                  setSettings({ ...settings, maxJobsPerBatch: +e.target.value })
-                }
-              />
-            </label></>}
-            {panel !== "execution" && <><label>
-              同步记录上限（0 表示无上限）
-              <input
-                type="number"
-                min="0"
-                max="1000000"
-                value={settings.syncLimit ?? 1000}
-                onChange={(e) =>
-                  setSettings({ ...settings, syncLimit: +e.target.value })
-                }
-              />
-            </label>
-            <label>
-              定时同步（分钟，0 表示关闭）
-              <input
-                type="number"
-                min="0"
-                max="1440"
-                value={settings.syncIntervalMinutes}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    syncIntervalMinutes: +e.target.value,
-                  })
-                }
-              />
-            </label>
-            <label className="mw-check-label">
-              <input
-                type="checkbox"
-                checked={settings.autoTriage}
-                onChange={(e) =>
-                  setSettings({ ...settings, autoTriage: e.target.checked })
-                }
-              />
-              自动分诊新增或已更新的 Issue
-            </label>
-            <label className="mw-check-label">
-              <input
-                type="checkbox"
-                checked={settings.autoPreflight ?? false}
-                onChange={(e) =>
-                  setSettings({ ...settings, autoPreflight: e.target.checked })
-                }
-              />
-              自动快速预检新增或已更新的 PR
-            </label>
-            <p className="mw-muted">
-              手动或定时同步后自动派发，后台按批补齐。结果保存在本机，未变化的版本直接复用；失败后需手动重试。分诊使用模型并产生费用，不会自动修改代码或发布。
-            </p>
-            </>}
-          </div>
-          {panel !== "automation" && <details className="mw-advanced">
-            <summary>高级执行选项（通常无需修改）</summary>
-            <div className="mw-form-grid">
-              <label>
-                超时时间（秒）
-                <input
-                  type="number"
-                  min="1"
-                  max="1800"
-                  value={settings.timeoutMs / 1000}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      timeoutMs: +e.target.value * 1000,
-                    })
-                  }
-                />
-              </label>
-              <label>
-                分诊 / PR 预检输出 Token 上限
-                <input
-                  type="number"
-                  min="500"
-                  max="8000"
-                  value={settings.triageMaxTokens ?? 1800}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      triageMaxTokens: +e.target.value,
-                    })
-                  }
-                />
-              </label>
-              <label>
-                每次请求输出 Token 上限
-                <input
-                  type="number"
-                  min="500"
-                  max="32000"
-                  value={settings.maxTokens}
-                  onChange={(e) =>
-                    setSettings({ ...settings, maxTokens: +e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                Harness Agent preset
-                <input
-                  value={settings.agentPreset}
-                  onChange={(e) =>
-                    setSettings({ ...settings, agentPreset: e.target.value })
-                  }
-                />
-              </label>
-              <label>
-                修复任务权限 preset
-                <input
-                  value={settings.permissionPreset}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      permissionPreset: e.target.value,
-                    })
-                  }
-                />
-              </label>
-            </div>
-            <p className="mw-muted">
-              Agent preset 填 inherit 跟随宿主默认（当前：
-              {host?.agentPreset ?? "仅原生环境可用"}），自动复用该 preset
-              的工具与 Skills。调查、审查使用 read-only；修复、文档的权限填
-              inherit 时也跟随宿主默认。
-            </p>
-          </details>}
-          {panel !== "automation" && <details className="mw-settings-note">
-            <summary>执行权限与发布范围</summary>
-            <div className="mw-callout amber">
-            <ShieldCheck size={18} />
-            <p>
-              单次输出上限不等于总费用上限。执行遵循 Harness
-              的权限策略；工作台不自动发布评论、推送分支或合并 PR。
-            </p>
-          </div>
-          </details>}
-          <button className="mw-button primary" disabled={busy}>
-            <Check size={15} />
-            保存设置
-          </button>
+          <GlobalSettingsFields settings={settings} update={setSettings} panel={panel} native={native} hostPreset={host?.agentPreset}/>
+
         </form>
       )}
-      {scope === "global" && (panel === "all" || panel === "workspaces") && <WorkspacesPanel />}
+      {scope === "global" && (panel === "all" || panel === "workspaces") && <WorkspacesPanel host={hostWorkspaces} />}
     </div>
   );
 }

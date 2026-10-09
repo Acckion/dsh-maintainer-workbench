@@ -40,6 +40,7 @@ import { RepositoryOrganize } from "./RepositoryOrganize.tsx";
 
 import { type DetailTab } from "./ReviewSummary.tsx";
 import { GitHubConnection, SettingsView } from "./SettingsView.tsx";
+import type { HostWorkspaces } from "./host-workspaces.ts";
 import { GlobalSettings } from "./GlobalSettings.tsx";
 
 import { API, request } from "./api.ts";
@@ -75,7 +76,8 @@ import { taskGroups, type TaskFilter } from "./task-presentation.ts";
 export function App({
   openSession,
   host = false,
-}: { openSession?: (id: string) => void; host?: boolean } = {}) {
+  hostWorkspaces,
+}: { hostWorkspaces?:HostWorkspaces; openSession?: (id: string) => void; host?: boolean } = {}) {
   const [state, setState] = useState<Snapshot>();
   const [page, setPage] = useState<Page>("inbox");
   const [repoId, setRepoId] = useState(() => {
@@ -1209,19 +1211,19 @@ export function App({
                 </section>
               )}
               {page === "repository-settings" && (
-                <RepositoryPolicy
+                <div className="mw-repository-settings"><RepositoryPolicy
                   key={repoId}
                   state={state}
                   repoId={repoId}
                   busy={!!busy}
                   save={(value) =>
-                    void action("policy", "/policy", value, "仓库策略已保存")
+                    action("policy", "/policy", value, "仓库策略已保存")
                   }
-                />
+                /></div>
               )}
-              {page === "settings" && <GlobalSettings native={host} />}
+              {page === "settings" && <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} />}
               {page === "repository-settings" && (
-                <SettingsView
+                <div className="mw-repository-settings"><SettingsView
                   key={page}
                   scope="repository"
                   state={state}
@@ -1254,7 +1256,7 @@ export function App({
                       "工作区绑定成功",
                     )
                   }
-                />
+                /></div>
               )}
               {page === "settings" && (
                 <section className="mw-repository-manager mw-repository-table">

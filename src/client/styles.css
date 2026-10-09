@@ -603,3 +603,86 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 .mw-stage-models .mw-model-label{align-self:center;margin:0}
 .mw-stage-models .mw-model-effort,.mw-stage-models .mw-model-unavailable{grid-column:2}
 @container maintainer-settings (max-width:380px){.mw-stage-models>.mw-model-picker{grid-template-columns:minmax(0,1fr);gap:6px}.mw-stage-models .mw-model-effort,.mw-stage-models .mw-model-unavailable{grid-column:1}}
+
+/* Harness settings use the host's semantic tokens: flat preference rows,
+   neutral controls and switches. These rules never restyle the workbench. */
+.mw:is(.mw-global-settings,.mw-repository-settings),.mw .mw-repository-settings{--ink:var(--dsw-alias-label-primary,#111315);--muted:var(--dsw-alias-label-secondary,var(--mw-muted,#858a93));--line:var(--dsw-alias-border-l2,var(--mw-border,#e4e5e7));--green:var(--ink);font-size:14px;line-height:20px;color:var(--ink)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-heading{margin:0 0 14px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-heading h2{font-size:16px;font-weight:500}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-tabs{margin-bottom:0;border-color:var(--line)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-tabs>button{color:var(--muted);font-size:14px;padding:10px 12px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-tabs>button[aria-current=page]{color:var(--ink);border-color:var(--ink);font-weight:500}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-card{border:0;border-radius:0;background:transparent;padding:0;box-shadow:none}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-grid{gap:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-row{position:relative;display:flex;align-items:center;justify-content:space-between;gap:24px;padding:16px 0;margin:0;border-bottom:.5px solid var(--line);font-weight:400}
+.mw-preference-copy{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:14px;line-height:20px}
+.mw-preference-copy small{color:var(--muted);font-size:12px;line-height:18px;font-weight:400}
+.mw-preference-control{flex:none;max-width:50%;min-width:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-control input:not([type=checkbox]),:is(.mw-global-settings,.mw-repository-settings) .mw-preference-control select,:is(.mw-global-settings,.mw-repository-settings) .mw-button,:is(.mw-global-settings,.mw-repository-settings) .mw-model-trigger,:is(.mw-global-settings,.mw-repository-settings) .mw-model-effort select{border:0;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft,#f5f6f7));color:var(--ink);min-height:36px;padding:8px 12px;box-shadow:none;font-size:14px;font-weight:400}
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-control input[type=number]{width:100px;text-align:center;margin:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-control input:not([type=number]):not([type=checkbox]){width:180px;max-width:100%;margin:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-button:hover{background:var(--dsw-alias-interactive-bg-hover,var(--mw-surface-raised,#eceef0))}
+:is(.mw-global-settings,.mw-repository-settings) .mw-button.primary{background:var(--ink);color:var(--dsw-alias-bg-layer-2,var(--mw-surface,#fff))}
+.mw-preference-switch{position:relative;display:block;width:36px;height:20px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-switch input{position:absolute;inset:0;width:36px;height:20px;opacity:0;margin:0;z-index:1;cursor:pointer}
+.mw-preference-switch>span{display:block;width:36px;height:20px;border-radius:20px;background:var(--dsw-alias-label-quaternary,var(--mw-border,#c3c6cb));transition:background .15s}
+.mw-preference-switch>span:after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--dsw-alias-bg-layer-2,var(--mw-surface,#fff));transition:transform .15s}
+.mw-preference-switch input:checked+span{background:var(--ink)}
+.mw-preference-switch input:checked+span:after{transform:translateX(16px)}
+.mw-preference-switch input:focus-visible+span{outline:2px solid var(--ink);outline-offset:3px}
+.mw-preference-details{padding:16px 0;border-bottom:.5px solid var(--line)}
+.mw-preference-details>summary{cursor:pointer;font-size:14px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-footnote{font-size:12px;color:var(--muted);line-height:18px;margin:12px 0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-card>button{margin:12px 0 0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-section-title{font-weight:500;color:var(--ink);font-size:14px;margin:16px 0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-credential-fields{border:0;margin:0;padding:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-credential-fields>label{padding:16px 0;border-bottom:.5px solid var(--line);margin:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-credential-fields input{background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft,#f5f6f7));border:0;border-radius:var(--dsw-radius-md,10px);color:var(--ink)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-connection-list{margin:16px 0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-auth-status{border:0;padding:0;background:transparent;color:var(--ink)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-auth-status p{color:var(--muted)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-heading{padding:16px 0 0;font-weight:500;font-size:14px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-heading>strong{font-weight:500}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-settings>p{color:var(--muted);margin:6px 0 0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-picker{display:grid;grid-template-columns:100px minmax(0,1fr);gap:0 16px;margin:0;padding:16px 0;border-bottom:.5px solid var(--line)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-label{font-size:14px;font-weight:400;margin:0;align-self:center}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-effort,:is(.mw-global-settings,.mw-repository-settings) .mw-model-unavailable{grid-column:2}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-effort{margin-top:8px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-menu{background:var(--dsw-alias-bg-layer-2,var(--mw-surface,#fff));border-color:var(--line);border-radius:var(--dsw-radius-md,12px)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-menu button[aria-checked=true],:is(.mw-global-settings,.mw-repository-settings) .mw-model-menu button:hover,:is(.mw-global-settings,.mw-repository-settings) .mw-model-menu button:focus-visible{background:var(--dsw-alias-interactive-bg-hover,var(--mw-surface-soft,#f3f4f5))}
+:is(.mw-global-settings,.mw-repository-settings) .mw-stage-models{border:0;margin-top:0;padding-top:16px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-stage-models>summary{font-size:14px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-stage-models>p{margin:6px 0;color:var(--muted)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-model-policy{padding-top:8px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-feedback{background:transparent;border-radius:0;margin:8px 0 0;padding:6px 0;font-size:12px;color:var(--muted)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-settings-feedback.error{color:var(--dsw-alias-state-error-primary,var(--mw-danger-text,#b43a32));background:transparent}
+:is(.mw-global-settings,.mw-repository-settings) .mw-workspace-settings>.mw-settings-card{padding-bottom:16px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-workspace-settings h3{padding-top:16px;font-size:14px;font-weight:500}
+:is(.mw-global-settings,.mw-repository-settings) .mw-workspace-settings .mw-settings-card>p{font-size:12px;color:var(--muted);margin:8px 0}
+.mw-workspace-list-row{display:flex;flex-direction:column;gap:4px;padding:12px 0;border-bottom:.5px solid var(--line)}
+.mw-workspace-list-row strong{font-size:14px;font-weight:400}
+.mw-workspace-list-row>span{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+button[data-mw-settings-entry]{position:relative}
+button[data-mw-settings-entry]>svg{visibility:hidden}
+button[data-mw-settings-entry]:before{content:"";position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;background:currentColor;mask:url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.6"%3E%3Ccircle cx="7" cy="5" r="2"/%3E%3Ccircle cx="17" cy="7" r="2"/%3E%3Ccircle cx="7" cy="19" r="2"/%3E%3Cpath d="M7 7v10M17 9c0 5-10 3-10 8"/%3E%3C/svg%3E') center/contain no-repeat}
+@container maintainer-settings (max-width:380px){:is(.mw-global-settings,.mw-repository-settings) .mw-preference-row{gap:12px}:is(.mw-global-settings,.mw-repository-settings) .mw-preference-control{max-width:42%}:is(.mw-global-settings,.mw-repository-settings) .mw-model-picker{grid-template-columns:minmax(0,1fr);gap:8px}:is(.mw-global-settings,.mw-repository-settings) .mw-model-effort,:is(.mw-global-settings,.mw-repository-settings) .mw-model-unavailable{grid-column:1}}
+
+:is(.mw-global-settings,.mw-repository-settings) .mw-preference-copy{color:var(--ink)}
+body[data-ds-dark-theme] .mw:is(.mw-global-settings,.mw-repository-settings),body[data-ds-dark-theme] .mw .mw-repository-settings{--ink:var(--dsw-alias-label-primary,#eceef0);--muted:var(--dsw-alias-label-secondary,#92979f);--line:var(--dsw-alias-border-l2,#34363b);background:var(--dsw-alias-bg-layer-2,var(--mw-surface,#191b1f))}
+
+:is(.mw-global-settings,.mw-repository-settings) .mw-workspace-settings h3{color:var(--ink)}
+
+:is(.mw-global-settings,.mw-repository-settings) .mw-token-row{display:flex;align-items:flex-end;gap:12px;padding:16px 0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-token-row>label{flex:1;min-width:0;margin:0;color:var(--ink)}
+:is(.mw-global-settings,.mw-repository-settings) .mw-token-row input{margin:8px 0 0;width:100%;height:36px}
+:is(.mw-global-settings,.mw-repository-settings) .mw-token-row>.mw-button{flex:none;margin:0}
+:is(.mw-global-settings,.mw-repository-settings) .mw-auth-status{margin:0;padding:0 0 8px}
+
+.mw-repository-settings{max-width:760px;margin:0 auto 24px}
+.mw-repository-settings .mw-settings-card>h3{font-size:16px;font-weight:500;color:var(--ink);margin:0 0 12px}
+.mw-repository-settings .mw-repo-profile{border:0;background:transparent;margin-top:20px;padding:0}
+.mw-repository-settings .mw-repo-profile h4{color:var(--ink);font-size:14px;font-weight:500}
+.mw-repository-settings .mw-repo-profile p{font-size:12px;color:var(--muted)}
+
+.mw :is(.mw-global-settings,.mw-repository-settings) .mw-token-row>label{width:auto;max-width:none}
+.mw :is(.mw-global-settings,.mw-repository-settings) .mw-token-row input{border:0;border-radius:var(--dsw-radius-md,10px);background:var(--dsw-alias-interactive-bg-default,var(--mw-surface-soft,#f5f6f7));color:var(--ink)}

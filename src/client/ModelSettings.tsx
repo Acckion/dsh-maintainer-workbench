@@ -18,7 +18,7 @@ export function ModelSettings({ settings, update }: { settings: Settings; update
   }, [refresh]);
   const inherited = catalog?.groups.find(g => g.id === catalog.default.provider)?.models.find(m => m.id === catalog.default.model)?.name ?? catalog?.default.model;
   return <div className="mw-model-settings">
-    <div className="mw-model-heading"><strong>任务模型</strong><button type="button" className="mw-text-button" disabled={loading}
+    <div className="mw-model-heading"><strong>Harness 模型</strong><button type="button" className="mw-text-button" disabled={loading}
       onClick={() => setRefresh(n => n + 1)}>{loading ? "正在读取…" : "刷新模型列表"}</button></div>
     <p className="mw-muted">使用 Harness 中已配置的模型，无需重复填写密钥。</p>
     {error && <p role="alert" className="mw-model-unavailable">{error}</p>}
@@ -39,7 +39,6 @@ export function ModelSettings({ settings, update }: { settings: Settings; update
           }}/>) }
         {!!Object.keys(settings.stageModels ?? {}).length && <button type="button" className="mw-text-button" onClick={() => update({...settings, stageModels: {}})}>所有阶段恢复默认</button>}
       </details>
-      <p className="mw-muted mw-model-policy">仅影响之后启动的任务；已保存的分析结果不会因此重新运行。</p>
     </>}
   </div>;
 }
