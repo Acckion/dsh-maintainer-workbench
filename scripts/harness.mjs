@@ -9,7 +9,11 @@ await writeFile(overlay, `- id: hmr\n  disabled: true\n- insert:\n    - id: main
 // Normal launch preserves DSH_HOME and all host-managed credentials/providers.
 // Isolation is explicit, useful for development and tests only.
 const isolated = process.argv.includes('--isolated');
-const env = { ...process.env, MAINTAINER_DATA_DIR: data, ...(isolated ? { DSH_HOME: resolve(root, '.harness-local') } : {}) };
+// Let the host (and the plugin's GitHub calls) trust locally installed root CAs,
+// e.g. corporate or security-tool HTTPS interception that Node's bundled CA set rejects.
+const inheritedNodeOptions = process.env.NODE_OPTIONS ?? '';
+const nodeOptions = inheritedNodeOptions.includes('--use-system-ca') ? inheritedNodeOptions : [inheritedNodeOptions, '--use-system-ca'].filter(Boolean).join(' ');
+const env = { ...process.env, NODE_OPTIONS: nodeOptions, MAINTAINER_DATA_DIR: data, ...(isolated ? { DSH_HOME: resolve(root, '.harness-local') } : {}) };
 console.log(isolated ? 'Harness: explicit isolated development profile (.harness-local)' : 'Harness: inherit existing DSH_HOME / normal user profile; configure models in host Settings');
 const child = spawn(process.execPath, [resolve(root, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '--profile', process.env.HARNESS_PROFILE ?? 'web', '--patch', overlay, '--no-open', '--port', process.env.HARNESS_PORT ?? '4318'], { cwd: root, env, stdio: 'inherit' });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));

@@ -11,8 +11,10 @@ function transportError(error: unknown, signal?: AbortSignal | null): GitHubRequ
   if (signal?.aborted || value?.name === 'TimeoutError' || value?.name === 'AbortError' || code === 'UND_ERR_CONNECT_TIMEOUT' || code === 'ETIMEDOUT') {
     return new GitHubRequestError('timeout', 'GitHub 连接超时或请求已取消，请检查网络后重试。此错误不表示仓库权限不足。');
   }
-  const detail = code === 'ENOTFOUND' || code === 'EAI_AGAIN' ? '域名解析失败' : code === 'ECONNREFUSED' ? '连接被拒绝' : code === 'ECONNRESET' || code === 'UND_ERR_SOCKET' ? '连接中断' : code === 'CERT_HAS_EXPIRED' || code === 'UNABLE_TO_VERIFY_LEAF_SIGNATURE' || code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ? '证书验证失败，请检查系统时间和网络证书' : '网络连接失败';
   // Do not forward raw transport messages: proxy URLs can contain credentials.
+  if (['CERT_HAS_EXPIRED', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY'].includes(String(code)))
+    return new GitHubRequestError('network', '无法连接 GitHub：证书验证失败，请检查系统时间；本机若安装了拦截 HTTPS 的根证书，可用 NODE_OPTIONS=--use-system-ca 启动工作台，或设置 NODE_EXTRA_CA_CERTS 指向该根证书的 PEM 文件后重试。此错误不表示令牌无效。');
+  const detail = code === 'ENOTFOUND' || code === 'EAI_AGAIN' ? '域名解析失败' : code === 'ECONNREFUSED' ? '连接被拒绝' : code === 'ECONNRESET' || code === 'UND_ERR_SOCKET' ? '连接中断' : '网络连接失败';
   return new GitHubRequestError('network', `无法连接 GitHub：${detail}。请检查网络或代理后重试，无需因此更换令牌。`);
 }
 

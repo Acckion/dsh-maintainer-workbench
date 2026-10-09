@@ -170,6 +170,7 @@ export interface Repo {
   policy?: Pick<
     Settings,
     | "syncLimit"
+    | "autoReview"
     | "autoPreflight"
     | "autoTriage"
     | "syncIntervalMinutes"
@@ -181,6 +182,7 @@ export interface Repo {
   fullName: string;
   description: string;
   defaultBranch: string;
+  localBranch?: string;
   headSha: string;
   localPath: string;
   mode: "github" | "local";
@@ -206,6 +208,11 @@ export interface PRContext {
 export interface Issue {
   processing?: import("../domain/processing.ts").ProcessingCase;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
+  orchestration?: import("./orchestration.ts").WorkflowState;
+  orchestrationView?: {
+    status: "plan" | "running" | "blocked" | "review" | "waiting" | "stale" | "deferred";
+    reason: string;
+  };
   remotePRs?: import("./remote-progress.ts").RemotePR[];
   actions?: import("./remote-progress.ts").ActionsSnapshot;
   remoteWarning?: string;
@@ -249,6 +256,7 @@ export interface Job {
   goal?: "resolve";
   goalId?: string;
   goalPauseReason?: string;
+  workflowRunId?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
   evidenceGate?: { allowed: boolean; reasons: string[] };
@@ -335,6 +343,7 @@ export interface Settings {
   stageModels?: Partial<Record<JobKind, ModelChoice>>;
   syncLimit?: number;
   autoPreflight?: boolean;
+  autoReview?: boolean;
   triageMaxTokens?: number;
   concurrency: number;
   maxJobsPerBatch: number;

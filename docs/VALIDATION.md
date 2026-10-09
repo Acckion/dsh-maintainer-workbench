@@ -32,6 +32,15 @@
 - 通过相同认证来源完成 HTTPS 私有克隆，并验证提交 0ea4647f7678a4f35b8ed1586e35fa35f818fbfe 存在；origin 不含令牌。
 - 未执行远端写入或真实模型任务。22 项自动化测试、类型检查、构建通过。
 
+## 2026-10-09 导入仓库问题修复
+
+- 仓库名归一化独立为 `src/core/repo-name.ts`：接受任意大小写、`.git` 后缀、协议/主机名、带路径的 GitHub URL、`git@github.com:` 形式，统一返回小写 owner/repo；无效输入不再让整批失败。
+- `/sync-many` 改为逐行容错：无效行按条返回错误，有效行继续同步；单批上限 20 个（超出按条提示分批），中文 zod 校验消息；客户端连接弹窗超过 20 行自动分批提交并合并结果。
+- 自动发现与手动连接合并：`performSync` 的 `prev` 匹配扩展到 `remoteCandidates`，单远端发现的工作区连接后不再产生重复行；同步全部仓库的预填只包含可同步的 GitHub 名称，不再混入本地文件夹名。
+- 发现工作区的本地分支改存 `localBranch`，不再覆盖 GitHub `defaultBranch`；界面显示 `localBranch ?? defaultBranch`。
+- `validateCheckout` 按 `githubName ?? fullName` 校验 origin，本地模式绑定的仓库不再跳过或错配；托管克隆与拉取失败给出可执行的中文错误（含超时提示）。
+- 空状态引导文案与浏览器冒烟脚本对齐：标题“自动发现 Harness 工作区”，按钮“添加其他远程仓库”。
+
 # MVP 验证记录
 
 ## 2026-09-25：移除产品演示数据

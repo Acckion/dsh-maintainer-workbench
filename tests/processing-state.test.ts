@@ -16,7 +16,6 @@ import { fixtureAnalysis, seedFixture } from "./support/fixtures.ts";
 test("a waiting case and its input survive restart without scheduling Agent work", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "mw-state-")),
     db = join(dir, "state.sqlite");
-  t.after(() => rm(dir, { recursive: true, force: true }));
   const first = new Store(db);
   seedFixture(first);
   const id = first.issues()[0].id;
@@ -28,7 +27,10 @@ test("a waiting case and its input survive restart without scheduling Agent work
   const saved = first.processing.current(id)!;
   first.close();
   const restored = new Store(db);
-  t.after(() => restored.close());
+  t.after(async () => {
+    restored.close();
+    await rm(dir, { recursive: true, force: true });
+  });
   assert.deepEqual(restored.processing.current(id), saved);
   assert.equal(restored.jobs().length, 0);
   const resumed = new ProcessingService(restored);
@@ -306,7 +308,6 @@ test("an accepted feature plan is actionable and needs fresh approval after GitH
 test("legacy queued executions migrate once without invoking the Agent or replaying events", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "mw-legacy-state-")),
     db = join(dir, "state.sqlite");
-  t.after(() => rm(dir, { recursive: true, force: true }));
   const first = new Store(db);
   seedFixture(first);
   const issue = first.issues()[0],
@@ -339,7 +340,10 @@ test("legacy queued executions migrate once without invoking the Agent or replay
   const count = migrated.processing.events(state.id).length;
   migrated.close();
   const restored = new Store(db);
-  t.after(() => restored.close());
+  t.after(async () => {
+    restored.close();
+    await rm(dir, { recursive: true, force: true });
+  });
   assert.deepEqual(restored.processing.current(issue.id), state);
   assert.equal(restored.processing.events(state.id).length, count);
   assert.equal(restored.jobs()[0].status, "queued");

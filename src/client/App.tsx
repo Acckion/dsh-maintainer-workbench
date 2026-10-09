@@ -26,6 +26,8 @@ import type { JobKind, Snapshot } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { AssistantActions } from "./AssistantActions.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
+import { BatchWorkflow } from "./BatchWorkflow.tsx";
+import { WorkflowCard } from "./WorkflowCard.tsx";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
 import { Empty, Modal, Tag } from "./Primitives.tsx";
 import { ProcessingHistory } from "./ProcessingHistory.tsx";
@@ -367,7 +369,10 @@ export function App({
   const repo = state?.repos.find((r) => r.id === repoId);
   const issues = state?.issues.filter((i) => i.repoId === repoId) ?? [];
   const jobs = state?.jobs.filter((j) => j.repoId === repoId) ?? [];
-  const pending = reviewQueue(jobs);
+  const pending = reviewQueue(jobs).filter((job) => {
+    const run = issues.find((issue) => issue.id === job.issueId)?.orchestration?.run;
+    return !run || (run.status === "review" && run.currentJobId === job.id);
+  });
   const running = jobs.filter((j) => ["running", "queued"].includes(j.status));
   const open = issues.filter((i) => i.state === "open" && !i.origin);
   const triaged = open.filter((i) => i.type === "issue" && i.analysis);
@@ -726,8 +731,11 @@ export function App({
               {page === "attention" && (
                 <Attention
                   state={state}
-                  open={(id) => {
+                  open={(id, issueId) => {
                     navigate("inbox", id);
+                    setFocused(issueId);
+                    setReaderRequest(issueId ? { sequence: Date.now(), issueId, tab: "overview" } : undefined);
+                    if (issueId) moveFocusToDetail();
                   }}
                 />
               )}
@@ -810,6 +818,12 @@ export function App({
                         </span>
                       </label>
                       <div>
+                        <BatchWorkflow
+                          issues={issues.filter((issue) => selected.includes(issue.id))}
+                          busy={!!busy}
+                          act={(path, data, message) => action("workflow-batch", path, data, message)}
+                        />
+                        <details><summary>高级操作</summary>
                         <button
                           disabled={!selected.length || !!busy}
                           onClick={() => void enqueue("triage")}
@@ -848,6 +862,7 @@ export function App({
                           <option value="ci">诊断 CI</option>
                           <option value="docs">文档维护</option>
                         </select>
+                        </details>
                       </div>
                     </div>
                     <div className="mw-issues" id="mw-inbox-items">
@@ -1293,7 +1308,12 @@ export function App({
                       if (r) {
                         setConnectionResults(r.results);
                         setRepoInput(
-                          state.repos.map((r) => r.fullName).join("\n"),
+                          state.repos
+                            .map((r) =>
+                              r.mode === "github" ? r.fullName : r.githubName,
+                            )
+                            .filter((n): n is string => !!n)
+                            .join("\n"),
                         );
                         setConnect(true);
                       }
@@ -1480,23 +1500,33 @@ export function App({
             onClick={(e) => e.stopPropagation()}
             onSubmit={async (e) => {
               e.preventDefault();
-              const r = await action(
-                "connect",
-                "/sync-many",
-                {
-                  names: repoInput
-                    .split(/[\n,，]+/)
-                    .map((n) => n.trim())
-                    .filter(Boolean),
-                },
-                "仓库连接检查完成",
-              );
-              if (r) {
-                setConnectionResults(r.results);
-                const connected = r.results.find(
-                  (item: { repoId?: string }) => item.repoId,
-                );
+              const names = repoInput
+                .split(/[\n,，]+/)
+                .map((n) => n.trim())
+                .filter(Boolean);
+              if (busy || !names.length) return;
+              setBusy("connect");
+              try {
+                const results: {
+                  fullName: string;
+                  repoId?: string;
+                  error?: string;
+                }[] = [];
+                for (let i = 0; i < names.length; i += 20)
+                  results.push(
+                    ...(await request("/sync-many", {
+                      names: names.slice(i, i + 20),
+                    })).results,
+                  );
+                await refresh();
+                setConnectionResults(results);
+                setToast({ text: "仓库连接检查完成" });
+                const connected = results.find((item) => item.repoId);
                 if (connected) navigate(page, connected.repoId);
+              } catch (e) {
+                setToast({ text: (e as Error).message, error: true });
+              } finally {
+                setBusy("");
               }
             }}
           >
@@ -1670,6 +1700,7 @@ export function App({
       );
       return (
         <section className="mw-item-overview">
+          <WorkflowCard issue={displayedIssue} history={history} busy={!!busy} act={(path, data, message) => action("workflow", path, data, message)} />
           <ProcessingInput
             issue={displayedIssue}
             busy={!!busy}
@@ -1738,6 +1769,10 @@ export function App({
     }
     if (stage === "plan")
       return (
+        <>
+        <WorkflowCard issue={displayedIssue} history={history} busy={!!busy} act={(path, data, message) => action("workflow", path, data, message)} />
+        <details open={!displayedIssue.orchestration?.draft}>
+        <summary>高级操作</summary>
         <IssuePlanning
           start={(kind, expectedVersion) =>
             action(
@@ -1761,10 +1796,13 @@ export function App({
           }
           act={(path, data, message) => action("workflow", path, data, message)}
         />
+        </details>
+        </>
       );
     if (stage === "work")
       return (
         <section className="mw-item-work">
+          <WorkflowCard issue={displayedIssue} history={history} busy={!!busy} act={(path, data, message) => action("workflow", path, data, message)} />
           <ProcessingInput
             issue={displayedIssue}
             busy={!!busy}

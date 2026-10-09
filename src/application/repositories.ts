@@ -11,6 +11,7 @@ import { localRepositoryProfile } from "../core/repository-context.ts";
 import { revision } from "../core/revision.ts";
 import { type Issue, type Repo } from "../core/types.ts";
 import { discoverWorkspace } from "../core/workspace-discovery.ts";
+import { normalizeRepoName } from "../core/repo-name.ts";
 
 export class RepositoryService extends ServiceBase {
   private pollTimer?: ReturnType<typeof setInterval>;
@@ -28,6 +29,7 @@ export class RepositoryService extends ServiceBase {
       enqueue: Enqueue;
       syncRemote: (id: string) => Promise<void>;
       isClosed: () => boolean;
+      synced: (repoId: string) => void;
     },
   ) {
     super(deps);
@@ -110,6 +112,7 @@ export class RepositoryService extends ServiceBase {
               interval * 60000
           )
             await this.sync(repo.githubName ?? repo.fullName);
+          this.hooks.synced(repo.id);
           this.autoTriage(repo.id);
         } catch (error) {
           if (!this.closed)
@@ -149,6 +152,7 @@ export class RepositoryService extends ServiceBase {
           !i.origin &&
           !i.linkedPullRequests?.length &&
           !["answered", "deferred"].includes(i.processing?.phase ?? "") &&
+          !["running", "paused", "waiting_author"].includes(i.orchestration?.run?.status ?? "") &&
           !i.informationRequests?.some((r) =>
             ["asked", "reply_received"].includes(r.state),
           ) &&
@@ -169,46 +173,57 @@ export class RepositoryService extends ServiceBase {
     }
   }
   async syncMany(names: string[]) {
-    const unique = [
-      ...new Set(
-        names.map((n) =>
-          n
-            .trim()
-            .replace(/^https:\/\/github\.com\//i, "")
-            .replace(/\/$/, "")
-            .replace(/\.git$/, "")
-            .toLowerCase(),
-        ),
-      ),
-    ];
-    if (
-      !unique.length ||
-      unique.length > 20 ||
-      unique.some(
-        (n) => !/^[a-z0-9][a-z0-9_.-]*\/[a-z0-9][a-z0-9_.-]*$/.test(n),
-      )
-    )
+    const results: { fullName: string; repoId?: string; error?: string }[] = [];
+    const seen = new Set<string>();
+    const pending: { index: number; fullName: string }[] = [];
+    let synced = 0;
+    for (const raw of names) {
+      const fullName = normalizeRepoName(raw);
+      if (!fullName) {
+        const key = `invalid:${raw.trim()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        results.push({
+          fullName: raw.trim() || raw,
+          error: "不是有效的 owner/repository 或 GitHub 仓库地址",
+        });
+        continue;
+      }
+      if (seen.has(fullName)) continue;
+      seen.add(fullName);
+      if (synced >= 20) {
+        results.push({ fullName, error: "一次最多连接 20 个仓库，请分批" });
+        continue;
+      }
+      synced += 1;
+      pending.push({ index: results.length, fullName });
+      results.push({ fullName });
+    }
+    for (const { index, fullName } of pending) {
+      try {
+        await this.sync(fullName);
+        results[index] = {
+          fullName,
+          repoId: this.findRepoForRemote(fullName)?.id,
+        };
+      } catch (error) {
+        results[index] = {
+          fullName,
+          error: error instanceof Error ? error.message : "同步失败",
+        };
+      }
+    }
+    if (!results.length)
       throw new Error(
         "请输入 1–20 个有效的 owner/repository 或 GitHub 仓库地址",
       );
-    const results: { fullName: string; repoId?: string; error?: string }[] = [];
-    for (const fullName of unique) {
-      try {
-        await this.sync(fullName);
-        results.push({
-          fullName,
-          repoId: this.store
-            .repos()
-            .find((r) => r.fullName.toLowerCase() === fullName)?.id,
-        });
-      } catch (error) {
-        results.push({
-          fullName,
-          error: error instanceof Error ? error.message : "同步失败",
-        });
-      }
-    }
     return { results };
+  }
+  private findRepoForRemote(fullName: string): Repo | undefined {
+    const target = fullName.toLowerCase();
+    return this.store
+      .repos()
+      .find((r) => (r.githubName ?? r.fullName).toLowerCase() === target);
   }
   async sync(fullName: string): Promise<void> {
     const key = fullName.toLowerCase();
@@ -221,23 +236,36 @@ export class RepositoryService extends ServiceBase {
     return task;
   }
   private async performSync(fullName: string): Promise<void> {
-    const configured = this.store
-      .repos()
-      .find(
-        (r) =>
-          (r.githubName ?? r.fullName).toLowerCase() === fullName.toLowerCase(),
-      );
+    const configured =
+      this.store
+        .repos()
+        .find(
+          (r) =>
+            (r.githubName ?? r.fullName).toLowerCase() === fullName.toLowerCase(),
+        ) ??
+      this.store
+        .repos()
+        .find((r) =>
+          (r.remoteCandidates ?? []).some(
+            (c) => c.toLowerCase() === fullName.toLowerCase(),
+          ),
+        );
     const { repo, issues } = await this.github.sync(
       fullName,
       configured?.policy?.syncLimit ?? this.store.settings().syncLimit ?? 1000,
     );
+    const target = repo.fullName.toLowerCase();
     const prev =
       this.store
         .repos()
         .find(
           (r) =>
             r.discovered &&
-            r.githubName?.toLowerCase() === repo.fullName.toLowerCase(),
+            (r.githubName?.toLowerCase() === target ||
+              (!r.githubName &&
+                (r.remoteCandidates ?? []).some(
+                  (c) => c.toLowerCase() === target,
+                ))),
         ) ?? this.store.get<Repo>("repos", repo.id);
     if (prev?.discovered) {
       const remoteId = repo.id;
@@ -247,8 +275,9 @@ export class RepositoryService extends ServiceBase {
         discovered: true,
         localKind: prev.localKind,
         workspacePaths: prev.workspacePaths,
-        githubName: prev.githubName,
+        githubName: prev.githubName ?? repo.fullName,
         remoteCandidates: prev.remoteCandidates,
+        localBranch: prev.localBranch,
         dirty: prev.dirty,
         headSha: prev.headSha,
       });
@@ -323,6 +352,7 @@ export class RepositoryService extends ServiceBase {
         this.store.put("issues", {
           ...issue,
           informationRequests,
+          orchestration: old?.orchestration,
           linkedPullRequests: old?.linkedPullRequests,
           remotePRs: old?.remotePRs,
           remoteWarning: old?.remoteWarning,
@@ -354,6 +384,7 @@ export class RepositoryService extends ServiceBase {
         "本次自动跟踪仅覆盖前 20 个事项，其余可手动刷新",
       );
     }
+    this.hooks.synced(repo.id);
     this.autoTriage(repo.id);
   }
   async bindPath(repoId: string, localPath: string): Promise<void> {
@@ -416,6 +447,7 @@ export class RepositoryService extends ServiceBase {
       .object({
         syncLimit: z.number().int().min(0).max(1000000).optional(),
         autoPreflight: z.boolean().optional(),
+        autoReview: z.boolean().optional(),
         autoTriage: z.boolean(),
         syncIntervalMinutes: z.number().int().min(0).max(1440),
         timeoutMs: z.number().int().min(1000).max(1800000),

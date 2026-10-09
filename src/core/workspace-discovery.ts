@@ -21,5 +21,5 @@ export async function discoverWorkspace(path:string, dataDir:string):Promise<Par
  const remotes:string[]=[];
  if(isGit)for(const name of (await git(root,['remote'])).split('\n').filter(Boolean)){const value=githubRemote(await git(root,['remote','get-url',name]));if(value && !remotes.includes(value))remotes.push(value);}
  const identity=createHash('sha256').update(root).digest('hex').slice(0,20);
- return {id:`local:${identity}`,fullName:remotes.length===1?remotes[0]:basename(root),localPath:root,headSha:head,mode:'local',discovered:true,localKind:isGit?'git':'folder',workspacePaths:[canonical],githubName:remotes.length===1?remotes[0]:undefined,remoteCandidates:remotes,defaultBranch:branch,dirty};
+ return {id:`local:${identity}`,fullName:remotes.length===1?remotes[0]:basename(root),localPath:root,headSha:head,mode:'local',discovered:true,localKind:isGit?'git':'folder',workspacePaths:[canonical],githubName:remotes.length===1?remotes[0]:undefined,remoteCandidates:remotes,localBranch:branch,dirty};
 }

@@ -8,6 +8,7 @@ import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
 import { IssuePlanning } from "./IssuePlanning.tsx";
+import { WorkflowCard } from "./WorkflowCard.tsx";
 import { reviewVerdicts } from "./review-evidence.ts";
 import { ReviewFindingControls } from "./ReviewFindingControls.tsx";
 const stages: Record<string, string> = {
@@ -79,6 +80,7 @@ export function WorkflowPanel({
   if (compact)
     return (
       <section className="mw-triage-followup">
+        <WorkflowCard issue={issue} history={history} busy={busy} act={act} />
         {!issue.origin && issue.type === "issue" && issue.state === "open" && (
           <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
         )}
@@ -148,8 +150,11 @@ export function WorkflowPanel({
           </span>
         </div>
       )}
+      <WorkflowCard issue={issue} history={history} busy={busy} act={act} />
       {!issue.origin && issue.type === "issue" && issue.state === "open" && (
+        <details><summary>高级操作</summary>
         <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
+        </details>
       )}
       {job?.deliveryReviewId && (
         <p className="mw-callout">
