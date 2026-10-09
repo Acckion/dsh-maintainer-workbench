@@ -1,8 +1,20 @@
 import React, { useEffect, useState } from "react";
 import type { Issue, IssuePlan, Job } from "../core/types.ts";
 import type { WorkflowAction } from "./IssuePlanning.tsx";
+import { useItemDraft, flushItemDraft } from "./item-draft.ts";
 import { taskStatus } from "./review-evidence.ts";
 import { kindNames } from "../core/types.ts";
+
+const fieldLabels: Record<keyof IssuePlan, string> = {
+  goal: "维护目标",
+  scope: "修改范围与排除项",
+  acceptanceCriteria: "验收条件（每行一项）",
+  reproduction: "复现条件与步骤",
+  expected: "预期行为",
+  actual: "实际行为",
+  category: "类型",
+  decision: "取舍",
+};
 
 export function WorkflowCard({
   issue,
@@ -21,52 +33,68 @@ export function WorkflowCard({
   }, message);
   const draft = issue.orchestration?.draft,
     run = issue.orchestration?.run;
+  const {
+    draft: savedDraft,
+    ready,
+    error: draftError,
+    update,
+  } = useItemDraft(issue.id);
   const [editing, setEditing] = useState(false);
   const [plan, setPlan] = useState<IssuePlan | undefined>();
   useEffect(() => {
     setPlan(
       draft
-        ? run?.plan && draft.sourceJobId !== run.currentJobId
-          ? run.plan
-          : {
-              category: draft.category,
-              goal: draft.goal,
-              scope: draft.scope,
-              acceptanceCriteria: draft.acceptanceCriteria,
-              reproduction: draft.reproduction,
-              expected: draft.expected,
-              actual: draft.actual,
-              decision: "accepted",
-            }
+        ? ready &&
+          savedDraft.plan &&
+          savedDraft.systemPlanInputKey === draft.inputKey &&
+          !["running", "review"].includes(run?.status ?? "")
+          ? savedDraft.plan
+          : run?.plan && draft.sourceJobId !== run.currentJobId
+            ? run.plan
+            : {
+                category: draft.category,
+                goal: draft.goal,
+                scope: draft.scope,
+                acceptanceCriteria: draft.acceptanceCriteria,
+                reproduction: draft.reproduction,
+                expected: draft.expected,
+                actual: draft.actual,
+                decision: "accepted",
+              }
         : undefined,
     );
-    setEditing(false);
-  }, [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id]);
+  }, [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id, ready]);
+  useEffect(
+    () => setEditing(false),
+    [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id],
+  );
   const active = history.find((j) => ["queued", "running"].includes(j.status));
   const current = history.find((j) => j.id === run?.currentJobId);
-  const edit = (key: keyof IssuePlan, value: string) =>
-    setPlan(
-      (p) =>
-        p && {
-          ...p,
-          [key]:
-            key === "acceptanceCriteria"
-              ? value.split("\n").filter((s) => s.trim())
-              : value,
-        },
-    );
+  const edit = (key: keyof IssuePlan, value: string) => {
+    if (!plan || !draft) return;
+    const next = {
+      ...plan,
+      [key]:
+        key === "acceptanceCriteria"
+          ? value.split("\n").filter((s) => s.trim())
+          : value,
+    };
+    setPlan(next);
+    update({ plan: next, systemPlanInputKey: draft.inputKey });
+  };
   const status = issue.orchestrationView?.status;
-  const start = (
+  const start = async (
     route?: "fix" | "docs" | "investigate" | "review",
     sourceJobId?: string,
-  ) =>
-    plan &&
-    draft &&
-    act(
+  ) => {
+    if (!plan || !draft) return;
+    await flushItemDraft(issue.id);
+    return act(
       "/workflow/start",
       {
         issueId: issue.id,
         inputKey: draft.inputKey,
+        expectedVersion: issue.processing?.version,
         plan,
         route,
         sourceJobId,
@@ -74,12 +102,14 @@ export function WorkflowCard({
       },
       "已确认计划，系统将连续执行并整理最终审核",
     );
+  };
   if (issue.origin) return null;
   return (
     <section className="mw-workflow-card" aria-label="处理建议与进度">
+      {draftError && <p role="alert">{draftError}</p>}
       <h3>{run ? "事项处理进度" : "系统处理建议"}</h3>
       <p>
-        {issue.orchestrationView?.reason ?? issue.processing?.reason ??
+        {issue.orchestrationView?.reason ??
           "系统先整理已有材料、范围和验收草稿；只请你补充真正缺失的信息。"}
       </p>
       {run && (
@@ -150,7 +180,7 @@ export function WorkflowCard({
               </div>
             )}
             {editing && (
-              <div>
+              <div className="mw-issue-planning">
                 {(
                   [
                     "goal",
@@ -162,19 +192,9 @@ export function WorkflowCard({
                   ] as (keyof IssuePlan)[]
                 ).map((key) => (
                   <label key={key}>
-                    {
-                      {
-                        goal: "维护目标",
-                        scope: "修改范围与排除项",
-                        acceptanceCriteria: "验收条件（每行一项）",
-                        reproduction: "复现条件与步骤",
-                        expected: "预期行为",
-                        actual: "实际行为",
-                        category: "类型",
-                        decision: "取舍",
-                      }[key]
-                    }
+                    {fieldLabels[key]}
                     <textarea
+                      aria-label={fieldLabels[key]}
                       value={
                         Array.isArray(plan[key])
                           ? (plan[key] as string[]).join("\n")
@@ -195,6 +215,12 @@ export function WorkflowCard({
                     className="mw-button primary"
                     disabled={
                       busy ||
+                      !ready ||
+                      issue.processing?.waits.some(
+                        (w) =>
+                          w.state === "open" &&
+                          ["user_input", "environment_ready"].includes(w.type),
+                      ) ||
                       !!active ||
                       !plan.goal ||
                       !plan.scope ||
@@ -211,6 +237,7 @@ export function WorkflowCard({
                 )}
               <button
                 className="mw-button"
+                disabled={!ready || busy}
                 onClick={() => setEditing(!editing)}
               >
                 修改建议

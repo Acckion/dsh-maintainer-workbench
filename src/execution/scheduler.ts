@@ -37,6 +37,7 @@ export class Scheduler extends ServiceBase {
       for (const job of jobs) {
         if (
           !job.goal ||
+          job.workflowRunId ||
           job.goalPauseReason ||
           jobs.some((child) => child.sourceJobId === job.id)
         )

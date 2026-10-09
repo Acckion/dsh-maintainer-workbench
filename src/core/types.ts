@@ -170,8 +170,8 @@ export interface Repo {
   policy?: Pick<
     Settings,
     | "syncLimit"
-    | "autoReview"
     | "autoPreflight"
+    | "autoReview"
     | "autoTriage"
     | "syncIntervalMinutes"
     | "timeoutMs"
@@ -209,7 +209,8 @@ export interface Issue {
   draft?: boolean;
   processing?: import("../domain/processing.ts").ProcessingCase;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
-  orchestration?: import("./orchestration.ts").WorkflowState;
+  orchestration?: import("../domain/plan-workflow.ts").WorkflowState;
+  processingSuggestion?: import("../domain/plan-workflow.ts").WorkflowProgress;
   orchestrationView?: {
     status: "plan" | "running" | "blocked" | "review" | "waiting" | "stale" | "deferred";
     reason: string;
@@ -340,11 +341,11 @@ export interface Audit {
   detail: string;
 }
 export interface Settings {
+  autoReview?: boolean;
   nativeDefaultModel?: ModelChoice;
   stageModels?: Partial<Record<JobKind, ModelChoice>>;
   syncLimit?: number;
   autoPreflight?: boolean;
-  autoReview?: boolean;
   triageMaxTokens?: number;
   concurrency: number;
   maxJobsPerBatch: number;

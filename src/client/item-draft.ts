@@ -1,6 +1,6 @@
 import {useEffect,useState} from 'react';
 import type {IssuePlan} from '../core/types.ts';
-export interface ItemDraft {view?:string;reply?:string;instructions?:string;plan?:IssuePlan}
+export interface ItemDraft {systemPlanInputKey?:string;view?:string;reply?:string;instructions?:string;plan?:IssuePlan}
 // Serialize writes per item: a late response cannot overwrite a newer edit.
 const writes = new Map<string,Promise<void>>();
 export function saveItemDraft(id:string,patch:ItemDraft):Promise<void> {

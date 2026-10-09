@@ -180,9 +180,9 @@ try {
 
       await selectPanel('Work');
       await page.getByText('处理记录与操作追踪',{exact:true}).click();await page.getByText('处理状态与事件历史',{exact:true}).click();
-      await page.getByText('input.submitted',{exact:true}).waitFor();
+      await page.getByText('补充输入已提交',{exact:true}).waitFor();
       await page.getByLabel('查看处理周期',{exact:true}).selectOption(inputIssue.processing.id);
-      await page.getByText('input.submitted',{exact:true}).waitFor();
+      await page.getByText('补充输入已提交',{exact:true}).waitFor();
       await page.getByRole('button', { name: 'Tasks' }).click();
       await page.locator('#mw-item-review-current').click();
       await selectPanel('Review');

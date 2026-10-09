@@ -1,3 +1,5 @@
+import type { WorkflowState } from "./plan-workflow.ts";
+
 /** Durable business state, independent of an individual Agent run. */
 export type ProcessingLifecycle =
   | "active"
@@ -83,6 +85,8 @@ export interface ProcessingCase {
   currentRunId?: string;
   planFingerprint?: string;
   planSourceFingerprint?: string;
+  /** Confirmed plan and durable checkpoints for this processing cycle only. */
+  planning?: WorkflowState;
   cycle: number;
   version: number;
   createdAt: string;
@@ -90,6 +94,7 @@ export interface ProcessingCase {
 }
 
 export type ProcessingEventPayload =
+  | { type: "planning.recorded"; planning: WorkflowState }
   | { type: "workflow.upgraded"; from: string; to: string }
   | {
       type: "source.observed";

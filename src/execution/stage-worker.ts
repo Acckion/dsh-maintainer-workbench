@@ -45,6 +45,7 @@ export class StageWorker extends ServiceBase {
   constructor(
     deps: ServiceDependencies,
     private hooks: {
+      completed?: (job: Job) => void;
       prepareRepository: (id: string) => Promise<void>;
       understand: (
         repo: Repo,
@@ -618,6 +619,7 @@ export class StageWorker extends ServiceBase {
     } finally {
       clearTimeout(timer);
       this.deps.workspaces.release(job);
+      this.hooks.completed?.(this.job(job.id));
     }
   }
 }

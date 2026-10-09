@@ -224,13 +224,15 @@ export class Workbench {
     return this.tasks.rerun(id);
   }
   retry(id: string) {
-    return this.tasks.retry(id);
+    const result = this.tasks.retry(id);
+    this.orchestration.replacement(id, result);
+    return result;
   }
   resume(id: string) {
     const job = this.store.get<Job>("jobs", id)!;
-    if (job) this.orchestration.assertResume(job);
+
     const result = this.tasks.resume(id);
-    this.orchestration.resumed(job, result);
+    this.orchestration.replacement(id, result);
     return result;
   }
   async review(id: string, decision: "approve" | "reject", note: string) {
@@ -358,7 +360,8 @@ export class Workbench {
       ),
       issues: issues.map((issue) => ({
         ...issue,
-        orchestrationView: this.orchestration.view(issue, histories.get(issue.id) ?? [], repos.get(issue.repoId)),
+        orchestrationView: this.orchestration.view(issue),
+        processingSuggestion: this.orchestration.view(issue),
         actionsAvailable: availableActions(
           issue,
           histories.get(issue.id)?.[0],

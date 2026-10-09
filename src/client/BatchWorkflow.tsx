@@ -30,9 +30,7 @@ export function BatchWorkflow({
       i.orchestration?.draft &&
       !i.orchestration.run &&
       ["fix", "docs", "investigate", "review"].includes(i.orchestration.draft.route) &&
-      !["running", "stale", "waiting", "deferred"].includes(
-        i.orchestrationView?.status ?? "",
-      ),
+      i.orchestrationView?.status === "plan",
   );
   return (
     <section aria-label="批量处理建议">

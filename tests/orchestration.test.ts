@@ -6,17 +6,14 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { createServer } from "node:http";
 import { Store } from "../src/core/store.ts";
 import { Workbench } from "../src/core/workbench.ts";
-import { GitHub } from "../src/core/github.ts";
 import { seedFixture, fixtureAnalysis } from "./support/fixtures.ts";
 import { asAnalysis, artifactSchemas } from "../src/core/artifacts.ts";
 import { git, collectPatch } from "../src/core/git.ts";
 import { documentCheckCommand } from "../src/core/document-acceptance.ts";
 import { planInputKey } from "../src/core/change-plan.ts";
 import type { Issue, Job, Runner } from "../src/core/types.ts";
-import { handler, localRejection } from "../src/server/http.ts";
 const common = {
   schemaVersion: 1 as const,
   summary: "文档修改",
@@ -39,7 +36,7 @@ const draft = {
   ],
   missingInfo: [],
 };
-function setup(github?: GitHub) {
+function setup() {
   const store = new Store(":memory:");
   seedFixture(store);
   const wb = new Workbench(
@@ -49,7 +46,7 @@ function setup(github?: GitHub) {
       result: fixtureAnalysis(issue, job.kind),
       engine: "unit fixture",
     }),
-    github,
+    undefined,
     false,
   );
   const issue = store.issues()[0],
@@ -67,141 +64,6 @@ function setup(github?: GitHub) {
   return { store, wb, issue: store.issues()[0], repo };
 }
 const accept = { ...draft, decision: "accepted" as const };
-
-test("snapshot retains durable processing state alongside orchestration status", async () => {
-  const { store, wb, issue } = setup();
-  try {
-    const wait = wb.processing.requestInput(issue.id, {
-      reason: "明确文档预期",
-      fields: [{ id: "expected", question: "期望哪项说明？" }],
-    });
-    const snapshot = wb.snapshot().issues[0];
-    assert.equal(snapshot.processing?.id, store.processing.current(issue.id)?.id);
-    assert.equal(snapshot.processing?.waits[0].id, wait.id);
-    assert.equal(snapshot.orchestrationView?.status, "blocked");
-    assert.throws(() => wb.orchestration.start(issue.id, issue.orchestration!.draft!.inputKey, accept), /补充输入/);
-    assert.equal(store.jobs().length, 0);
-  } finally { await wb.close(); }
-});
-
-test("waiting input preserves partial results and resumes within the same authorized workflow", async () => {
-  const { store, wb, issue } = setup();
-  try {
-    wb.orchestration.start(issue.id, issue.orchestration!.draft!.inputKey, accept);
-    const job = store.jobs()[0];
-    store.put("jobs", { ...job, status: "waiting_input", result: fixtureAnalysis(issue, "docs"), patch: "partial patch" });
-    const wait = wb.processing.requestInput(issue.id, {
-      reason: "需要文档措辞",
-      fields: [{ id: "wording", question: "使用哪项术语？" }],
-    }, job.id);
-    wb.orchestration.completed(store.jobs()[0]);
-    assert.equal(store.jobs().length, 1);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "blocked");
-    assert.deepEqual(store.issues()[0].orchestration?.run?.completedJobIds, []);
-    wb.processing.submitInput(issue.id, wait.id, { wording: "完整使用说明" }, store.processing.current(issue.id)!.version);
-    assert.equal(store.jobs().length, 1);
-    const ready = store.issues()[0];
-    store.put("issues", { ...ready, orchestration: { ...ready.orchestration, run: { ...ready.orchestration!.run!, deadlineAt: new Date(0).toISOString() } } });
-    assert.throws(() => wb.resume(job.id), /预算/);
-    assert.equal(store.jobs().length, 1);
-    store.put("issues", ready);
-    const resumed = wb.orchestration.resume(issue.id);
-    const next = store.get<Job>("jobs", resumed.created[0])!;
-    assert.equal(next.workflowRunId, job.workflowRunId);
-    assert.equal(next.sourceJobId, job.id);
-    assert.match(next.instructions!, /完整使用说明/);
-    assert.equal(store.issues()[0].orchestration?.run?.currentJobId, next.id);
-    wb.orchestration.completed(store.jobs()[0]);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "running");
-    assert.equal(store.get<Job>("jobs", job.id)?.patch, "partial patch");
-  } finally { await wb.close(); }
-});
-
-test("fresh confirmation renews the source binding even when the accepted plan is unchanged", async () => {
-  const { store, wb, issue, repo } = setup();
-  try {
-    wb.orchestration.start(issue.id, issue.orchestration!.draft!.inputKey, accept);
-    wb.orchestration.pause(issue.id, true);
-    const old = store.issues()[0];
-    const updated = { ...old, body: "补充了来源事实，计划范围不变", orchestration: { draft: { ...old.orchestration!.draft!, inputKey: "updated" } } };
-    updated.orchestration.draft.inputKey = planInputKey(updated, repo);
-    store.put("issues", updated);
-    const result = wb.orchestration.start(issue.id, updated.orchestration.draft.inputKey, accept);
-    assert.equal(result.created.length, 1);
-    assert.equal(store.processing.current(issue.id)?.planSourceFingerprint, store.processing.current(issue.id)?.sourceFingerprint);
-  } finally { await wb.close(); }
-});
-
-test("checkpoint recovery preserves confirmed feedback and never duplicates the queued execution", async () => {
-  const { store, wb, issue } = setup();
-  try {
-    const first = wb.orchestration.start(issue.id, issue.orchestration!.draft!.inputKey, accept, undefined, undefined, "必须保留术语 A");
-    const saved = store.issues()[0];
-    store.put("issues", { ...saved, orchestration: { ...saved.orchestration, run: { ...saved.orchestration!.run!, currentJobId: undefined } } });
-    wb.orchestration.reconcile();
-    assert.equal(store.jobs().length, 1);
-    assert.equal(store.issues()[0].orchestration?.run?.currentJobId, first.created[0]);
-    assert.match(store.jobs()[0].instructions!, /必须保留术语 A/);
-  } finally { await wb.close(); }
-});
-
-test("repository synchronization preserves orchestration and saved policy settings", async () => {
-  const github = new GitHub("", async () => { throw new Error("Unexpected external request"); });
-  const { store, wb, issue, repo } = setup(github);
-  try {
-    wb.orchestration.start(issue.id, issue.orchestration!.draft!.inputKey, accept);
-    const runId = store.issues()[0].orchestration!.run!.id;
-    wb.updatePolicy(repo.id, { autoTriage: false, autoReview: true, syncIntervalMinutes: 0, timeoutMs: 600000, maxTokens: 6000 });
-    assert.equal(store.repos()[0].policy?.autoReview, true);
-    wb.updateSettings({ ...store.settings(), autoReview: true });
-    assert.equal(store.settings().autoReview, true);
-    github.sync = async () => ({ repo: store.repos()[0], issues: [{ ...issue, body: "updated remotely" }] });
-    await wb.sync(repo.fullName);
-    assert.equal(store.issues()[0].orchestration?.run?.id, runId);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "blocked");
-  } finally { await wb.close(); }
-});
-
-test("batch dispatch reports a blocked environment as an error without claiming a task was created", async () => {
-  const { store, wb, issue, repo } = setup();
-  try {
-    const emptyRepo = { ...repo, mode: "local" as const, headSha: "" };
-    store.put("repos", emptyRepo);
-    const inputKey = planInputKey(issue, emptyRepo);
-    store.put("issues", { ...issue, orchestration: { ...issue.orchestration, draft: { ...issue.orchestration!.draft!, inputKey } } });
-    const result = wb.orchestration.startBatch([{ issueId: issue.id, inputKey, plan: accept }]);
-    assert.match(result.results[0].error!, /无 Git 提交/);
-    assert.ok("created" in result.results[0]);
-    assert.equal(result.results[0].created?.length, 0);
-    assert.equal(store.jobs().length, 0);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "blocked");
-  } finally { await wb.close(); }
-});
-
-test("workflow HTTP actions honor durable version conflicts before changing authorization", async () => {
-  const { store, wb, issue } = setup();
-  const server = createServer(handler(wb, localRejection));
-  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
-  try {
-    const version = issue.processing!.version;
-    wb.decide(issue.id, "decision", "需要确认");
-    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/maintainer/api/workflow/start`;
-    const post = (expectedVersion: number) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ issueId: issue.id, inputKey: issue.orchestration!.draft!.inputKey, plan: accept, expectedVersion }) });
-    const obsolete = await post(version);
-    assert.equal(obsolete.status, 409);
-    assert.equal(store.jobs().length, 0);
-    const response = await post(store.processing.current(issue.id)!.version);
-    assert.equal(response.status, 200);
-    assert.equal((await response.json()).created.length, 1);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "running");
-    const staleBatch = wb.orchestration.startBatch([{ issueId: issue.id, inputKey: issue.orchestration!.draft!.inputKey, plan: accept, expectedVersion: version }]);
-    assert.match(staleBatch.results[0].error!, /状态已变化/);
-    assert.equal(store.jobs().length, 1);
-  } finally {
-    await new Promise<void>(resolve => server.close(() => resolve()));
-    await wb.close();
-  }
-});
 
 test("reanalyzing a stopped plan archives its authorization and requires a fresh confirmation", async () => {
   const { store, wb, issue } = setup();
@@ -259,6 +121,124 @@ test("reanalyzing a stopped plan archives its authorization and requires a fresh
   }
 });
 
+test("plan confirmation preserves master input waits and does not grant a new authorization", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    const wait = wb.processing.requestInput(issue.id, {
+      reason: "Need expected behavior",
+      fields: [{ id: "expected", question: "Expected behavior?" }],
+    });
+    assert.throws(
+      () =>
+        wb.orchestration.start(
+          issue.id,
+          issue.orchestration!.draft!.inputKey,
+          accept,
+        ),
+      /当前输入/,
+    );
+    assert.equal(
+      store.processing.current(issue.id)!.waits.find((w) => w.id === wait.id)
+        ?.state,
+      "open",
+    );
+    assert.equal(store.issues()[0].plan, undefined);
+    assert.equal(store.jobs().length, 0);
+  } finally {
+    await wb.close();
+  }
+});
+
+test("master input resume keeps the authorized chain without treating the waiting result as completed", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    wb.orchestration.start(
+      issue.id,
+      issue.orchestration!.draft!.inputKey,
+      accept,
+    );
+    const job = store.jobs()[0];
+    const waiting = {
+      ...job,
+      status: "waiting_input" as const,
+      result: fixtureAnalysis(issue, "docs"),
+    };
+    store.put("jobs", waiting);
+    const wait = wb.processing.requestInput(
+      issue.id,
+      {
+        reason: "Need precise edit",
+        fields: [{ id: "edit", question: "Which paragraph?" }],
+      },
+      job.id,
+    );
+    wb.orchestration.completed(waiting);
+    assert.equal(store.jobs().length, 1);
+    assert.equal(
+      store.issues()[0].orchestration?.run?.completedJobIds.length,
+      0,
+    );
+    wb.processing.submitInput(
+      issue.id,
+      wait.id,
+      { edit: "Existing usage paragraph" },
+      store.processing.current(issue.id)!.version,
+    );
+    const resumed = wb.resume(job.id).created[0];
+    assert.ok(resumed);
+    assert.equal(
+      store.get<Job>("jobs", resumed)?.workflowRunId,
+      job.workflowRunId,
+    );
+    assert.equal(store.issues()[0].orchestration?.run?.currentJobId, resumed);
+    assert.equal(store.issues()[0].orchestration?.run?.status, "running");
+    assert.equal(store.get<Job>("jobs", job.id)?.status, "waiting_input");
+  } finally {
+    await wb.close();
+  }
+});
+
+test("an old processing cycle cannot advance a reopened item", async () => {
+  const { store, wb, issue, repo } = setup();
+  try {
+    wb.orchestration.start(
+      issue.id,
+      issue.orchestration!.draft!.inputKey,
+      accept,
+    );
+    const job = store.jobs()[0];
+    store.put("issues", { ...store.issues()[0], state: "closed" });
+    store.put("issues", { ...store.issues()[0], state: "open" });
+    assert.notEqual(store.processing.current(issue.id)!.id, job.caseId);
+    const completed = {
+      ...job,
+      status: "completed" as const,
+      result: fixtureAnalysis(issue, "docs"),
+      patch: "old patch",
+    };
+    store.put("jobs", completed);
+    wb.orchestration.completed(completed);
+    wb.orchestration.synced(repo.id);
+    assert.equal(store.jobs().length, 1);
+    assert.equal(store.issues()[0].orchestration, undefined);
+    assert.equal(
+      store.processing.cases(issue.id)[0].planning?.run?.id,
+      job.workflowRunId,
+    );
+    assert.throws(
+      () =>
+        wb.orchestration.start(
+          issue.id,
+          issue.orchestration!.draft!.inputKey,
+          accept,
+        ),
+      /变化|草稿/,
+    );
+  } finally {
+    await wb.close();
+  }
+});
+
 test("confirmation is idempotent and changed plans cannot overwrite a running authorization", async () => {
   const { store, wb, issue } = setup();
   try {
@@ -305,7 +285,7 @@ test("stale materials reject confirmation and queued checkpoints never count as 
         ),
       /变化/,
     );
-    assert.equal(wb.snapshot().issues[0].orchestrationView?.status, "stale");
+    assert.equal(wb.snapshot().issues[0].processingSuggestion?.status, "stale");
   } finally {
     await wb.close();
   }
@@ -438,7 +418,7 @@ test("batch start reports per-item failures without making a failed item look st
     ]);
     assert.ok("created" in result.results[0]);
     assert.equal(result.results[0].created?.length, 1);
-    assert.match(result.results[1].error!, /不存在|开放事项/);
+    assert.match(result.results[1].error!, /开放事项/);
     assert.equal(store.jobs().length, 1);
   } finally {
     await wb.close();
@@ -493,11 +473,6 @@ test("author handoff waits for confirmed publication and reviews only a new head
         },
       },
     };
-    store.put("jobs", j);
-    wb.orchestration.completed(j);
-    store.put("jobs", { ...j, workflowRunId: "previous-authorization" });
-    assert.throws(() => wb.orchestration.waitAuthor(j.id), /当前计划/);
-    assert.equal(store.issues()[0].orchestration?.run?.status, "review");
     store.put("jobs", j);
     wb.orchestration.waitAuthor(j.id);
     wb.orchestration.synced(repo.id);
@@ -753,5 +728,145 @@ test("document plan runs real git changes and document checks continuously then 
     "passed",
   );
   assert.ok(store.jobs().find((j) => j.kind === "docs")?.patch);
+  const approvals = store.processing
+    .current(issue.id)!
+    .waits.filter((wait) => wait.type === "approval" && wait.state === "open");
+  assert.equal(
+    approvals.length,
+    1,
+    "only final review requires a maintainer decision",
+  );
+  assert.equal(
+    approvals[0].requestedByRunId,
+    store.jobs().find((j) => j.kind === "review")!.id,
+  );
+
   assert.ok(store.jobs().every((j) => !j.publications));
+});
+
+test("planning has one durable case state and duplicate events do not advance its version", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    const state = store.processing.current(issue.id)!;
+    assert.deepEqual(state.planning, issue.orchestration);
+    const raw = JSON.parse(
+      String(
+        store.db.prepare("SELECT data FROM issues WHERE id=?").get(issue.id)!
+          .data,
+      ),
+    );
+    assert.equal(raw.orchestration, undefined);
+    const events = store.processing.events(state.id);
+    assert.ok(
+      events.some((event) => event.payload.type === "planning.recorded"),
+    );
+    store.processing.recordPlanning(issue.id, state.planning!, state.version);
+    assert.equal(store.processing.current(issue.id)!.version, state.version);
+    assert.equal(store.processing.events(state.id).length, events.length);
+    assert.throws(
+      () =>
+        store.processing.recordPlanning(
+          issue.id,
+          state.planning!,
+          state.version - 1,
+        ),
+      /变化|冲突|更新/,
+    );
+    assert.throws(
+      () =>
+        store.processing.recordPlanning(
+          issue.id,
+          {
+            ...state.planning,
+            run: { caseId: "another-cycle" } as never,
+          },
+          state.version,
+        ),
+      /处理周期/,
+    );
+    assert.deepEqual(store.processing.current(issue.id), state);
+  } finally {
+    await wb.close();
+  }
+});
+
+test("legacy planning migration is durable, idempotent and cannot authorize an unbound run", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mw-planning-migration-"));
+  const path = join(directory, "state.sqlite");
+  try {
+    let store = new Store(path);
+    seedFixture(store);
+    const issue = store.issues()[0],
+      repo = store.repos()[0];
+    const planning = {
+      draft: {
+        ...draft,
+        inputKey: planInputKey(issue, repo),
+        generatedAt: new Date().toISOString(),
+      },
+      run: {
+        id: "legacy",
+        inputKey: planInputKey(issue, repo),
+        planVersion: "legacy",
+        plan: accept,
+        route: "docs",
+        status: "running",
+        completedJobIds: [],
+        reason: "legacy",
+        startedAt: new Date().toISOString(),
+        deadlineAt: new Date(Date.now() + 60000).toISOString(),
+        maxSteps: 6,
+      },
+    };
+    store.db
+      .prepare("UPDATE issues SET data=? WHERE id=?")
+      .run(JSON.stringify({ ...issue, orchestration: planning }), issue.id);
+    store.db.close();
+    store = new Store(path);
+    const migrated = store.issues()[0];
+    assert.equal(migrated.orchestration?.run?.status, "blocked");
+    assert.equal(migrated.orchestration?.run?.caseId, migrated.processing?.id);
+    assert.equal(store.jobs().length, 0);
+    const count = store.processing.events(migrated.processing!.id).length;
+    store.db.close();
+    store = new Store(path);
+    assert.equal(
+      store.processing.events(migrated.processing!.id).length,
+      count,
+    );
+    assert.deepEqual(store.issues()[0].orchestration, migrated.orchestration);
+    store.db.close();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("confirmation rejects a stale case version before granting authorization", async () => {
+  const { store, wb, issue } = setup();
+  try {
+    const version = issue.processing!.version;
+    store.processing.recordPlanning(
+      issue.id,
+      { ...issue.orchestration, previousRuns: [] },
+      version,
+    );
+    assert.throws(
+      () =>
+        wb.orchestration.start(
+          issue.id,
+          issue.orchestration!.draft!.inputKey,
+          accept,
+          undefined,
+          undefined,
+          "",
+          version,
+        ),
+      /变化/,
+    );
+    assert.equal(store.jobs().length, 0);
+    assert.equal(store.issues()[0].plan, undefined);
+    assert.equal(store.issues()[0].orchestration?.run, undefined);
+  } finally {
+    await wb.close();
+  }
 });

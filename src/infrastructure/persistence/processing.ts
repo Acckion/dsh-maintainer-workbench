@@ -1,3 +1,4 @@
+import type { WorkflowState } from "../../domain/plan-workflow.ts";
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { revision } from "../../core/revision.ts";
@@ -192,6 +193,69 @@ export class ProcessingRepository {
       .prepare("UPDATE processing_cases SET data=? WHERE id=?")
       .run(JSON.stringify(next), state.id);
     return next;
+  }
+  recordPlanning(
+    workItemId: string,
+    planning: WorkflowState,
+    expectedVersion?: number,
+  ): ProcessingCase {
+    const state = this.current(workItemId);
+    if (!state) throw new Error("事项处理状态不存在");
+    if (expectedVersion !== undefined && state.version !== expectedVersion)
+      throw new ProcessingConflictError();
+    if (hash(state.planning ?? null) === hash(planning)) return state;
+    return this.dispatch(
+      workItemId,
+      { type: "planning.recorded", planning },
+      "system",
+      `planning:${state.version}:${hash(planning)}`,
+      expectedVersion,
+    );
+  }
+  /** Import legacy records once, including authorization attached to a historical cycle. */
+  migratePlanning(issue: Issue): void {
+    const planning = issue.orchestration;
+    if (!planning) return;
+    const state = planning.run?.caseId
+      ? this.cases(issue.id).find((c) => c.id === planning.run!.caseId)
+      : this.current(issue.id);
+    if (!state || state.planning) return;
+    // A legacy run without a cycle cannot acquire execution permission during migration.
+    const imported =
+      planning.run && !planning.run.caseId
+        ? {
+            ...planning,
+            run: {
+              ...planning.run,
+              caseId: state.id,
+              status: "blocked" as const,
+              reason: "旧计划缺少处理周期绑定，请核对后重新确认",
+            },
+          }
+        : planning;
+    const now = new Date().toISOString();
+    const event: ProcessingEvent = {
+      id: randomUUID(),
+      caseId: state.id,
+      workItemId: issue.id,
+      source: "system",
+      deduplicationKey: `${state.id}:planning:migration`,
+      occurredAt: now,
+      receivedAt: now,
+      payload: { type: "planning.recorded", planning: imported },
+    };
+    const next = workflowDefinition(state.workflowDefinitionVersion).transition(
+      state,
+      event,
+    );
+    this.db
+      .prepare(
+        "INSERT INTO processing_events(id,caseId,deduplicationKey,data) VALUES(?,?,?,?)",
+      )
+      .run(event.id, state.id, event.deduplicationKey, JSON.stringify(event));
+    this.db
+      .prepare("UPDATE processing_cases SET data=? WHERE id=?")
+      .run(JSON.stringify(next), state.id);
   }
   observeIssue(previous: Issue | undefined, issue: Issue): ProcessingCase {
     let state = this.current(issue.id);

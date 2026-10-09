@@ -261,6 +261,8 @@ export function actionLabel(kind: JobKind, issue: Issue, job?: Job): string {
 export function eventDescription(event: ProcessingEvent): string {
   const p = event.payload;
   switch (p.type) {
+    case "planning.recorded":
+      return "处理计划与进度已保存";
     case "run.observed":
       return `${kindNames[p.kind as JobKind] ?? "阶段任务"} · ${({ queued: "已排队", running: "执行中", failed: "失败", completed: "结果已保存", awaiting_review: "等待审核", approved: "本地已接受", rejected: "已退回", cancelled: "已停止", waiting_input: "等待输入", waiting_environment: "等待环境" } as Record<string, string>)[p.status] ?? p.status}：${p.reason}`;
     case "decision.recorded":
