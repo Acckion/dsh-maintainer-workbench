@@ -1581,6 +1581,7 @@ export function App({
           }
           close={() => setDetailOpen(false)}
           renderAgentPanel={renderStage}
+        renderAgentActions={renderStageActions}
           agentPanel={
             <>
               <WorkflowPanel
@@ -1834,9 +1835,23 @@ export function App({
           setJobFocus(undefined);
         }}
         renderAgentPanel={renderStage}
+        renderAgentActions={renderStageActions}
         agentPanel={renderDetail()}
       />
     );
+  }
+
+  function renderStageActions(stage: "triage" | "execution" | "review") {
+    if (!displayedIssue || stage === "review") return null;
+    const kinds: JobKind[] = stage === "triage"
+      ? [displayedIssue.type === "pr" ? "preflight" : "triage"]
+      : displayedIssue.type === "pr" ? ["review", "ci"] : ["investigate", "fix"];
+    return kinds.map(kind => (
+      <button key={kind} className="mw-button" disabled={!!busy}
+        onClick={() => void enqueue(kind, [displayedIssue.id])}>
+        {kindNames[kind]}
+      </button>
+    ));
   }
 
   function renderStage(stage: "triage" | "execution" | "review") {
@@ -1874,37 +1889,6 @@ export function App({
       );
     return (
       <section className="mw-stage-panel">
-        <div className="mw-stage-flow">
-          <span className={stage === "triage" ? "active" : ""}>1 · Triage</span>
-          <ArrowRight size={14} />
-          <span className={stage === "execution" ? "active" : ""}>
-            2 · Execution
-          </span>
-          <ArrowRight size={14} />
-          <span>3 · Review</span>
-        </div>
-        <p className="mw-muted">
-          {stage === "triage"
-            ? "分类、优先级与下一步路由；PR 使用快速预检。结果按版本保存，未变化时直接复用。"
-            : "从调查到实施和验证，查看任务进度及执行记录。"}
-        </p>
-        <div className="mw-detail-actions">
-          {(stage === "triage"
-            ? [displayedIssue.type === "pr" ? "preflight" : "triage"]
-            : displayedIssue.type === "pr"
-              ? ["review", "ci"]
-              : ["investigate", "fix"]
-          ).map((kind) => (
-            <button
-              key={kind}
-              className="mw-button"
-              disabled={!!busy}
-              onClick={() => void enqueue(kind as JobKind, [displayedIssue.id])}
-            >
-              {kindNames[kind as JobKind]}
-            </button>
-          ))}
-        </div>
         {relevant.length > 0 && (
           <div className="mw-stage-jobs">
             {relevant.map((j) => (

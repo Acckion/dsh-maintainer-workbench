@@ -359,8 +359,6 @@
 .mw-global-tabs button.mw-tab-sync:disabled{opacity:.45;cursor:not-allowed}
 
 .mw-stage-panel{padding:20px;display:flex;flex-direction:column;gap:16px}
-.mw-stage-flow{display:flex;align-items:center;gap:14px;padding-bottom:16px;border-bottom:1px solid #e0e9e3;color:#87988f}
-.mw-stage-flow .active{font-weight:650;color:#167963}
 .mw-stage-jobs{display:flex;gap:8px;flex-wrap:wrap}
 
 /* Compact workspace chrome: content, not persistent explanatory banners. */
@@ -385,7 +383,6 @@
 .mw-callout{padding:10px 12px;gap:8px;font-size:13px}
 .mw-callout p{margin:4px 0}
 .mw-stage-panel{padding:8px 0;gap:12px}
-.mw-stage-flow{padding-bottom:10px}
 .mw-reader-content details.mw-compact-notice>summary{margin:0;font-size:12px}
 
 .mw-review-summary > section { padding: 14px 0; border-top: 1px solid #e1e8e5; }
@@ -398,3 +395,5 @@
 
 .mw-final-review-nav { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 14px; }
 .mw-final-review-nav .mw-text-button { font-size: 12px !important; }
+
+.mw-reader-tabbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}.mw-reader-tabbar .mw-reader-tabs{min-width:0;flex:1}.mw-reader-stage-actions{display:flex;gap:8px;flex-shrink:0}.mw-reader-stage-actions .mw-button{padding:7px 11px;font-size:12px}@media(max-width:600px){.mw-reader-tabbar{flex-wrap:wrap;gap:4px}.mw-reader-tabbar .mw-reader-tabs{flex-basis:100%}.mw-reader-stage-actions{margin-left:auto;margin-bottom:8px}}
