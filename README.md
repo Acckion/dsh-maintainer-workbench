@@ -58,11 +58,21 @@ npm start
 
 ## 安装为分发插件
 
+每次 `master` 更新，GitHub Actions 自动构建预编译包，在 [GitHub Releases](https://github.com/Acckion/dsh-maintainer-workbench/releases) 发布按提交区分的 `master-<commit>` 预发布版本。下载其 `dsh-maintainer-workbench.tgz` 后，在 Harness 插件安装入口选择本地文件，或使用该 Release 附件的完整下载 URL。包内包含 `dist`，没有安装构建脚本，因此不需要为本插件配置 Git 构建白名单；直接安装源码 Git URL 仍需授权。
+
+自动发布规则、npm 可选配置和校验方式见 [自动分发说明](docs/AUTOMATED-DISTRIBUTION.md)。本地生成同样的包：
+
+```sh
+npm ci --ignore-scripts
+npm run package:distribution
+dsh plugin --profile web add /absolute/path/artifacts/dsh-maintainer-workbench.tgz
+```
+
 ```sh
 npm run build
 npm pack
 # 在已有 Harness 环境：
-dsh plugin --profile web add /absolute/path/dsh-maintainer-workbench-0.2.0.tgz
+dsh plugin --profile web add /absolute/path/dsh-maintainer-workbench-0.4.0.tgz
 dsh web
 ```
 

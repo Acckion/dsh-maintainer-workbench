@@ -4,6 +4,10 @@
   "description": "Repository maintenance workbench for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Acckion/dsh-maintainer-workbench.git"
+  },
   "main": "./dist/plugin.js",
   "exports": {
     ".": "./dist/plugin.js",
@@ -21,6 +25,7 @@
     "skills",
     "docs/VALIDATION.md",
     "docs/ACCEPTANCE.md",
+    "docs/AUTOMATED-DISTRIBUTION.md",
     "docs/evidence",
     "docs/product",
     "docs/EVALUATION.md",
@@ -46,6 +51,7 @@
   "scripts": {
     "dev": "node --use-system-ca --import tsx --watch src/server/dev.ts",
     "build": "node scripts/build.mjs",
+    "package:distribution": "npm run build && node scripts/pack-distribution.mjs",
     "prepare": "npm run build",
     "start": "node --use-system-ca dist/server.js",
     "typecheck": "tsc --noEmit",
