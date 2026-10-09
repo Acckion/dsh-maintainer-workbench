@@ -423,3 +423,22 @@
 .mw-filter-toggle.active{color:var(--green);background:#e8f4ef}
 .mw-sync-time{align-self:center;color:var(--muted);font-size:11px;white-space:nowrap;padding-right:12px}
 .mw-item-work .mw-operation-tracker{margin:0 0 12px}
+
+/* Anchored filter options never consume inbox height. */
+.mw-inbox-filter{position:relative;flex:none}
+.mw-filter-popover{position:absolute;right:0;top:calc(100% + 6px);z-index:30;min-width:180px;padding:5px;border:1px solid var(--line);border-radius:9px;background:white;box-shadow:0 8px 24px #203c3420}
+.mw-filter-popover>button{display:flex;width:100%;justify-content:space-between;border:0;background:transparent;border-radius:5px;color:var(--ink);padding:8px 10px;text-align:left}
+.mw-filter-popover>button:hover,.mw-filter-popover>button[aria-pressed=true]{background:#eaf5ef;color:var(--green)}
+.mw-layout-tabs .mw-panel-top{padding-top:6px;padding-bottom:0}
+.mw-layout-tabs .mw-panel-top .mw-tabs button{padding-top:8px;padding-bottom:8px}
+.mw-reader-header .mw-reader-topline{justify-content:flex-end;min-height:0;margin-bottom:8px}
+.mw-reader-topline:has(.mw-reader-top-actions:empty){display:none}
+.mw-reader-header h2{font-size:20px;line-height:1.4;margin-top:0}
+.mw-reader-header h2>.mw-icon-button{display:inline-flex;vertical-align:middle;margin-left:5px;font-size:13px}
+@media(max-width:760px){.mw-reader-header h2{font-size:18px}}
+
+.mw-reader-header .mw-mobile-list-return{display:none}
+@media(max-width:760px){.mw-reader-header .mw-mobile-list-return{display:inline-flex;margin-right:6px}}
+.mw-reader-embedded .mw-reader-header h2{font-size:19px;line-height:1.4;margin-top:0}
+.mw-reader-header h2>.mw-mobile-list-return{display:none}
+@media(max-width:760px){.mw-reader-embedded .mw-reader-header h2{font-size:18px}.mw-reader-header h2>.mw-mobile-list-return{display:inline-flex;margin-right:6px}}

@@ -57,8 +57,11 @@ try {
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.getByLabel('筛选问题', {exact:true}).count(), 0);
       await page.getByRole('button', {name:'展开筛选',exact:true}).click();
-      await page.getByLabel('筛选问题', {exact:true}).selectOption('all');
+      await page.getByRole('dialog', {name:'筛选问题'}).getByRole('button',{name:'所有开放问题',exact:true}).click();
+      assert.equal(await page.getByRole('dialog', {name:'筛选问题'}).count(), 0);
       await page.getByRole('button', {name:'展开筛选',exact:true}).click();
+      await page.keyboard.press('Escape');
+      assert.equal(await page.getByRole('dialog', {name:'筛选问题'}).count(), 0);
       const row = page.locator('[id="mw-item-fixture/queue#128"]').locator('..');
       assert.ok(await row.locator('.mw-issue-title strong').evaluate(el=>el.getBoundingClientRect().width) > 50, 'item title remains readable');
       const selection = await row.locator('input[type=checkbox]').boundingBox();

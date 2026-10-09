@@ -1,3 +1,4 @@
+import { InboxFilter } from "./InboxFilter.tsx";
 import {flushItemDraft} from './item-draft.ts';
 import {ReviewFindingControls} from './ReviewFindingControls.tsx';
 import {RemoteProgress} from './RemoteProgress.tsx';
@@ -449,7 +450,6 @@ export function App({
   const [showQuickTasks, setShowQuickTasks] = useState(false);
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
-  const [filterOpen, setFilterOpen] = useState(false);
   const [type, setType] = useState("all");
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -1048,21 +1048,7 @@ export function App({
                           onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
-                      <button className={`mw-icon-button mw-filter-toggle ${filter !== "all" ? "active" : ""}`} aria-label="展开筛选" aria-expanded={filterOpen} onClick={()=>setFilterOpen(v=>!v)}><Filter size={16}/></button>
-                      {filterOpen && <label className="mw-filter">
-                        <Filter size={14} />
-                        <select
-                          aria-label="筛选问题"
-                          value={filter}
-                          onChange={(e) => setFilter(e.target.value)}
-                        >
-                          <option value="all">所有开放问题</option>
-                          <option value="untriaged">尚未分诊</option>
-                          <option value="priority">高优先级</option>
-                          <option value="duplicates">疑似重复</option>
-                          <option value="closed">已关闭</option>
-                        </select>
-                      </label>}
+                      <InboxFilter value={filter} onChange={setFilter}/>
                     </div>
                     <div className="mw-batch">
                       <label>
@@ -1203,7 +1189,7 @@ export function App({
                               </div>
                             </button>
                             <div className="mw-row-status">
-                              {i.type === "issue" && (i.plan?.category ?? i.analysis?.category) && <Tag>{categoryNames[(i.plan?.category ?? i.analysis?.category)!]}</Tag>}
+                              {i.type === "issue" && (i.plan?.category ?? i.analysis?.category) && <Tag>{i.plan?.category ?? i.analysis?.category}</Tag>}
                               {current ? (
                                 <Tag tone="violet">
                                   <Loader2 size={11} className="mw-spin" />{" "}
