@@ -1678,6 +1678,7 @@ export function App({
         audit={state?.audit}
         render={renderStage}
         track={renderTrack}
+        evidence={renderLinkedEvidence}
         actions={renderWorkflowActions}
       />
     );
@@ -1715,103 +1716,6 @@ export function App({
     const job = selectedJob;
     if (!displayedIssue) return null;
     const history = jobs.filter((j) => j.issueId === displayedIssue.id);
-    if (stage === "overview") {
-      const saved =
-        job?.result ?? (readOnly ? undefined : displayedIssue.analysis);
-      const active =
-        !readOnly &&
-        history.find((j) => ["queued", "running"].includes(j.status));
-      return (
-        <section className="mw-item-overview">
-          {!readOnly && (
-            <ProcessingInput
-              issue={displayedIssue}
-              busy={!!busy}
-              act={(path, data, message) =>
-                action("workflow", path, data, message)
-              }
-            />
-          )}
-          <h3>
-            {active
-              ? `${kindNames[active.kind]}中`
-              : saved
-                ? "当前结论"
-                : "尚未分析"}
-          </h3>
-          {saved ? (
-            <>
-              <p>{saved.summary}</p>
-              <div className="mw-tags">
-                <span className="mw-tag">{saved.category}</span>
-                <span className="mw-tag">{saved.priority}</span>
-              </div>
-              {saved.missingInfo.length > 0 && (
-                <details>
-                  <summary>
-                    {displayedIssue.type === "pr" ? "审查覆盖缺口" : "信息缺口"}{" "}
-                    · {saved.missingInfo.length}
-                  </summary>
-                  <ul>
-                    {saved.missingInfo.map((text) => (
-                      <li key={text}>{text}</li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </>
-          ) : (
-            <p>选择上方操作开始分析。</p>
-          )}
-          {job?.error && (
-            <p role="alert">
-              {job.status === "waiting_environment"
-                ? "等待环境准备"
-                : "最近一次任务失败"}
-              ：{job.error}。已保存的结论仍可查看。
-            </p>
-          )}
-          {displayedIssue.type === "issue" &&
-            displayedIssue.analysis?.category === "question" && (
-              <button
-                className="mw-text-button"
-                onClick={() =>
-                  setReaderRequest({
-                    sequence: Date.now(),
-                    issueId: displayedIssue.id,
-                    tab: "plan",
-                  })
-                }
-              >
-                调整事项类型
-              </button>
-            )}
-          {job && (
-            <button
-              className="mw-text-button"
-              onClick={() => openEvidenceJob(job.id, "log")}
-            >
-              查看执行记录
-            </button>
-          )}
-          {job && !["triage", "preflight"].includes(job.kind) && (
-            <details className="mw-overview-evidence">
-              <summary>关联验证与交付证据</summary>
-              <ReviewSummary
-                compact
-                job={job}
-                jobs={jobs}
-                issue={displayedIssue}
-                audit={state?.audit ?? []}
-                native={!!state?.capabilities.harness}
-                open={openEvidenceJob}
-                openSession={openSession}
-              />
-            </details>
-          )}
-        </section>
-      );
-    }
     if (stage === "plan")
       return readOnly ? (
         <p>
@@ -1891,6 +1795,12 @@ export function App({
           </details>
           {job ? (
             <>
+              <button
+                className="mw-text-button"
+                onClick={() => openEvidenceJob(job.id, "log")}
+              >
+                查看执行记录
+              </button>
               {job.error && <p role="alert">{job.error}</p>}
               {job.result && <p>{job.result.summary}</p>}
               {job.sessionId && openSession && (
@@ -2035,6 +1945,30 @@ export function App({
     return null;
   }
 
+  function renderLinkedEvidence(selectedJob?: typeof job) {
+    if (
+      !displayedIssue ||
+      !selectedJob ||
+      ["triage", "preflight"].includes(selectedJob.kind)
+    )
+      return null;
+    return (
+      <details className="mw-delivery-evidence">
+        <summary>关联验证与交付证据</summary>
+        <ReviewSummary
+          compact
+          job={selectedJob}
+          jobs={jobs}
+          issue={displayedIssue}
+          audit={state?.audit ?? []}
+          native={!!state?.capabilities.harness}
+          open={openEvidenceJob}
+          openSession={openSession}
+        />
+      </details>
+    );
+  }
+
   function renderTrack(
     selectedJob = job,
     readOnly = false,
@@ -2043,6 +1977,7 @@ export function App({
     if (!displayedIssue) return null;
     return (
       <>
+        {renderLinkedEvidence(selectedJob)}
         {selectedJob &&
           (readOnly
             ? Object.entries(selectedJob.publications ?? {}).map(

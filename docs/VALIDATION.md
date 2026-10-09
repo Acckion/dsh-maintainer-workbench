@@ -190,3 +190,5 @@ REGRESSION_PASSED
 截图使用公开 PR 标题与明确标记为“演示”的合成分析，不是对真实 PR 的新审查结论：[浅色当前阶段](evidence/workflow-timeline-2026-10-09/timeline-light-1440.png)、[查看历史](evidence/workflow-timeline-2026-10-09/timeline-history-1440.png)、[深色执行中](evidence/workflow-timeline-2026-10-09/timeline-dark-running-1440.png)、[手机](evidence/workflow-timeline-2026-10-09/timeline-light-390.png)。无付费模型调用、外部 GitHub 写入或新增原生 Harness 端到端验证。
 
 同日界面精简：移除进度条上方的分类、初步判断、源码模块路径与分类依据说明，保留概览、计划和周期操作。严格类型检查、构建与阶段浏览器夹具（1440px / 390px）通过；截图更新为精简后的界面，当前源文件指纹见验收摘要的 `uiCleanup`，此前 304 项测试与完整维护/导航验收对应 `bf58bf6`。
+
+同日移除“处理概览”入口与原汇总面板；旧概览选择自动迁移到当前阶段，关联验证与交付证据放在确认和交付阶段按需展开。执行记录链接在阶段的执行视图中保留。`npm run check`（304 项测试）与阶段、维护、导航三组浏览器夹具（1440px / 390px）通过；阶段夹具额外验证旧概览选择迁移与确认阶段证据入口。截图和源文件指纹更新至验收摘要的 `overviewRemoval`。

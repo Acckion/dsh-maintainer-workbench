@@ -7,7 +7,7 @@ import type { AgentTab } from "./RepositoryDetail.tsx";
 export type StageSelection = {
   nodeId?: string;
   attemptId?: string;
-  view: "stage" | "overview" | "plan";
+  view: "stage" | "plan";
   detail: "result" | "execution";
 };
 interface Props {
@@ -28,6 +28,7 @@ interface Props {
     decision?: boolean,
   ) => ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
+  evidence?: (job?: Job) => ReactNode;
   progress?: string;
   actions?: ReactNode;
 }
@@ -44,6 +45,7 @@ export function StagePanel({
   choose,
   render,
   track,
+  evidence,
   progress,
   actions,
 }: Props) {
@@ -211,6 +213,10 @@ export function StagePanel({
           readOnly,
         )
       )}
+      {selected.stage === "decision" &&
+        selected.id === timeline.currentNodeId &&
+        attempt &&
+        evidence?.(attempt)}
       {!viewingHistory && (
         <aside className="mw-stage-next" aria-label="当前处理与下一步">
           <div>

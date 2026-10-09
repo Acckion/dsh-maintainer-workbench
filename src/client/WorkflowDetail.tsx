@@ -24,6 +24,7 @@ interface Props {
     decision?: boolean,
   ) => ReactNode;
   actions: (job?: Job, actions?: ProcessingTimeline["actions"]) => ReactNode;
+  evidence: (job?: Job) => ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
 }
 type Selection = StageSelection;
@@ -60,6 +61,7 @@ export function WorkflowDetail({
   audit = [],
   render,
   actions,
+  evidence,
   track,
 }: Props) {
   const history = jobs.filter((j) => j.issueId === issue.id);
@@ -93,8 +95,9 @@ export function WorkflowDetail({
         localStorage.getItem(`maintainer.stage:${issue.id}:${state.id}`) ??
           "null",
       );
-      if (saved && ["stage", "overview", "plan"].includes(saved.view))
-        return saved;
+      if (saved?.view === "overview")
+        return { view: "stage", detail: "result" };
+      if (saved && ["stage", "plan"].includes(saved.view)) return saved;
     } catch {}
     return {
       view: "stage",
@@ -219,14 +222,6 @@ export function WorkflowDetail({
     <section className="mw-workflow-detail" aria-label="事项处理流程">
       <div className="mw-workflow-toolbar">
         <div className="mw-workflow-views">
-          <button
-            type="button"
-            className="mw-text-button"
-            aria-pressed={selection.view === "overview"}
-            onClick={() => choose({ view: "overview", detail: "result" })}
-          >
-            处理概览
-          </button>
           {issue.type === "issue" && (
             <button
               type="button"
@@ -275,34 +270,33 @@ export function WorkflowDetail({
               当前阶段有更新。查看历史不会改变正在执行的任务。
             </p>
           )}
-          {selection.view === "overview"
-            ? render("overview", currentJob, timeline.historical)
-            : selection.view === "plan"
-              ? render("plan", currentJob, timeline.historical)
-              : selected && (
-                  <StagePanel
-                    selected={selected}
-                    timeline={timeline}
-                    issue={issue}
-                    attempt={attempt}
-                    currentJob={currentJob}
-                    history={history}
-                    readOnly={readOnly}
-                    viewingHistory={viewingHistory}
-                    selection={selection}
-                    choose={choose}
-                    render={render}
-                    track={track}
-                    progress={progress}
-                    actions={
-                      !timeline.historical &&
-                      selected.id === timeline.currentNodeId &&
-                      (!readOnly || selected.result === "输入已更新")
-                        ? actions(currentJob, timeline.actions)
-                        : undefined
-                    }
-                  />
-                )}
+          {selection.view === "plan"
+            ? render("plan", currentJob, timeline.historical)
+            : selected && (
+                <StagePanel
+                  selected={selected}
+                  timeline={timeline}
+                  issue={issue}
+                  attempt={attempt}
+                  currentJob={currentJob}
+                  history={history}
+                  readOnly={readOnly}
+                  viewingHistory={viewingHistory}
+                  selection={selection}
+                  choose={choose}
+                  render={render}
+                  track={track}
+                  evidence={evidence}
+                  progress={progress}
+                  actions={
+                    !timeline.historical &&
+                    selected.id === timeline.currentNodeId &&
+                    (!readOnly || selected.result === "输入已更新")
+                      ? actions(currentJob, timeline.actions)
+                      : undefined
+                  }
+                />
+              )}
           <details className="mw-stage-activity">
             <summary>阶段活动记录 · {timeline.eventTotal}</summary>
             <p className="mw-muted">

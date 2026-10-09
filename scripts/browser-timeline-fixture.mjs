@@ -200,6 +200,14 @@ try {
       await actionPage.close();
     }
     const page = await browser.newPage({ viewport: { width, height: 1000 } });
+    await page.addInitScript(
+      ({ issueId, caseId }) =>
+        localStorage.setItem(
+          `maintainer.stage:${issueId}:${caseId}`,
+          JSON.stringify({ view: "overview", detail: "result" }),
+        ),
+      { issueId: item.id, caseId },
+    );
     page.setDefaultTimeout(12000);
     try {
       await page.goto(`http://127.0.0.1:${server.address().port}`);
@@ -218,10 +226,24 @@ try {
         nav = flow.getByRole("navigation", { name: "处理阶段", exact: true }),
         panel = flow.getByRole("region", { name: "选中阶段", exact: true });
       await nav.getByRole("button", { name: /^测试审查/ }).waitFor();
-      assert.equal(await flow.getByText("PR · 测试 / 夹具", { exact: true }).count(), 0);
-      assert.equal(await flow.getByText("依据已读取的源码，范围仍需核对", { exact: true }).count(), 0);
+      assert.equal(
+        await flow.getByText("PR · 测试 / 夹具", { exact: true }).count(),
+        0,
+      );
+      assert.equal(
+        await flow
+          .getByText("依据已读取的源码，范围仍需核对", { exact: true })
+          .count(),
+        0,
+      );
       await expect(panel).toContainText("审查证据不足");
       await expect(page.locator(".mw-reader-state")).toHaveText("草稿");
+      assert.equal(
+        await flow
+          .getByRole("button", { name: "处理概览", exact: true })
+          .count(),
+        0,
+      );
       assert.equal(
         await page
           .getByRole("button", { name: "调查并修复", exact: true })
@@ -365,6 +387,7 @@ try {
         "维护者确认",
       );
       await nav.locator('[aria-current="step"]').click();
+      await panel.getByText("关联验证与交付证据", { exact: true }).waitFor();
       await expect(
         panel.getByRole("button", { name: "接受此报告", exact: true }),
       ).toBeVisible();

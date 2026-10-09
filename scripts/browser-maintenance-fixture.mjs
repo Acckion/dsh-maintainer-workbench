@@ -71,7 +71,6 @@ try {
         else await page.locator('select[aria-label="AI 功能"]').selectOption('overview');
         const flow=page.getByRole('region',{name:'事项处理流程',exact:true});
         if(name==='Plan')return flow.getByRole('button',{name:'调整分类与计划',exact:true}).click();
-        if(name==='Overview')return flow.getByRole('button',{name:'处理概览',exact:true}).click();
         const back=flow.getByRole('button',{name:'返回当前阶段',exact:true});if(await back.count())await back.click();
         return flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true}).click();
       };
