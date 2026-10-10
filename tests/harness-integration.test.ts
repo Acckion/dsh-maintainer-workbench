@@ -112,3 +112,41 @@ test('native docs loop stops model requests and keeps the specific blocker witho
     assert.equal(turns,1);assert.equal(disposed,true);assert.equal(listeners.size,0);
   } finally {store.close();await rm(root,{recursive:true,force:true});}
 });
+
+for (const failures of [1,3]) test(`Messages pre-start recovery stays inside one native request and ${failures===1?'recovers':'stops at its limit'}`,async()=>{
+ const listeners=new Map<string,any>();let followups=0,downstream=0;const progress:string[]=[];let diagnostics:any;
+ const ctx={
+  agentDefaultModel:{currentSelection:()=>({provider:'p',model:'m'})},llm:{listProviders:()=>[{id:'p'}]},
+  agentPresets:{resolve:async()=>({id:'standard'})},permissionPresets:{resolve:()=>{},set:()=>{}},workspaceRegistry:{archiveSession:async()=>{}},
+  on:(name:string,fn:any)=>{listeners.set(name,fn);return()=>listeners.delete(name);},
+  agents:{create:async(options:any)=>{
+   await options.setup({tools:{schemas:()=>[],restrict:()=>{},guard:()=>{}}});
+   return {dispose:async()=>{},agent:{session:{},cancel:()=>{},whenIdle:async()=>{},followup:()=>{
+    followups++;
+    queueMicrotask(async()=>{
+     try{
+      let terminal=false;
+      for(let i=0;i<failures;i++){
+       const stream=listeners.get('llm/stream')({sessionId:options.sessionId},async function*(){throw Object.assign(new Error('DeepSeek Messages stream: event precedes message_start'),{code:'MALFORMED_RESPONSE'});});
+       const chunks=[];for await(const chunk of stream)chunks.push(chunk);
+       assert.equal(chunks.length,1);assert.equal(chunks[0].type,'finish');
+       const action=await listeners.get('agent/request-error')({agent:{session:{id:options.sessionId}},turn:1,step:1,signal:new AbortController().signal,failure:chunks[0].reason.failure},async()=>{downstream++;});
+       if(!action){terminal=true;break;}
+      }
+      if(terminal){listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'error',error:{code:'MALFORMED_RESPONSE',message:'DeepSeek Messages stream: event precedes message_start'}}}});return;}
+      const report={schemaVersion:1,stage:'triage',summary:'triage',coverage:'metadata',evidence:[],nextSteps:[],responseDraft:'',category:'bug',priority:'P2',labels:[],module:'unknown',impact:'unknown',missingInfo:[],duplicateOf:null,duplicateReason:'',route:'investigate',routeReason:'needs evidence'};
+      listeners.get('session/event')({id:options.sessionId},{type:'assistant/message',data:{message:{content:[{type:'text',text:JSON.stringify(report)}]}}});
+      listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'completed'}}});
+     }catch(e){listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'error',error:{message:String(e)}}}});}
+    });
+   }}};
+  }},
+ } as unknown as Context;
+ const store=new Store(':memory:');seedFixture(store);const issue=store.issues()[0],repo=store.repos()[0],now=new Date().toISOString();
+ try{
+  const run=harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'stream-test',repoId:repo.id,issueId:issue.id,kind:'triage',status:'running',revision:'r',baseSha:repo.headSha,issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,analysisPath:'/tmp'},settings:store.settings(),signal:new AbortController().signal,progress:m=>progress.push(m),recordDiagnostics:d=>{diagnostics=d;}});
+  if(failures===1)assert.equal((await run).artifact?.stage,'triage');else await assert.rejects(run,/有限重试已用尽/);
+  assert.equal(followups,1);assert.equal(downstream,0);assert.equal(diagnostics.calls,0);assert.equal(diagnostics.protocolRecovery.attempts,failures===1?1:2);assert.equal(listeners.size,0);
+  assert.ok(progress.some(m=>m.includes('恢复同一次请求')));
+ }finally{store.close();}
+});

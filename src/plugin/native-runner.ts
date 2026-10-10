@@ -1,3 +1,5 @@
+import { setTimeout as recoveryDelay } from "node:timers/promises";
+import { messageStreamRecovery, recoverableMessageStream } from "../core/message-stream-recovery.ts";
 import { toolLoopPolicy } from "../core/tool-loop.ts";
 import type { Context } from "@deepseek-ai/cordis";
 import type {} from "@deepseek-ai/dsh-agent";
@@ -213,16 +215,31 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           return budgetBlockedStream(
             `上下文预算阻塞：估算输入 ${budget.estimatedInputTokens} tokens，输出预留 ${options.maxTokens ?? settings.maxTokens}。这是保守估算，非服务商精确计数；请缩小读取范围或选择已确认容量的路由。任务记录保留，未向模型发送此请求。`,
           );
+        return recoverableMessageStream(next);
       }
       return next();
     });
     let handle;
     let contextRecoveryAttempts = 0;
+    const streamRecovery = messageStreamRecovery();
     const removeContextRecovery = ctx.on(
       "agent/request-error",
       async (payload, next) => {
-        if (payload.agent.session.id !== sessionId || !compactStage || loop.reason)
-          return next();
+        if (payload.agent.session.id !== sessionId) return next();
+        if (loop.reason) return undefined;
+        const streamAction = streamRecovery.next(payload.failure, payload.turn, payload.step);
+        if (streamAction) {
+          diagnostics.protocolRecovery = { attempts: streamRecovery.attempts, lastAction: streamAction, error: payload.failure.message };
+          snapshotDiagnostics();
+          if (streamAction === "exhausted") {
+            progress("模型消息流持续异常，有限重试已用尽；已有执行记录保留，任务停止", sessionId);
+            return undefined;
+          }
+          progress(`模型消息流顺序异常，正在恢复同一次请求（本会话第 ${streamRecovery.attempts}/4 次）；不重新派发阶段任务`, sessionId);
+          await recoveryDelay(250 * streamRecovery.attempts, undefined, { signal: payload.signal });
+          return { kind: "retry" as const };
+        }
+        if (!compactStage) return next();
         try {
           const pruner = ctx.get("toolResultPruner");
           const compactor = ctx.get("compaction");
@@ -540,10 +557,12 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           if (event.data.reason.kind === "completed") finishTurn();
           else {
             if (finalText) recordOutput?.(finalText);
-            const message = loop.reason ?? (
+            const message = loop.reason ?? (diagnostics.protocolRecovery?.lastAction === "exhausted"
+              ? `模型消息流格式异常，有限重试已用尽：${diagnostics.protocolRecovery.error}。已有工作区和记录保留，请检查模型服务后明确重试。`
+              : (
               event.data.reason.kind === "max-tokens"
                 ? "模型输出预算已耗尽，尚未生成完整产物。请提高仓库输出 Token 上限后重试；已有输出和工作区保留。"
-                : `Harness 任务未完成：${JSON.stringify(event.data.reason).slice(0, 1600)}`);
+                : `Harness 任务未完成：${JSON.stringify(event.data.reason).slice(0, 1600)}`));
             failTurn(
               event.data.reason.kind === "max-tokens" && finalText
                 ? new ArtifactFormatError(message)

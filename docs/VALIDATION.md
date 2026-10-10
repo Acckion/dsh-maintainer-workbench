@@ -223,3 +223,9 @@ management and light/dark layouts. The dirty-workspace browser fixture passed
 through isolated task execution and frozen patch generation. Navigation fixtures
 cover source-list restoration and asynchronous dispatch/review races; their
 batch operation entry now opens the latest master's advanced operations menu.
+
+## 2026-10-10：Messages 流起始事件异常的有限恢复
+
+- Issue #3 的原生会话记录包含 `DeepSeek Messages stream: event precedes message_start` / `MALFORMED_RESPONSE`；当前官方适配器在流翻译时直接抛出该异常，未经过宿主的请求错误恢复入口。仅从现有日志无法确定服务端、代理链路或适配器兼容性的根因。
+- 仅在当前任务会话尚未收到任何流内容时，将这一种确定的异常接入宿主恢复入口。每个请求步骤最多重试 2 次，每个任务会话累计最多 4 次；恢复不重新派发阶段，也不重跑已有工具操作。其他协议错误、已收到内容后的异常及工具循环阻塞不按此规则恢复。上限耗尽后保留原始错误、诊断与工作区，要求明确重试。
+- `npm run check`：类型检查、376 项自动测试及构建通过。新增测试模拟适配器直接抛错，验证同会话恢复、上限停止、无重复工具操作，以及其他异常和部分流的拒绝恢复。未重新调用真实模型，服务端恢复效果仍需 Issue #3 实测。
