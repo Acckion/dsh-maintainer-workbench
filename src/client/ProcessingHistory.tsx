@@ -11,6 +11,7 @@ const eventNames: Record<ProcessingEvent["payload"]["type"], string> = {
   "information.observed": "补充信息已更新",
   "run.observed": "执行进度已更新",
   "input.requested": "需要补充输入",
+  "input.recorded": "保存部分资料",
   "input.submitted": "补充输入已提交",
   "remote.activity": "远端进度已更新",
   "publication.confirmed": "交付已确认",

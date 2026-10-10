@@ -294,6 +294,7 @@ export function handler(
             issueId: z.string(),
             waitId: z.string(),
             values: z.record(z.string()),
+            dispositions: z.record(z.enum(["provided","unknown","unavailable","reporter"])).optional(),
             expectedVersion: z.number().int().nonnegative(),
           })
           .parse(input);
@@ -302,6 +303,7 @@ export function handler(
           p.waitId,
           p.values,
           p.expectedVersion,
+          p.dispositions,
         );
         send(res, 200, { ok: true });
         return;

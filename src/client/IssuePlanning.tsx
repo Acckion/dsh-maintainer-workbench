@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { categoryNames, defaultPlan, planBlocker } from "../core/issue-flow.ts";
+import { categoryNames, defaultPlan, planBlocker, readOnlyScope, unknownFact } from "../core/issue-flow.ts";
 import type { Issue, IssuePlan, Job } from "../core/types.ts";
 import { useItemDraft } from "./item-draft.ts";
 
@@ -24,7 +24,7 @@ export function IssuePlanning({
   job?: Job;
   busy: boolean;
   act: WorkflowAction;
-  start?: (kind: "fix" | "docs", version?: number) => Promise<unknown>;
+  start?: (kind: "fix" | "docs" | "investigate", version?: number) => Promise<unknown>;
 }) {
   const act: WorkflowAction = (path, data, message) =>
     perform(
@@ -81,6 +81,7 @@ export function IssuePlanning({
     setAnswer("");
     setAskedAt("");
   }, [issue.id]);
+  const suggestedKind = readOnlyScope(plan.scope) || (plan.category==='bug' && unknownFact(plan.reproduction)) ? 'investigate' : plan.category==='docs'?'docs':'fix';
   const active =
     issue.informationRequests?.filter((request) =>
       ["asked", "reply_received"].includes(request.state),
@@ -102,7 +103,7 @@ export function IssuePlanning({
   };
   const blocker = planBlocker(
     { ...issue, plan },
-    plan.category === "docs" ? "docs" : "fix",
+    suggestedKind,
   );
   return (
     <section aria-label="事项类型与补充信息" className="mw-issue-planning">
@@ -142,7 +143,8 @@ export function IssuePlanning({
           />
         </label>
         {plan.category === "bug" && (
-          <>
+          <><p className="mw-muted">已有复现资料：{plan.reproduction || '报告者尚未提供'}。未知资料可以先调查，不要求维护者编写复现过程。</p>
+          <details><summary>修订复现资料、预期与实际行为</summary>
             <label>
               复现条件与步骤
               <textarea
@@ -170,7 +172,7 @@ export function IssuePlanning({
                 onChange={(event) => edit("actual", event.target.value)}
               />
             </label>
-          </>
+          </details></>
         )}
         <label>
           {plan.category === "docs" ? "文档位置与修改范围" : "实施范围与排除项"}
@@ -245,7 +247,7 @@ export function IssuePlanning({
                 !ready ||
                 !!planBlocker(
                   { ...issue, plan: { ...plan, decision: "accepted" } },
-                  plan.category === "docs" ? "docs" : "fix",
+                  suggestedKind,
                 )
               }
               onClick={async () => {
@@ -263,13 +265,13 @@ export function IssuePlanning({
                   setPlan(confirmed);
                   update({ plan: confirmed });
                   await start(
-                    plan.category === "docs" ? "docs" : "fix",
+                    suggestedKind,
                     (saved as { version?: number }).version,
                   );
                 }
               }}
             >
-              {plan.category === "docs"
+              {suggestedKind === "investigate" ? "确认并开始只读调查" : plan.category === "docs"
                 ? "确认并更新文档"
                 : "确认计划并开始实施"}
             </button>

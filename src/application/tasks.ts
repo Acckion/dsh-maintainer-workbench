@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import {defaultTriageMaxTokens} from '../core/output-budget.ts';
 import {
   ServiceBase,
   type Enqueue,
@@ -32,7 +33,7 @@ export const settingsSchema = z.object({
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
   autoPreflight: z.boolean().default(false),
   autoReview: z.boolean().default(false),
-  triageMaxTokens: z.number().int().min(500).max(8000).default(1800),
+  triageMaxTokens: z.number().int().min(500).max(8000).default(defaultTriageMaxTokens),
   concurrency: z.number().int().min(1).max(4),
   maxJobsPerBatch: z.number().int().min(1).max(50),
   timeoutMs: z.number().int().min(1000).max(1800000),
@@ -419,7 +420,7 @@ export class TaskService extends ServiceBase {
       instructions:
         (job.instructions ?? "") +
         "\nMaintainer supplied input (use only within accepted scope):\n" +
-        JSON.stringify(responses.map((r) => r.values)),
+        JSON.stringify(waits.map(w=>w.answers ?? responses.filter(r=>r.waitId===w.id).at(-1)?.values)),
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,

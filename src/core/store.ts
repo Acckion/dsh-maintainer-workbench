@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { currentIssue } from "../infrastructure/persistence/legacy-issue.ts";
 import { ProcessingRepository } from "../infrastructure/persistence/processing.ts";
 import type { Analysis, Audit, Issue, Job, Repo, Settings } from "./types.ts";
+import {defaultTriageMaxTokens} from './output-budget.ts';
 
 /** One writer per process. Each mutation is durable before the worker can start. */
 export class Store {
@@ -209,7 +210,7 @@ export class Store {
       stageModels: {},
       syncLimit: 1000,
       autoPreflight: false,
-      triageMaxTokens: 1800,
+      triageMaxTokens: defaultTriageMaxTokens,
       concurrency: 2,
       maxJobsPerBatch: 20,
       timeoutMs: 600000,

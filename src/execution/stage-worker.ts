@@ -1,3 +1,6 @@
+import {unansweredInputRequest} from '../domain/input.ts';
+import {blockingGaps} from '../domain/gaps.ts';
+import {effectiveOutputTokens} from '../core/output-budget.ts';
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -71,12 +74,7 @@ export class StageWorker extends ServiceBase {
     const settings = {
       ...defaults,
       timeoutMs: policy?.timeoutMs ?? defaults.timeoutMs,
-      maxTokens: lightweight(job.kind)
-        ? Math.min(
-            policy?.maxTokens ?? defaults.maxTokens,
-            defaults.triageMaxTokens ?? 1800,
-          )
-        : (policy?.maxTokens ?? defaults.maxTokens),
+      maxTokens: effectiveOutputTokens(job.kind,defaults,policy),
     };
     const timer = setTimeout(
       () => controller.abort(new Error("任务超出配置的执行时间")),
@@ -412,11 +410,41 @@ export class StageWorker extends ServiceBase {
           "分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付",
         );
       const requestedInput = output.inputRequest ?? output.artifact?.inputRequest;
-      const inputRequest = planningInputRequest(output.artifact, requestedInput);
+      const caseState=this.store.processing.current(job.issueId);
+      const inputRequest = unansweredInputRequest(planningInputRequest(output.artifact, requestedInput),
+        caseState?.waits.filter(w=>w.targetFingerprint===caseState.sourceFingerprint && !['cancelled','superseded'].includes(w.state)) ?? []);
       if (requestedInput && inputRequest !== requestedInput) {
         output = { ...output, inputRequest,
           artifact: output.artifact ? { ...output.artifact, inputRequest } : undefined };
-        this.store.audit("workflow.plan_confirmation_routed", "计划确认交由界面处理；未授予实施权限，真实补充问题保留", job.id);
+        this.store.audit("workflow.plan_confirmation_routed", "计划确认、系统待办和已有同版本答复不进入人工补充；未授予实施权限", job.id);
+      }
+      const stageGaps=blockingGaps(output.artifact?.gaps ?? [],job.kind);
+      const ownChecks=stageGaps.filter(g=>g.kind==='system_check');
+      if(ownChecks.length && !stageGaps.some(g=>g.kind==="environment")){
+        this.saveJob({...this.job(job.id),...output,patch,patchSha256:patchHash(patch)});
+        throw new Error(`系统检查尚未完成：${ownChecks.map(g=>g.summary).join('；')}。由系统补检查，不要求维护者填写。`);
+      }
+      const environmentGap=stageGaps.find(g=>g.kind==='environment');
+      if(environmentGap){
+        this.saveJob({...this.job(job.id),...output,patch,patchSha256:patchHash(patch)});
+        throw new EnvironmentUnavailable(environmentGap.summary+'；'+environmentGap.resolution);
+      }
+      const externalGaps=stageGaps.filter(g=>g.kind==='external_wait');
+      if(externalGaps.length){
+        await this.deps.workspaces.freeze(job,patch);
+        this.store.transaction(()=>{
+          const current=this.store.get<Issue>('issues',job.issueId)!;
+          if(job.revision!==revision(current,this.repo(job.repoId),job.kind) || (job.caseId && job.caseId!==current.processing?.id)) throw new Error('版本已变化，不能登记旧外部等待');
+          this.saveJob({...this.job(job.id),...output,patch,patchSha256:patchHash(patch),status:'completed',finishedAt:new Date().toISOString()});
+          for(const gap of externalGaps) this.store.processing.dispatch(job.issueId,{type:'input.requested',wait:{
+            id:`gap:${job.id}:${gap.id}`,type:gap.waitFor!,state:'open',reason:gap.summary+'；'+gap.resolution,
+            requestedByRunId:job.id,targetFingerprint:current.processing!.sourceFingerprint,
+            targetHeadSha:job.prContext?.headSha ?? current.headSha ?? job.baseSha,targetBaseSha:job.prContext?.baseSha ?? current.prBaseSha,
+            targetUrl:current.url,
+            createdAt:new Date().toISOString(),
+          }},'system',`gap:${job.id}:${gap.id}`);
+        });
+        return;
       }
       if (inputRequest) {
         const currentIssue = this.store.get<Issue>("issues", job.issueId)!;
@@ -452,6 +480,10 @@ export class StageWorker extends ServiceBase {
           );
         });
         return;
+      }
+      if(stageGaps.length){
+        this.saveJob({...this.job(job.id),...output,patch,patchSha256:patchHash(patch)});
+        throw new Error(`当前阶段前置条件未满足：${stageGaps.map(g=>g.summary).join('；')}；请查看缺口责任与解除条件。`);
       }
       if (
         (job.kind === "fix" || job.kind === "docs") &&

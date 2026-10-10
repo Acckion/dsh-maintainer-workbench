@@ -1,3 +1,4 @@
+import {gapsSchema, planGaps, gapsGuidance} from '../domain/gaps.ts';
 import { z } from "zod";
 import type { Issue, Job, Repo } from "./types.ts";
 import { issuePlanSchema } from "./issue-flow.ts";
@@ -6,7 +7,12 @@ import type { InputRequest } from "../domain/input.ts";
 
 /** Route authorization to the plan UI; never treat this as permission to execute. */
 export function planningInputRequest(artifact: Job["artifact"], request?: InputRequest): InputRequest | undefined {
-  if (!request || !artifact || !["triage", "preflight", "investigate"].includes(artifact.stage)) return request;
+  if (!request) return request;
+  const meaningful = request.fields.filter(f=>f.purpose!=="plan_confirmation" &&
+    !(f.gapId && artifact?.gaps?.some(g=>g.id===f.gapId && (g.status==="resolved" || !["reporter_information","maintainer_decision"].includes(g.kind)))));
+  if(!meaningful.length)return undefined;
+  request = meaningful.length===request.fields.length?request:{...request,fields:meaningful};
+  if (!artifact || !["triage", "preflight", "investigate"].includes(artifact.stage)) return request;
   const parsed = draftSchema.safeParse("planDraft" in artifact ? artifact.planDraft : undefined);
   if (!parsed.success || !parsed.data.goal.trim() || !parsed.data.scope.trim() ||
       (!parsed.data.acceptanceCriteria.length || !parsed.data.acceptanceCriteria.every(s => s.trim())) ||
@@ -39,6 +45,7 @@ export const draftSchema = issuePlanSchema.omit({ decision: true }).extend({
       }),
     )
     .max(30),
+  gaps: gapsSchema.optional(),
   missingInfo: z.array(z.string().min(1).max(1000)).max(12),
   route: z.enum(["docs", "fix", "investigate", "answer", "review", "track"]),
 });
@@ -70,7 +77,7 @@ export function planInputKey(issue: Issue, repo: Repo): string {
     )
     .digest("hex");
 }
-export const planningGuidance = `For triage, preflight and investigation, also return planDraft. Build a concise Chinese editable plan from the supplied issue/PR, repository guidance and current investigation. Do not ask humans to copy known facts. Read applicable guidance for investigation. Never invent acceptance, reproduction or facts. Distinguish recommendations in sources.detail; missing required facts go in missingInfo. planDraft fields: category:bug|feature|docs|question|maintenance, goal:string, scope:string, reproduction:string, expected:string, actual:string, acceptanceCriteria:string[], route:docs|fix|investigate|answer|review|track, sources:[{field:goal|scope|acceptanceCriteria|reproduction|expected|actual|category,source:string,detail:string}], missingInfo:string[]. Sources reference the provided issue/PR URL, repository source path, or current report evidence. Document plans specify exact requested edits and patch-level checks, never invent capabilities or add whole-repository audits. PRs can have mixed changes: include all relevant review focuses in acceptanceCriteria, do not require bug reproduction fields for PR review. Pure questions use answer. Unclear root causes use investigate. All plan fields are draft suggestions, not execution evidence or human authorization. PLAN CONFIRMATION IS OWNED BY THE HOST UI: return the draft and stop; never ask whether to confirm/start/execute it in inputRequest. inputRequest is only for genuinely missing human-provided facts (purpose:information) or substantive choices not resolved by supplied materials (purpose:decision). Unread repository files, file existence and anchor checks are future system checks, not human information gaps; put them in nextSteps or acceptanceCriteria, not missingInfo.`;
+export const planningGuidance = gapsGuidance + `For triage, preflight and investigation, also return planDraft. Build a concise Chinese editable plan from the supplied issue/PR, repository guidance and current investigation. Do not ask humans to copy known facts. Read applicable guidance for investigation. Never invent acceptance, reproduction or facts. Distinguish recommendations in sources.detail; missing required facts go in missingInfo. planDraft fields: category:bug|feature|docs|question|maintenance, goal:string, scope:string, reproduction:string, expected:string, actual:string, acceptanceCriteria:string[], route:docs|fix|investigate|answer|review|track, sources:[{field:goal|scope|acceptanceCriteria|reproduction|expected|actual|category,source:string,detail:string}], missingInfo:string[]. Sources reference the provided issue/PR URL, repository source path, or current report evidence. Document plans specify exact requested edits and patch-level checks, never invent capabilities or add whole-repository audits. PRs can have mixed changes: include all relevant review focuses in acceptanceCriteria, do not require bug reproduction fields for PR review. Pure questions use answer. Unclear root causes use investigate. All plan fields are draft suggestions, not execution evidence or human authorization. PLAN CONFIRMATION IS OWNED BY THE HOST UI: return the draft and stop; never ask whether to confirm/start/execute it in inputRequest. inputRequest is only for genuinely missing human-provided facts (purpose:information) or substantive choices not resolved by supplied materials (purpose:decision). Unread repository files, file existence and anchor checks are future system checks, not human information gaps; put them in nextSteps or acceptanceCriteria, not missingInfo.`;
 
 export function draftFromJob(issue: Issue, repo: Repo, job: Job): PlanDraft {
   const a = job.artifact;
@@ -80,6 +87,7 @@ export function draftFromJob(issue: Issue, repo: Repo, job: Job): PlanDraft {
   if (parsed.success)
     return {
       ...parsed.data,
+      gaps: planGaps({...parsed.data, gaps: parsed.data.gaps ?? a?.gaps}),
       inputKey: planInputKey(issue, repo),
       sourceJobId: job.id,
       generatedAt: new Date().toISOString(),
@@ -105,6 +113,7 @@ export function draftFromJob(issue: Issue, repo: Repo, job: Job): PlanDraft {
       issue.plan?.acceptanceCriteria ??
       (a && "acceptanceCriteria" in a ? a.acceptanceCriteria : []),
     route:
+      issue.plan && /不修改文件|不实施修复|只读/.test(issue.plan.scope) ? "investigate" :
       issue.type === "pr"
         ? "review"
         : category === "question"

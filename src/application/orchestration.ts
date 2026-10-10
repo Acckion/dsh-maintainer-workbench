@@ -1,3 +1,4 @@
+import {blockingGaps, planGaps} from '../domain/gaps.ts';
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { randomUUID } from "node:crypto";
 import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
@@ -8,7 +9,7 @@ import {
   planInputKey,
   type PlanDraft,
 } from "../core/change-plan.ts";
-import { issuePlanSchema, planBlocker } from "../core/issue-flow.ts";
+import { issuePlanSchema, planBlocker, readOnlyScope } from "../core/issue-flow.ts";
 import { validationState } from "../core/workflow-state.ts";
 
 import type {
@@ -167,7 +168,8 @@ export class Orchestration {
       ...issuePlanSchema.parse(value),
       decision: "accepted",
     });
-    const suggested = route ?? draft.route;
+    const requestedRoute = route ?? draft.route;
+    const suggested = ["fix","docs"].includes(requestedRoute) && readOnlyScope(plan.scope) ? "investigate" : requestedRoute;
     if (suggested === "answer" || suggested === "track")
       throw new Error("当前建议是答复或跟踪，请查看处理建议");
     const kind: JobKind = suggested;
@@ -178,6 +180,9 @@ export class Orchestration {
     const blocker =
       issue.type === "pr" ? undefined : planBlocker({ ...issue, plan }, kind);
     if (blocker) throw new Error(blocker);
+    const gaps = blockingGaps(planGaps(draft),kind);
+    if(gaps.some(g=>["reporter_information","maintainer_decision","environment","external_wait"].includes(g.kind)))
+      throw new Error(`当前阶段缺少前置条件：${gaps.map(g=>g.summary).join("；")}；请先调查或处理对应等待。`);
     const old = issue.orchestration?.run;
     if (old?.status === "running") {
       if (
@@ -291,13 +296,19 @@ export class Orchestration {
     if (!issue || ["queued", "running"].includes(job.status)) return;
     if (job.caseId && job.caseId !== issue.processing?.id) return;
     if (["waiting_input", "waiting_environment"].includes(job.status)) {
+      if(['triage','preflight','investigate'].includes(job.kind) && job.result && job.artifact &&
+        !blockingGaps(job.artifact.gaps ?? [],job.kind).some(g=>g.kind==='system_check')) {
+        const repo=this.wb.store.get<import('../core/types.ts').Repo>('repos',issue.repoId)!;
+        const draft=draftFromJob(issue,repo,job);
+        this.put(issue,{...issue.orchestration,draft});
+      }
       if (job.workflowRunId === issue.orchestration?.run?.id)
         this.stop(
           issue,
           "blocked",
           job.waitingReason ??
             job.error ??
-            "等待输入或环境恢复，请在 Work 面板处理",
+            (job.kind==="investigate" ? "调查结论已保存，等待资料或环境；未授权实施修复" : "等待输入或环境恢复，请在 Work 面板处理"),
         );
       return;
     }
@@ -330,7 +341,7 @@ export class Orchestration {
         job.artifact.readiness === "review" &&
         (repo.policy?.autoReview ?? this.wb.store.settings().autoReview) &&
         !run &&
-        !draft.missingInfo.length &&
+        !planGaps(draft).some(g=>g.status!=="resolved") &&
         draft.goal &&
         draft.scope &&
         draft.acceptanceCriteria.length
@@ -396,6 +407,11 @@ export class Orchestration {
   }
   private advance(updated: Issue, job: Job) {
     const run = updated.orchestration!.run!;
+    const blockers=blockingGaps(job.artifact?.gaps ?? [],job.kind);
+    if(blockers.length){
+      this.stop(updated,'blocked',`阶段记录已保存，等待前置条件：${blockers.map(g=>g.summary).join('；')}`);
+      return;
+    }
     if (job.kind === "docs" || job.kind === "fix") {
       if (!job.patch) {
         this.stop(updated, "blocked", "没有可验证补丁，请检查执行结果");

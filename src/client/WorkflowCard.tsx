@@ -1,3 +1,5 @@
+import {GapSummary} from './GapSummary.tsx';
+import {readOnlyScope} from '../core/issue-flow.ts';
 import React, { useEffect, useState } from "react";
 import type { Issue, IssuePlan, Job } from "../core/types.ts";
 import type { WorkflowAction } from "./IssuePlanning.tsx";
@@ -169,19 +171,7 @@ export function WorkflowCard({
                 </p>
               ))}
             </details>
-            {draft.missingInfo.length > 0 && (
-              <div className="mw-callout amber">
-                <strong>需要核对的缺口</strong>
-                <ul>
-                  {draft.missingInfo.map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ul>
-                <p>
-                  已有材料由系统整理；下面可以修订草稿或从高级操作记录聚合追问。
-                </p>
-              </div>
-            )}
+            <GapSummary plan={draft} />
             {editing && (
               <div className="mw-issue-planning">
                 {(
@@ -233,7 +223,7 @@ export function WorkflowCard({
                   >
                     {draft.route === "review"
                       ? "确认并开始审查"
-                      : draft.route === "investigate"
+                      : (draft.route === "investigate" || readOnlyScope(plan.scope))
                         ? "确认并开始调查"
                         : "确认并开始"}
                   </button>

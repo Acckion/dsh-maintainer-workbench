@@ -202,10 +202,10 @@ try {
 
       await openIssue('fixture/queue#132');
       assert.equal(await page.getByRole('button',{name:'根据补充信息继续',exact:true}).count(),0);
-      assert.equal(await page.getByRole('button',{name:'保存补充输入',exact:true}).isDisabled(),true);
+      assert.equal(await page.getByRole('button',{name:'保存资料与未解决项',exact:true}).isDisabled(),true);
       await page.getByLabel('Expected queue behavior?',{exact:true}).fill('Keep queue order');
-      await page.getByRole('button',{name:'保存补充输入',exact:true}).click();
-      await page.getByText('已保存补充输入，可继续处理',{exact:true}).waitFor();
+      await page.getByRole('button',{name:'保存资料与未解决项',exact:true}).click();
+      await page.getByText('已保存资料；必需信息未齐备时等待保留',{exact:true}).waitFor();
       assert.equal(store.processing.current(inputIssue.id).waits.find(wait=>wait.id===inputWait.id).state,'satisfied');
       assert.equal(store.jobs().filter(item=>item.issueId===inputIssue.id).length,1);
       await page.getByRole('button',{name:'根据补充信息继续',exact:true}).click();

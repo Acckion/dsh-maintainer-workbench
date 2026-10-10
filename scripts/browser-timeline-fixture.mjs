@@ -438,12 +438,12 @@ try {
         flow.getByRole("button", { name: "根据补充信息继续", exact: true }),
       ).toHaveCount(0);
       await expect(
-        panel.getByRole("button", { name: "保存补充输入", exact: true }),
+        panel.getByRole("button", { name: "保存资料与未解决项", exact: true }),
       ).toBeDisabled();
       await page.evaluate(() => document.activeElement?.blur());
       await expect(
         panel.getByRole("region", { name: "处理进度", exact: true }),
-      ).toContainText("需要你补充信息");
+      ).toContainText("需要补充资料");
       await page.screenshot({
         path: join(root, `timeline-input-${width}.png`),
         fullPage: true,
@@ -452,7 +452,7 @@ try {
         .getByLabel("是否将联动验证纳入范围？", { exact: true })
         .fill("先核对证据，不修改生产代码");
       await page
-        .getByRole("button", { name: "保存补充输入", exact: true })
+        .getByRole("button", { name: "保存资料与未解决项", exact: true })
         .click();
       await expect(
         flow.getByRole("button", { name: "根据补充信息继续", exact: true }),

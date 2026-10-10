@@ -46,7 +46,12 @@ export interface ProcessingWait {
   targetFingerprint: string;
   requestedByRunId?: string;
   requiredFields?: string[];
+  answers?: Record<string, import("./input.ts").InputAnswer>;
   questions?: {
+    gapId?: string;
+    actor?: "reporter" | "maintainer";
+    required?: boolean;
+    purpose?: "information" | "decision" | "plan_confirmation";
     id: string;
     question: string;
     options?: { label: string; description?: string }[];
@@ -131,7 +136,8 @@ export type ProcessingEventPayload =
       pauseReason?: string;
     }
   | { type: "input.requested"; wait: ProcessingWait }
-  | { type: "input.submitted"; waitId: string; targetFingerprint: string }
+  | { type: "input.submitted"; waitId: string; targetFingerprint: string; answers?: Record<string, import("./input.ts").InputAnswer> }
+  | { type: "input.recorded"; waitId: string; targetFingerprint: string; answers: Record<string, import("./input.ts").InputAnswer> }
   | {
       type: "remote.activity";
       kind: "ci" | "reviews" | "threads";

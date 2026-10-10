@@ -39,3 +39,9 @@ test('varied document searches also have a bounded investigation budget', () => 
   const code=toolLoopPolicy();
   for(let i=0;i<100;i++) assert.equal(code.guard('bash',{command:`test ${i}`}),undefined);
 });
+test('read-only investigations cannot browse indefinitely and budget exhaustion is not success',()=>{
+ const p=toolLoopPolicy(false,true);
+ for(let i=0;i<60;i++) assert.equal(p.guard('read',{file_path:`source-${i}.ts`,offset:1,limit:20}),undefined);
+ assert.match(p.guard('read',{file_path:'next.ts',offset:1,limit:20})!,/调查预算阻塞/);
+ assert.match(p.reason!,/不代表阶段成功/);
+});

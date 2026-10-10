@@ -15,7 +15,7 @@ function fingerprint(name: string, argumentsValue: unknown): string {
 }
 
 /** Session-local guard. Never caches a tool result or treats a warning as evidence. */
-export function toolLoopPolicy(documentTask = false) {
+export function toolLoopPolicy(documentTask = false, investigation = false) {
   const seen = new Map<string, number>();
   let inspections = 0;
   let reason: string | undefined;
@@ -30,6 +30,10 @@ export function toolLoopPolicy(documentTask = false) {
       inspections++;
       if (count >= 4) {
         reason = '重复工具调用阻塞：同一调用已请求4次，且期间没有成功的文件编辑。已停止继续请求模型；请检查已有证据和工作区后重试，原始记录保留。';
+        return reason;
+      }
+      if (investigation && inspections > 60) {
+        reason='调查预算阻塞：已请求60次查阅或命令；请整理已有事实、未完成检查和具体阻塞，不继续扩大查阅。记录保留，预算耗尽不代表阶段成功。';
         return reason;
       }
       if (documentTask && inspections > 60) {

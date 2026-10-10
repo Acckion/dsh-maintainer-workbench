@@ -1669,6 +1669,7 @@ export function App({
     if (!displayedIssue) return null;
     return (
       <WorkflowDetail
+        key={`${displayedIssue.id}:${displayedIssue.processing?.id}`}
         openSession={openSession}
         issue={displayedIssue}
         jobs={jobs}
@@ -1736,6 +1737,14 @@ export function App({
       ) : (
         <>
           {renderProcessingAdvice(true)}
+          <ProcessingInput
+            issue={displayedIssue}
+            runId={job?.id}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
           <details open={!displayedIssue.orchestration?.draft}>
             <summary>高级操作</summary>
             <IssuePlanning
