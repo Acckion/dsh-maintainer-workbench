@@ -73,6 +73,8 @@ try {
       updatedAt: new Date().toISOString(),
       result: result(kind),
       engine: "fixture",
+      sessionId: `session-${id}`,
+      worktree: `/fixture/worktrees/${id}`,
       prContext: {
         headSha: item.headSha,
         baseSha: repo.headSha,
@@ -506,6 +508,16 @@ try {
         path: join(root, `timeline-attempt-history-${width}.png`),
         fullPage: true,
       });
+      const resources = flow.locator('.mw-item-resources');
+      await resources.locator(':scope > summary').click();
+      assert.ok(await resources.locator('.mw-resource-row').count() >= 3);
+      await resources.locator('.mw-stage-resources').first().locator(':scope > summary').click();
+      await resources.getByText('隔离工作区路径', {exact:true}).first().click();
+      await expect(resources).toContainText('/fixture/worktrees/timeline-preflight');
+      await resources.getByRole('button', {name:'查看执行记录',exact:true}).first().click();
+      await expect(panel).toContainText('正在查看历史');
+      assert.equal(await panel.getByRole('button',{name:'接受此报告',exact:true}).count(),0);
+      await page.screenshot({path:join(root,`item-resources-${width}.png`),fullPage:true});
       // New source cycle: archived attempts remain readable, with all write controls hidden.
       store.put("issues", { ...store.get("issues", item.id), state: "closed" });
       store.put("issues", {

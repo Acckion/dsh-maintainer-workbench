@@ -11,7 +11,7 @@ const panels = [
 type Panel = typeof panels[number][0];
 
 /** Same form/controller in the native settings section and workbench shortcut. */
-export function GlobalSettings({ native = false, hostWorkspaces }: { native?: boolean; hostWorkspaces?: HostWorkspaces }) {
+export function GlobalSettings({ native = false, hostWorkspaces, openSession }: { native?: boolean; hostWorkspaces?: HostWorkspaces; openSession?: (id:string)=>void }) {
   const [snapshot, setSnapshot] = useState<GlobalSettingsSnapshot>();
   const [panel, setPanel] = useState<Panel>("automation");
   const [busy, setBusy] = useState(true);
@@ -86,7 +86,7 @@ export function GlobalSettings({ native = false, hostWorkspaces }: { native?: bo
       </div>}
       {!snapshot && !error && <p role="status">正在读取设置…</p>}
       {snapshot && <fieldset disabled={busy} className="mw-settings-fields"><SettingsView key={reloadVersion} scope="global" state={snapshot}
-        panel={panel} retryVersion={retryVersion} hostWorkspaces={hostWorkspaces} repoId="" busy={busy} changed={onChanged}
+        panel={panel} retryVersion={retryVersion} hostWorkspaces={hostWorkspaces} openSession={openSession} repoId="" busy={busy} changed={onChanged}
         save={s => void save(s)} credentials={credentials}
         prepare={() => {}} bind={() => {}} /></fieldset>}
     </section>

@@ -1231,7 +1231,7 @@ export function App({
                 </div>
               )}
               {page === "settings" && (
-                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} />
+                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} openSession={openSession} />
               )}
               {page === "repository-settings" && (
                 <div className="mw-repository-settings">
@@ -1669,6 +1669,7 @@ export function App({
     if (!displayedIssue) return null;
     return (
       <WorkflowDetail
+        openSession={openSession}
         issue={displayedIssue}
         jobs={jobs}
         job={job}

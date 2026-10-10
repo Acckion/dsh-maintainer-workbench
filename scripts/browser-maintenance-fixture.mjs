@@ -278,7 +278,8 @@ try {
       await page.screenshot({ path: join(dir, `maintenance-${width}.png`), fullPage: true });
       await page.getByRole('button',{name:'全局设置',exact:true}).click();
       await page.getByRole('button',{name:'工作区',exact:true}).click();
-      await page.getByRole('heading',{name:'任务隔离目录',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'事项工作区与会话',exact:true}).waitFor();
+      await page.locator('.mw-item-resources').filter({hasText:'Cleanup fixture'}).locator(':scope > summary').click();
       await page.getByRole('button',{name:'检查与预览',exact:true}).click();
       await page.getByLabel('工作区处置预览',{exact:true}).waitFor();
       await page.getByRole('button',{name:'确认清理此工作区',exact:true}).click();

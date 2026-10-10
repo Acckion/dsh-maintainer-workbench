@@ -21,7 +21,7 @@ const result = await build({ stdin: {resolveDir:process.cwd(),loader:'tsx',conte
   const registrations=[];
   const source={items:[],state:'idle',phase:'ready',error:null},listeners=new Set();
   window.workspaceFixture={path:null,error:'',calls:[]};
-  apply({effect:fn=>fn(),uiWorkspace:{openSession(){},pickDirectory:async()=>window.workspaceFixture.path},workspaces:{
+  apply({effect:fn=>fn(),uiWorkspace:{openSession(id){window.sessionOpened=id;},pickDirectory:async()=>window.workspaceFixture.path},workspaces:{
     list:{getSnapshot:()=>source,subscribe:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}},
     create:async({path})=>{if(window.workspaceFixture.error)throw Error(window.workspaceFixture.error);
       window.workspaceFixture.calls.push(path);
@@ -125,11 +125,31 @@ try {
   await page.evaluate(()=>{window.workspaceFixture.error='';window.workspaceFixture.path='/fixture/second';});
   await add.click();await page.getByText('/fixture/second',{exact:true}).waitFor();
   await page.screenshot({path:join(directory,'native-settings-workspaces.png'),fullPage:true});
+  // Group independent resources by item, including light sessions and failed attempts.
+  const resourceIssue={id:'fixture/repo#3',repoId:'fixture/repo',number:3,type:'issue',title:'Document resources',body:'',author:'fixture',labels:[],state:'open',comments:0,updatedAt:new Date().toISOString(),url:''};
+  const resourceRun=(id,kind,time)=>({id,repoId:resourceIssue.repoId,issueId:resourceIssue.id,issueSnapshot:resourceIssue,kind,status:'completed',attempt:1,revision:'r',baseSha:'base',sessionId:'session-'+id,worktree:'/fixture/worktrees/'+id,createdAt:`2026-10-10T00:00:0${time}Z`,updatedAt:new Date().toISOString()});
+  const resourceJobs=[resourceRun('docs','docs',1),{...resourceRun('validate','validate',2),sourceJobId:'docs',status:'failed'},{...resourceRun('light','triage',0),worktree:undefined,analysisPath:'/fixture/analysis/light'},{...resourceRun('validate-retry','validate',3),sourceJobId:'docs'}];
+  const resourceWorkspace=(id)=>({id,ownerRunId:id,repositoryId:resourceIssue.repoId,path:'/fixture/worktrees/'+id,branch:'fixture',checkoutSha:'base',purpose:'fixture',status:'retained',updatedAt:new Date().toISOString()});
+  await page.route('**/maintainer/api/state',r=>r.fulfill({json:{jobs:resourceJobs,issues:[resourceIssue]}}));
+  await page.route('**/maintainer/api/workspaces',r=>r.fulfill({json:[resourceWorkspace('docs'),resourceWorkspace('validate'),resourceWorkspace('validate-retry')]}));
+  await page.getByRole('button',{name:'刷新工作区',exact:true}).click();
+  const resources=page.locator('.mw-item-resources').filter({hasText:'Issue #3'});
+  await resources.locator(':scope > summary').click();
+  assert.equal(await resources.locator('.mw-resource-row').count(),4);
+  await expect(resources).toContainText('来源：文档维护 · 第 1 次');
+  await expect(resources).toContainText('失败');
+  assert.equal(await resources.locator('.mw-resource-stage').count(),3);
+  await expect(resources).toContainText('2 次尝试 · 已完成');
+  await resources.getByRole('button',{name:'打开验证变更会话',exact:true}).last().click();
+  assert.equal(await page.evaluate(()=>window.sessionOpened),'session-validate-retry');
+  await resources.locator('.mw-stage-resources > summary').filter({hasText:'文档维护'}).click();
+  assert.equal(await resources.getByRole('button',{name:'检查与预览',exact:true}).count(),3);
+  await page.screenshot({path:join(directory,'grouped-item-workspaces.png'),fullPage:true});
   await page.getByRole('button',{name:'自动化',exact:true}).click();
   await page.screenshot({path:join(directory,'native-settings-official-light.png'),fullPage:true});
   await page.evaluate(()=>document.body.setAttribute('data-ds-dark-theme',''));
   await page.screenshot({path:join(directory,'native-settings-official-dark.png'),fullPage:true});
   const geometry=await page.locator('.mw-global-settings').evaluate(e=>({right:e.getBoundingClientRect().right,width:document.documentElement.clientWidth,overflow:document.documentElement.scrollWidth>document.documentElement.clientWidth}));
   assert.ok(geometry.right<=geometry.width+1);assert.equal(geometry.overflow,false);assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:true,directory,coverage:['native settings registration and branch icon','debounced autosave and reload','failed autosave draft and retry','default and per-stage model autosave','compact connection layout','workspace add cancel repeat error retry','light dark layouts']}));
+  console.log(JSON.stringify({passed:true,directory,coverage:['native settings registration and branch icon','debounced autosave and reload','failed autosave draft and retry','default and per-stage model autosave','compact connection layout','workspace add cancel repeat error retry','item-grouped workspace and light session records','source linkage and exact session navigation','light dark layouts']}));
 } finally {await browser.close();await new Promise(r=>server.close(r));await w.close();}
