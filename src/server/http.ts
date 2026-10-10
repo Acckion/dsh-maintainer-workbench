@@ -1,3 +1,4 @@
+import { sidebarRuns } from "../domain/sidebar-workspaces.ts";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 import type { Credentials } from "../core/credentials.ts";
@@ -87,6 +88,10 @@ export function handler(
       }
       if (req.method === "GET" && path === "/state") {
         send(res, 200, workbench.snapshot());
+        return;
+      }
+      if (req.method === "GET" && path === "/workspaces/sidebar") {
+        send(res, 200, sidebarRuns(workbench.store.jobs(),workbench.store.repos()));
         return;
       }
       if (req.method === "GET" && path === "/workspaces") {
@@ -289,6 +294,7 @@ export function handler(
             issueId: z.string(),
             waitId: z.string(),
             values: z.record(z.string()),
+            dispositions: z.record(z.enum(["provided","unknown","unavailable","reporter"])).optional(),
             expectedVersion: z.number().int().nonnegative(),
           })
           .parse(input);
@@ -297,6 +303,7 @@ export function handler(
           p.waitId,
           p.values,
           p.expectedVersion,
+          p.dispositions,
         );
         send(res, 200, { ok: true });
         return;

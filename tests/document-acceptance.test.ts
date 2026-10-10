@@ -38,3 +38,27 @@ test('checker exit-code echo retains current-session evidence without accepting 
   assert.ok(pkg.files.includes('scripts/verify-document-patch.mjs'));
   try{process.chdir(tmpdir());const command=documentCheckCommand({worktree:'/tmp/worktree',baseSha:'a'.repeat(40)});assert.ok(command.includes('scripts/verify-document-patch.mjs'));assert.ok(!command.includes("'/tmp/scripts/"));}finally{process.chdir(before);}
  });
+
+test('host checker evidence is attached before reconciling shortened supplemental model commands',async()=>{
+ const {reconcileTestExecutions}=await import('../src/core/execution-links.ts');
+ const {documentChecksPassed}=await import('../src/core/document-acceptance.ts');
+ const {validationState}=await import('../src/core/workflow-state.ts');
+ const record={id:'session:1',sessionId:'session',cwd:job.worktree,checkoutSha:job.baseSha,patchHash:'patch',command:documentCheckCommand(job)+'; echo "validator_exit=$?"',exitCode:0,isError:false,output:'DOCUMENT_CHECKS_JSON={"checks":{"whitespace":true,"link_files":true,"link_anchors":true,"exact_repetition":true}}'} as ExecutionRecord;
+ const current={...job,executionRecords:[record]};
+ const report={...artifact(),tests:[{command:documentCheckCommand(job),status:'passed' as const,output:'checker passed'},{command:'git diff --check; ...',status:'passed' as const,output:'model shortened command'}]};
+ const accepted=documentAcceptance(report,current);
+ const output=reconcileTestExecutions(accepted,current);
+ if(output.stage!=='validate')throw Error('wrong stage');
+ assert.deepEqual(output.blockers,[]);assert.equal(output.tests.length,1);assert.equal(output.tests[0].status,'passed');assert.equal(output.tests[0].executionId,record.id);assert.ok(output.evidence.some(e=>e.detail.startsWith('not_run')));assert.match(output.coverage,/补充检查/);assert.equal(validationState(output)?.state,'passed');
+ const explicit={...current,instructions:'必须执行 git diff --check; ...'};
+ const required=reconcileTestExecutions(documentAcceptance(report,explicit),explicit);
+ if(required.stage==='validate')assert.ok(required.blockers.length);
+ const realBlocker=reconcileTestExecutions(documentAcceptance({...report,blockers:['必须检查失败']},current),current);
+ if(realBlocker.stage==='validate')assert.ok(realBlocker.blockers.includes('必须检查失败'));
+ for(const change of [{sessionId:'other'},{patchHash:'other'},{exitCode:1},{output:'DOCUMENT_CHECKS_JSON={"checks":{"whitespace":false}}'}]){
+  const invalid={...current,executionRecords:[{...record,...change}]};
+  assert.equal(documentChecksPassed(invalid),false);
+  const output=reconcileTestExecutions(documentAcceptance(report,invalid),invalid);
+  if(output.stage==='validate')assert.ok(output.blockers.length);
+ }
+});

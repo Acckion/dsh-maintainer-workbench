@@ -224,13 +224,15 @@ export class Workbench {
     return this.tasks.rerun(id);
   }
   retry(id: string) {
+    const job = this.store.get<Job>("jobs", id);
+    if (job) this.orchestration.assertRecovery(job);
     const result = this.tasks.retry(id);
     this.orchestration.replacement(id, result);
     return result;
   }
   resume(id: string) {
-    const job = this.store.get<Job>("jobs", id)!;
-
+    const job = this.store.get<Job>("jobs", id);
+    if (job) this.orchestration.assertRecovery(job);
     const result = this.tasks.resume(id);
     this.orchestration.replacement(id, result);
     return result;

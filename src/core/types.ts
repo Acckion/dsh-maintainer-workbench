@@ -119,6 +119,7 @@ export interface ExecutionRecord {
   truncated: boolean;
 }
 export interface ToolDiagnostics {
+  protocolRecovery?: { attempts: number; lastAction: "retry" | "exhausted"; error: string };
   contextRecovery?: { attempts: number; lastAction: string; error?: string };
   validationRepair?: { attempts: number; reason: string };
   implementationRepair?: { attempts: number; reason: string };

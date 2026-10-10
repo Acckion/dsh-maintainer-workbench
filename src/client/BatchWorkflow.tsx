@@ -1,3 +1,4 @@
+import {GapSummary} from './GapSummary.tsx';
 import React, { useState } from "react";
 import { kindNames } from "../core/types.ts";
 import type { Issue } from "../core/types.ts";
@@ -87,11 +88,7 @@ export function BatchWorkflow({
                       <li key={n}>{s}</li>
                     ))}
                   </ul>
-                  {i.orchestration.draft.missingInfo.length > 0 && (
-                    <p className="mw-callout amber">
-                      缺口：{i.orchestration.draft.missingInfo.join("；")}
-                    </p>
-                  )}
+                  <GapSummary plan={i.orchestration.draft} />
                 </>
               )}
             </article>

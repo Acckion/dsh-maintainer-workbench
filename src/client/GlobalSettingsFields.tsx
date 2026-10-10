@@ -35,6 +35,7 @@ export function GlobalSettingsFields({settings,update,panel,native,hostPreset}: 
     {panel !== "automation" && <details className="mw-preference-details"><summary>高级执行选项</summary>
       {number('timeoutMs','超时时间（秒）',1,1800,'超过此时间的任务停止并保留记录',1000)}
       {number('triageMaxTokens','分诊 / PR 预检输出 Token 上限',500,8000)}
+      <p className="mw-muted">分诊与预检实际额度取此项和仓库／全局输出上限的较小值；模型推理与计划草稿均需预算。默认 6000。</p>
       {number('maxTokens','每次请求输出 Token 上限',500,32000,'单次输出上限不等于任务总费用上限')}
       {text('agentPreset','Harness Agent preset',`inherit 跟随宿主默认${hostPreset?`（${hostPreset}）`:''}，复用工具与 Skills`)}
       {text('permissionPreset','修复任务权限 preset','inherit 跟随宿主默认；调查与审查保持只读')}

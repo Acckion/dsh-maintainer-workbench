@@ -271,6 +271,8 @@ export function eventDescription(event: ProcessingEvent): string {
       return `事项已同步：${p.merged ? "已合并" : p.state === "closed" ? "已关闭" : "开放中"}${p.headSha ? ` · ${p.headSha.slice(0, 12)}` : ""}`;
     case "input.requested":
       return `已请求补充信息：${p.wait.reason}`;
+    case "input.recorded":
+      return "已保存部分资料，仍有未解决项";
     case "input.submitted":
       return "补充输入已保存，等待显式继续";
     case "environment.observed":

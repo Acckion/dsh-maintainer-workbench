@@ -1231,7 +1231,7 @@ export function App({
                 </div>
               )}
               {page === "settings" && (
-                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} />
+                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} openSession={openSession} />
               )}
               {page === "repository-settings" && (
                 <div className="mw-repository-settings">
@@ -1669,6 +1669,8 @@ export function App({
     if (!displayedIssue) return null;
     return (
       <WorkflowDetail
+        key={`${displayedIssue.id}:${displayedIssue.processing?.id}`}
+        openSession={openSession}
         issue={displayedIssue}
         jobs={jobs}
         job={job}
@@ -1735,6 +1737,14 @@ export function App({
       ) : (
         <>
           {renderProcessingAdvice(true)}
+          <ProcessingInput
+            issue={displayedIssue}
+            runId={job?.id}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
           <details open={!displayedIssue.orchestration?.draft}>
             <summary>高级操作</summary>
             <IssuePlanning

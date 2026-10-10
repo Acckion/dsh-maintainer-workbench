@@ -927,3 +927,36 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw .mw-summary-properties .mw-tags{display:flex;flex-wrap:wrap;gap:6px}
 .mw .mw-summary-properties>code{overflow-wrap:anywhere}
 .mw .mw-reader-summary{grid-template-columns:minmax(0,1fr)}
+
+.mw-item-resources{margin:16px 0;padding:12px;border:1px solid var(--line);border-radius:10px;min-width:0}
+.mw-item-resources>summary{cursor:pointer;font-weight:500;overflow-wrap:anywhere}
+.mw-resource-list{list-style:none;margin:12px 0 0;padding:0;min-width:0}
+.mw-resource-row{padding:12px 0;border-top:1px solid var(--line);overflow-wrap:anywhere;min-width:0}
+.mw-resource-heading{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between}
+.mw-resource-row p{margin:6px 0}
+.mw-resource-row details{margin:8px 0}
+.mw-resource-row code{white-space:normal;overflow-wrap:anywhere}
+.mw-resource-actions{display:flex;gap:12px;flex-wrap:wrap;margin:8px 0}
+
+.mw-resource-stages{list-style:none;margin:12px 0 0;padding:0}
+.mw-resource-stage{margin:10px 0;min-width:0}
+.mw-stage-resources{border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0}
+.mw-stage-resources>summary{cursor:pointer;overflow-wrap:anywhere}
+.mw-stage-resources>summary>span{margin-left:12px;font-size:12px;color:var(--muted)}
+
+/* Native Harness sidebar: one visible header per owned item/stage; real rows remain in place. */
+[data-mw-stage-list]{display:flex!important;flex-direction:column}
+[data-mw-stage-section]{margin-top:0!important;margin-bottom:0!important;min-width:0}
+[data-mw-stage-header="member"],[data-mw-stage-header-wrapper="member"]{display:none!important}
+[data-mw-stage-header]>[class*="rowActions"]{display:none!important}
+[data-mw-stage-title]{display:block!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+[data-mw-stage-title]>span{display:none!important}
+[data-mw-stage-title]::after{content:attr(data-mw-stage-title);font-size:14px;line-height:20px}
+[data-mw-attempt-title]{font-size:0!important}
+[data-mw-attempt-title]::after{content:attr(data-mw-attempt-title);font-size:14px;line-height:20px}
+[data-mw-stage-selected="true"]>[class*="folder"]{color:var(--dsw-alias-state-business-primary)}
+
+/* Shared input layout also applies outside the embedded stage panel. */
+.mw-processing-input label{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.mw-processing-input textarea,.mw-processing-input select{width:100%;padding:10px;font:inherit}
+.mw-gap-summary p{overflow-wrap:anywhere}
