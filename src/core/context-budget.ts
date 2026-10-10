@@ -12,7 +12,7 @@ export function requestBudget(messages: readonly { role: string; content?: unkno
   return { messageChars, toolChars, systemChars, estimatedInputTokens,
     roles: messages.map(message => ({ role: message.role, chars: wireSize(message) })) };
 }
-export const documentTools = ['read', 'glob', 'grep', 'edit', 'write', 'bash', 'job_output', 'job_list', 'job_kill'];
+export const documentTools = ['read', 'glob', 'grep', 'edit', 'write', 'bash', 'pwsh', 'job_output', 'job_list', 'job_kill'];
 
 /** Reject unbounded document reads before execution; do not truncate host results. */
 export function documentReadBlocker(name: string, args: unknown): string | undefined {

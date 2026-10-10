@@ -405,6 +405,7 @@ body[data-ds-dark-theme]{
 .mw-layout-tabs .mw-task-row>.mw-tag{grid-row:2}
 
 .mw-organize-workspace{display:grid;grid-template-columns:290px minmax(0,1fr);gap:20px;align-items:start}
+.mw-conversation-history{margin-top:24px;border-top:1px solid var(--mw-border,#e0e7e3);padding-top:16px}.mw-conversation-record{padding:16px 0;border-bottom:1px solid var(--mw-border,#e0e7e3);overflow-wrap:anywhere}.mw-conversation-record .mw-repository-markdown h3{font-size:15px}.mw-conversation-record .mw-button{margin-top:12px}
 .mw-organize-sidebar{padding:18px;background:var(--mw-surface,#fff);border:1px solid var(--mw-border,#e0e7e3);border-radius:10px;max-height:calc(100dvh - 240px);overflow:auto}
 .mw-organize-sidebar h3{font-size:14px;margin:0 0 12px}
 .mw-organize-sidebar h3:not(:first-child){margin-top:24px}

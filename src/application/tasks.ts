@@ -7,6 +7,7 @@ import {
   type ServiceDependencies,
 } from "../application/service.ts";
 import { lightweight, type FindingDecision } from "../core/artifacts.ts";
+import { taskConversationCategory } from "../core/conversations.ts";
 import { resolveDelivery, type DeliveryTarget } from "../core/delivery.ts";
 import { documentAcceptance } from "../core/document-acceptance.ts";
 import { collectPatch } from "../core/git.ts";
@@ -240,6 +241,8 @@ export class TaskService extends ServiceBase {
         }
         const id = randomUUID();
         const job: Job = {
+          conversationCategory: options.sourceJobId && ['validate', 'review'].includes(kind)
+            ? taskConversationCategory(this.job(options.sourceJobId)) : undefined,
           workflowRunId: options.workflowRunId,
           goal: options.goal,
           goalId: options.goal ? (options.goalId ?? id) : undefined,

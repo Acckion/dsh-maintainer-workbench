@@ -25,10 +25,12 @@ for(const mismatch of ['none','session','patch','cwd','version','unknownExit','d
 });
 
 test('validation exposes local checks and rejects tool installation without widening host permissions',()=>{
- assert.ok(validationTools.includes('bash'));assert.ok(validationTools.includes('read'));
+ assert.ok(validationTools.includes('bash'));assert.ok(validationTools.includes('pwsh'));assert.ok(validationTools.includes('read'));
  for(const name of ['skill','edit','write','subagent','workflow'])assert.ok(!validationTools.includes(name));
- for(const command of ['brew install gh','/opt/homebrew/bin/brew install gh','npm install','pnpm add vitest','pip3 install requests','npx vitest'])assert.ok(validationCommandBlocker('bash',{command}),command);
- for(const command of ['node --input-type=module -e "1+1"','pnpm test src/utils/chunk-items.test.ts','git diff --cached','npx --no-install vitest'])assert.equal(validationCommandBlocker('bash',{command}),undefined,command);
+ for(const shell of ['bash','pwsh']) {
+  for(const command of ['brew install gh','/opt/homebrew/bin/brew install gh','npm install','pnpm add vitest','pip3 install requests','npx vitest'])assert.ok(validationCommandBlocker(shell,{command}),command);
+  for(const command of ['node --input-type=module -e "1+1"','pnpm test src/utils/chunk-items.test.ts','git diff --cached','npx --no-install vitest'])assert.equal(validationCommandBlocker(shell,{command}),undefined,command);
+ }
 });
 
 test('unexecuted validation cannot present an invented read-only environment as host fact',()=>{

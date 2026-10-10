@@ -36,5 +36,22 @@ test('checker exit-code echo retains current-session evidence without accepting 
   const before=process.cwd();const {tmpdir}=await import('node:os');const {readFileSync}=await import('node:fs');
   const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
   assert.ok(pkg.files.includes('scripts/verify-document-patch.mjs'));
-  try{process.chdir(tmpdir());const command=documentCheckCommand({worktree:'/tmp/worktree',baseSha:'a'.repeat(40)});assert.ok(command.includes('scripts/verify-document-patch.mjs'));assert.ok(!command.includes("'/tmp/scripts/"));}finally{process.chdir(before);}
+  try{process.chdir(tmpdir());const command=documentCheckCommand({worktree:'/tmp/worktree',baseSha:'a'.repeat(40)});assert.match(command,/scripts[/\\]verify-document-patch\.mjs/);assert.ok(!command.includes("'/tmp/scripts/"));}finally{process.chdir(before);}
  });
+
+test('host document command executes in the native shell with spaces and apostrophes in paths',async()=>{
+ const {mkdtemp,writeFile,rm}=await import('node:fs/promises');const {join}=await import('node:path');const {tmpdir}=await import('node:os');
+ const {execFile}=await import('node:child_process');const {promisify}=await import('node:util');const {git}=await import('../src/core/git.ts');
+ const root=await mkdtemp(join(tmpdir(),"document check's-"));
+ try {
+  await git(root,['init']);await writeFile(join(root,'README.md'),'# Fixture\n\nOriginal text.\n');await git(root,['add','.']);
+  await git(root,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
+  const baseSha=await git(root,['rev-parse','HEAD']);await writeFile(join(root,'README.md'),'# Fixture\n\nOriginal text.\n\nClarified behavior.\n');
+  const command=documentCheckCommand({worktree:root,baseSha});
+  const args=process.platform==='win32'?['-NoProfile','-NonInteractive','-Command',command]:['-c',command];
+  const {stdout}=await promisify(execFile)(process.platform==='win32'?'pwsh':'bash',args,{cwd:root,timeout:20000});
+  const line=stdout.split('\n').find(line=>line.startsWith('DOCUMENT_CHECKS_JSON='));assert.ok(line);
+  const result=JSON.parse(line.slice('DOCUMENT_CHECKS_JSON='.length));
+  assert.deepEqual(result.checks,{whitespace:true,link_files:true,link_anchors:true,exact_repetition:true});
+ }finally{await rm(root,{recursive:true,force:true});}
+});

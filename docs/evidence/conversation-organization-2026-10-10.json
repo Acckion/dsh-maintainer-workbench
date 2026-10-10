@@ -1,0 +1,175 @@
+{
+  "date": "2026-10-10",
+  "platform": "win32",
+  "node": "v25.2.1",
+  "harness": "0.2.1-alpha.1",
+  "boundaries": {
+    "provider": "Local deterministic Messages protocol fixture",
+    "browser": "Built client + real HTTP API + SQLite + prerecorded results",
+    "liveModelCalls": false,
+    "githubBusinessWrites": false
+  },
+  "native": {
+    "fix": {
+      "status": "awaiting_review",
+      "command": "& 'C:\\nvm4w\\nodejs\\node.exe' 'fixture-fix.cjs'",
+      "exitCode": 0,
+      "baselineFailed": true,
+      "regressionPassed": true
+    },
+    "validation": {
+      "status": "completed",
+      "command": "& 'C:\\nvm4w\\nodejs\\node.exe' 'test.cjs'",
+      "exitCode": 0,
+      "patchBound": true
+    },
+    "input": {
+      "pausedStatus": "waiting_input",
+      "question": "Expected queue behavior?",
+      "continuedStatus": "completed",
+      "differentWorktree": true,
+      "running": 0
+    },
+    "grouping": {
+      "repositoryAreas": 2,
+      "categorySessions": 3,
+      "archivedExecutionSessions": 5,
+      "initial": [
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-maintenance",
+          "records": 4
+        },
+        {
+          "sessionId": "maintainer-category-28a6fa45b800961d812b6d6a-bug",
+          "records": 1
+        }
+      ],
+      "additionalPRs": [
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-maintenance",
+          "records": 6
+        },
+        {
+          "sessionId": "maintainer-category-28a6fa45b800961d812b6d6a-bug",
+          "records": 1
+        },
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-docs",
+          "records": 1
+        }
+      ],
+      "updatedResult": [
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-maintenance",
+          "records": 7
+        },
+        {
+          "sessionId": "maintainer-category-28a6fa45b800961d812b6d6a-bug",
+          "records": 1
+        },
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-docs",
+          "records": 1
+        }
+      ]
+    },
+    "restart": {
+      "passed": true,
+      "noModelRequest": true,
+      "historyBeforeNewRetry": [
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-maintenance",
+          "records": 7
+        },
+        {
+          "sessionId": "maintainer-category-28a6fa45b800961d812b6d6a-bug",
+          "records": 1
+        },
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-docs",
+          "records": 1
+        }
+      ],
+      "afterNewRetry": [
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-maintenance",
+          "records": 8
+        },
+        {
+          "sessionId": "maintainer-category-28a6fa45b800961d812b6d6a-bug",
+          "records": 1
+        },
+        {
+          "sessionId": "maintainer-category-84dc948f29fe7cfb2cbf1fd8-docs",
+          "records": 1
+        }
+      ],
+      "repositoryAreas": 2
+    }
+  },
+  "browser": [
+    {
+      "width": 1440,
+      "categories": 8,
+      "fullHistory": 25,
+      "repositoryIsolation": true,
+      "scopedDrafts": true,
+      "realApiDispatch": "8ce165d4-6f80-418c-af09-b2b157f7aca4"
+    },
+    {
+      "width": 390,
+      "categories": 8,
+      "fullHistory": 25,
+      "repositoryIsolation": true,
+      "scopedDrafts": true,
+      "realApiDispatch": "06ae3167-a463-45e3-bbd3-0f4bc2e0bd16"
+    }
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "build": "passed",
+    "nativeE2E": "passed",
+    "browserE2E": "passed",
+    "relatedTests": {
+      "total": 48,
+      "passed": 47,
+      "failed": 0,
+      "skipped": 1
+    },
+    "fullSuite": {
+      "total": 353,
+      "passed": 346,
+      "failed": 6,
+      "skipped": 1
+    }
+  },
+  "remainingFullSuiteFailures": [
+    {
+      "file": "tests/document-validation.test.ts",
+      "reason": "Existing slash-only path assertion differs from Windows separators"
+    },
+    {
+      "file": "tests/evaluation-report.test.ts",
+      "reason": "Existing HOME assertion uses POSIX path literals"
+    },
+    {
+      "file": "tests/runtime-notices.test.ts",
+      "reason": "Checked-out third-party notices use CRLF while installed package notices use LF"
+    },
+    {
+      "file": "tests/workbench.test.ts",
+      "reason": "Windows file mode does not report POSIX 0600"
+    },
+    {
+      "file": "tests/workflow-events.test.ts",
+      "test": "workflow v1 upgrades once",
+      "reason": "Unclosed SQLite handle prevents temporary database unlink on Windows (EBUSY)"
+    },
+    {
+      "file": "tests/workflow-events.test.ts",
+      "test": "published clarification receipts",
+      "reason": "Unclosed SQLite handle prevents temporary database unlink on Windows (EBUSY)"
+    }
+  ],
+  "skipped": "Filesystem does not report sparse allocation via stat.blocks"
+}

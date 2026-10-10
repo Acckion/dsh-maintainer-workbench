@@ -5,22 +5,28 @@ import { resolve, join } from 'node:path';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { build } from 'esbuild';
+import { fixtureEnvironment } from '../tests/evaluation/environment.ts';
 const exec = promisify(execFile), root = resolve(import.meta.dirname, '..');
 const dir = await mkdtemp(join(tmpdir(), 'maintainer-native-'));
+const env = { ...fixtureEnvironment(process.env, dir), FIXTURE_DIR: dir, DSH_TELEMETRY_DISABLED: '1', NODE_OPTIONS: '--use-system-ca' };
+const timeoutMs = Number(process.env.NATIVE_FIXTURE_TIMEOUT_MS ?? 240000);
+await mkdir(env.HOME, { recursive: true });
+console.log('NATIVE_FIXTURE_DIRECTORY',dir);
 const repo = join(dir, 'repo'); await mkdir(repo);
-const git = args => exec('git', args, { cwd: repo });
+const git = args => exec('git', args, { cwd: repo, env });
 await git(['init','-b','main']); await git(['remote','add','origin','https://github.com/fixture/native.git']);
 await writeFile(join(repo,'sum.cjs'), 'module.exports=(a,b)=>a-b;\n');
 await writeFile(join(repo,'test.cjs'), "require('node:assert/strict').equal(require('./sum.cjs')(2,1),3);console.log('REGRESSION_PASSED');\n");
-await writeFile(join(repo,'fixture-fix.cjs'), `const {spawnSync}=require('node:child_process');const fs=require('node:fs');const before=spawnSync(process.execPath,['test.cjs'],{encoding:'utf8'});if(before.status===0)throw Error('baseline should fail');console.log('BASELINE_FAILED_AS_EXPECTED');fs.writeFileSync('sum.cjs','module.exports=(a,b)=>a+b;\\n');const after=spawnSync(process.execPath,['test.cjs'],{encoding:'utf8'});console.log(after.stdout);if(after.status!==0)throw Error(after.stderr);\n`);
+await writeFile(join(repo,'fixture-fix.cjs'), `const assert=require('node:assert/strict');const fs=require('node:fs');assert.throws(()=>require('./test.cjs'),{code:'ERR_ASSERTION'});console.log('BASELINE_FAILED_AS_EXPECTED');fs.writeFileSync('sum.cjs','module.exports=(a,b)=>a+b;\\n');delete require.cache[require.resolve('./sum.cjs')];delete require.cache[require.resolve('./test.cjs')];require('./test.cjs');\n`);
 await git(['add','.']); await git(['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
 await build({entryPoints:['tests/native-fixture-plugin.ts'],bundle:true,platform:'node',format:'esm',packages:'external',outfile:'.data/native-fixture-plugin.mjs'});
+
 let calls=0; const models=[];
 const server=createServer(async(req,res)=>{
   let body='';for await(const chunk of req)body+=chunk;
   const request=JSON.parse(body||'{}');calls++; models.push(request.model);
   await writeFile(join(dir,`request-${calls}.json`),JSON.stringify(request,null,2));
-  const tool=request.tools?.find(t=>t.name.toLowerCase().includes('bash'));
+  const tool=request.tools?.find(t=>['bash','pwsh'].includes(t.name));
   const toolsUsed=JSON.stringify(request.messages).includes('tool_result');
   const prompt=JSON.stringify(request.messages);
   const metadata=prompt.includes('Metadata-only workspace')||prompt.includes('Metadata routing only')||prompt.includes('stage:\\"triage\\"');
@@ -28,10 +34,12 @@ const server=createServer(async(req,res)=>{
   const resumedInput=inputBridge&&prompt.includes('Maintainer supplied input');
   const questionTool=request.tools?.find(t=>t.name==='ask_user_question');
   const validation=request.messages?.some(m=>Array.isArray(m.content)&&m.content.some(c=>c.type==='text'&&(c.text?.includes('stage:"validate"') || c.text?.includes('CURRENT VALIDATION CONTRACT'))));
-  const executedCommand=`${process.execPath} ${validation ? 'test.cjs' : 'fixture-fix.cjs'}`;
+  const file=validation ? 'test.cjs' : 'fixture-fix.cjs';
+  const executable=process.execPath.replaceAll("'","''");
+  const executedCommand=process.platform==='win32' ? `& '${executable}' '${file}'` : `'${executable}' '${file}'`;
   const common = {schemaVersion:1,summary:'本地确定性模型夹具，验证实际工具执行和工作流接线。',coverage:'Owned test fixture only',evidence:[],nextSteps:['Review patch'],responseDraft:'Fixture result.'};
   const final=inputBridge?{...common,stage:'investigate',facts:['Maintainer supplied queue behavior'],hypotheses:[],reproduction:'not run',rootCause:'not established',impact:'fixture only',proposedChanges:[],acceptanceCriteria:[],blockers:[]} : metadata ? {...common,stage:'triage',category:'bug',priority:'P2',labels:[],module:'sum',impact:'incorrect result',missingInfo:[],duplicateOf:null,duplicateReason:'',route:'investigate',routeReason:'needs reproduction'} : validation ? {...common,stage:'validate',environment:'Owned temporary Node fixture',tests:[{command:executedCommand,status:'passed',output:'REGRESSION_PASSED'}],blockers:[]} : {...common,stage:'fix',changes:['Correct addition'],acceptanceCriteria:['sum(2,1) === 3'],limitations:[],tests:[{command:'node test.cjs (before)',status:'failed',output:'BASELINE_FAILED_AS_EXPECTED'},{command:'node test.cjs (after)',status:'passed',output:'REGRESSION_PASSED'}]};
-  if(metadata && request.tools?.some(t=>t.name.toLowerCase().includes('bash'))) throw Error('metadata task exposed shell');
+  if(metadata && request.tools?.some(t=>['bash','pwsh'].includes(t.name))) throw Error('metadata task exposed shell');
   const content=inputBridge&&!resumedInput&&questionTool?{type:'tool_use',id:'input-call-1',name:questionTool.name,input:{questions:[{id:'behavior',question:'Expected queue behavior?',options:[{label:'Keep order',description:'Preserve queue ordering'}]}]}}:!metadata&&!toolsUsed&&tool?{type:'tool_use',id:'fixture-call-1',name:tool.name,input:{command:executedCommand,description:'Run owned local regression fixture',timeout:20000}}:{type:'text',text:JSON.stringify(final)};
   console.log('MOCK_MESSAGES_CALL',calls,'tools',request.tools?.map(t=>t.name).join(','),'response',content.type);
   res.writeHead(200,{'content-type':'text/event-stream','cache-control':'no-cache'});
@@ -44,9 +52,36 @@ const server=createServer(async(req,res)=>{
 await new Promise(r=>server.listen(0,'127.0.0.1',r));const port=server.address().port;
 const overlay=join(dir,'fixture.yml');await writeFile(overlay,`- id: hmr\n  disabled: true\n- id: llm-deepseek\n  config:\n    baseURL: http://127.0.0.1:${port}\n    thinking: disabled\n- insert:\n    - id: fixture-pruner\n      name: "@deepseek-ai/dsh-compaction-tool-result-pruner"\n      config:\n        thresholdChars: 3000\n        headChars: 1600\n        tailChars: 600\n    - id: fixture-compaction\n      name: "@deepseek-ai/dsh-compaction-basic"\n      config:\n        auto: false\n        headroomTokens: 4096\n        maxTokens: 2048\n        retainTokens: 2000\n    - id: fixture\n      name: ${JSON.stringify(resolve(root,'.data/native-fixture-plugin.mjs'))}\n`);
 await writeFile(resolve(root,'.data/native-fixture-location.txt'),dir);
-const child=spawn(process.execPath,[resolve(root,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','web','--patch',overlay,'--no-open','--port','4320'],{cwd:root,env:{...process.env,DSH_HOME:join(dir,'dsh'),DEEPSEEK_API_KEY:'local-test-placeholder',FIXTURE_DIR:dir},stdio:['ignore','pipe','pipe']});
+const child=spawn(process.execPath,[resolve(root,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','web','--patch',overlay,'--no-open','--port','4320'],{cwd:root,env,stdio:['ignore','pipe','pipe']});
 child.stdout.on('data',b=>process.stdout.write(b));child.stderr.on('data',b=>process.stderr.write(b));
-const deadline=setTimeout(()=>{child.kill('SIGTERM');server.close();process.exitCode=1;},110000);
+child.on('error',error=>{console.error('HARNESS_START_ERROR',error);process.exitCode=1;});
+child.on('exit',(code,signal)=>console.log('HARNESS_EXIT',JSON.stringify({code,signal})));
+const deadline=setTimeout(()=>{console.error('HARNESS_TIMEOUT',timeoutMs);child.kill('SIGTERM');server.close();process.exitCode=1;},timeoutMs+5000);
 let complete=false;
-for(let i=0;i<105;i++) { await new Promise(r=>setTimeout(r,1000));try{const result=JSON.parse(await readFile(join(dir,'result.json'),'utf8'));const job=result.jobs.find(j=>j.kind==='fix'); const metadata=result.jobs.find(j=>j.kind==='triage');console.log('RESULT',JSON.stringify({status:job.status,error:job.error,sessionId:job.sessionId,patch:job.patch,toolEvidence:job.result?.evidence.filter(e=>e.source.startsWith('Harness')).map(e=>e.detail)}));if(job.status!=='awaiting_review'||!job.patch?.includes('a+b')||!job.result?.evidence.some(e=>e.detail.includes('REGRESSION_PASSED')))process.exitCode=1;if(metadata?.status!=='completed'||!metadata.sessionId||metadata.worktree||!metadata.analysisPath||metadata.result.tests.some(t=>t.status!=='not_run')||!models.length||!models.includes('deepseek-v4-pro')||!models.includes('deepseek-flash')||models.some(m=>!['deepseek-flash','deepseek-v4-pro'].includes(m))||!result.modelCatalog?.groups.some(g=>g.id==='deepseek-official'&&g.models.some(m=>m.id==='deepseek-v4-pro')))process.exitCode=1; if (!job.executionRecords?.some(record => record.command?.includes('fixture-fix.cjs') && record.exitCode === 0 && record.output.includes('REGRESSION_PASSED'))) process.exitCode=1; if (metadata?.executionRecords?.length) process.exitCode=1; const validator=result.jobs.find(j=>j.kind==='validate'); const test=validator?.artifact?.tests?.[0]; const execution=validator?.executionRecords?.find(record=>record.id===test?.executionId); if (validator?.status!=='completed'||test?.status!=='passed'||execution?.exitCode!==0||execution.patchHash!==validator.patchSha256) process.exitCode=1; console.log('VALIDATION_EXECUTION',JSON.stringify({status:validator?.status,command:test?.command,executionId:test?.executionId,exitCode:execution?.exitCode,patchBound:execution?.patchHash===validator?.patchSha256})); if (!job.toolDiagnostics?.mountedTools.includes('bash') || !job.toolDiagnostics.requests.some(r => r.tools.includes('bash')) || job.toolDiagnostics.calls !== 1 || job.toolDiagnostics.results !== 1 || job.toolDiagnostics.canonicalResults !== 1 || !job.toolDiagnostics.finished) process.exitCode=1; if (metadata.toolDiagnostics?.requests.some(r=>r.tools.length) || metadata.toolDiagnostics?.mountedTools.length) process.exitCode=1; if (!JSON.stringify(result.contextProbe?.pruned).includes('tool result middle pruned') || !JSON.stringify(result.contextProbe?.pruned).includes('HEAD') || !JSON.stringify(result.contextProbe?.pruned).includes('TAIL')) process.exitCode=1; if (!result.capabilities.host?.contextServices?.pruner || !result.capabilities.host?.contextServices?.compactor) process.exitCode=1; if(result.inputProbe?.pausedStatus!=='waiting_input'||result.inputProbe.continuedStatus!=='completed'||!result.inputProbe.differentWorktree||result.inputProbe.running!==0)process.exitCode=1;console.log('INPUT_BRIDGE',JSON.stringify(result.inputProbe)); console.log('HOST_MODEL_ROUTING',JSON.stringify({models,metadataStatus:metadata?.status,metadataSession:metadata?.sessionId,host:result.capabilities.host}));complete=true;break;}catch(e){if(e.code!=='ENOENT')throw e;}}
-if(!complete)process.exitCode=1;clearTimeout(deadline);child.kill('SIGTERM');server.close();console.log('Evidence directory:',dir);
+for(let i=0;i<Math.ceil(timeoutMs/1000) && child.exitCode===null;i++) { await new Promise(r=>setTimeout(r,1000));try{const result=JSON.parse(await readFile(join(dir,'result.json'),'utf8'));const job=result.jobs.find(j=>j.kind==='fix'); const metadata=result.jobs.find(j=>j.kind==='triage'&&j.repoId==='fixture/metadata');console.log('RESULT',JSON.stringify({status:job.status,error:job.error,sessionId:job.sessionId,patch:job.patch,toolEvidence:job.result?.evidence.filter(e=>e.source.startsWith('Harness')).map(e=>e.detail)}));if(job.status!=='awaiting_review'||!job.patch?.includes('a+b')||!job.result?.evidence.some(e=>e.detail.includes('REGRESSION_PASSED')))process.exitCode=1;if(metadata?.status!=='completed'||!metadata.sessionId||metadata.worktree||!metadata.analysisPath||metadata.result.tests.some(t=>t.status!=='not_run')||!models.length||!models.includes('deepseek-v4-pro')||!models.includes('deepseek-flash')||models.some(m=>!['deepseek-flash','deepseek-v4-pro'].includes(m))||!result.modelCatalog?.groups.some(g=>g.id==='deepseek-official'&&g.models.some(m=>m.id==='deepseek-v4-pro')))process.exitCode=1; if (!job.executionRecords?.some(record => record.command?.includes('fixture-fix.cjs') && record.exitCode === 0 && record.output.includes('REGRESSION_PASSED'))) process.exitCode=1; if (metadata?.executionRecords?.length) process.exitCode=1; const validator=result.jobs.find(j=>j.kind==='validate'); const test=validator?.artifact?.tests?.[0]; const execution=validator?.executionRecords?.find(record=>record.id===test?.executionId); if (validator?.status!=='completed'||test?.status!=='passed'||execution?.exitCode!==0||execution.patchHash!==validator.patchSha256) process.exitCode=1; console.log('VALIDATION_EXECUTION',JSON.stringify({status:validator?.status,command:test?.command,executionId:test?.executionId,exitCode:execution?.exitCode,patchBound:execution?.patchHash===validator?.patchSha256})); if (!job.toolDiagnostics?.mountedTools.some(name=>['bash','pwsh'].includes(name)) || !job.toolDiagnostics.requests.some(r => r.tools.some(name=>['bash','pwsh'].includes(name))) || job.toolDiagnostics.calls !== 1 || job.toolDiagnostics.results !== 1 || job.toolDiagnostics.canonicalResults !== 1 || !job.toolDiagnostics.finished) process.exitCode=1; if (metadata.toolDiagnostics?.requests.some(r=>r.tools.length) || metadata.toolDiagnostics?.mountedTools.length) process.exitCode=1; if (!JSON.stringify(result.contextProbe?.pruned).includes('tool result middle pruned') || !JSON.stringify(result.contextProbe?.pruned).includes('HEAD') || !JSON.stringify(result.contextProbe?.pruned).includes('TAIL')) process.exitCode=1; if (!result.capabilities.host?.contextServices?.pruner || !result.capabilities.host?.contextServices?.compactor) process.exitCode=1; if(result.inputProbe?.pausedStatus!=='waiting_input'||result.inputProbe.continuedStatus!=='completed'||!result.inputProbe.differentWorktree||result.inputProbe.running!==0)process.exitCode=1;console.log('INPUT_BRIDGE',JSON.stringify(result.inputProbe)); console.log('HOST_MODEL_ROUTING',JSON.stringify({models,metadataStatus:metadata?.status,metadataSession:metadata?.sessionId,host:result.capabilities.host}));complete=true;break;}catch(e){if(e.code!=='ENOENT')throw e;}}
+if(!complete)process.exitCode=1;
+clearTimeout(deadline);
+const exited = new Promise(resolve => child.once('exit', resolve));
+child.kill('SIGTERM');
+if (child.exitCode === null && child.signalCode === null) await exited;
+if (complete && !process.exitCode) {
+  const callsBeforeRestart = calls;
+  const restarted = spawn(process.execPath,[resolve(root,'node_modules/@deepseek-ai/dsh/lib/bin.js'),'--profile','web','--patch',overlay,'--no-open','--port','4320'],{cwd:root,env:{...env,FIXTURE_RESTART:'1'},stdio:['ignore','pipe','pipe']});
+  restarted.stdout.on('data',b=>process.stdout.write(b));restarted.stderr.on('data',b=>process.stderr.write(b));
+  let restartComplete=false;
+  try {
+    for(let i=0;i<Math.ceil(timeoutMs/1000) && restarted.exitCode===null;i++) {
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      try {
+        const result=JSON.parse(await readFile(join(dir,'restart.json'),'utf8'));
+        if(calls!==callsBeforeRestart)throw Error('Category recording dispatched a model request');
+        console.log('CONVERSATION_PERSISTENCE',JSON.stringify(result));restartComplete=true;break;
+      } catch(error) { if(error.code!=='ENOENT')throw error; }
+    }
+    if(!restartComplete)throw Error('Native conversation restart probe did not finish');
+  } finally {
+    const stopped=new Promise(resolve=>restarted.once('exit',resolve));restarted.kill('SIGTERM');
+    if(restarted.exitCode===null && restarted.signalCode===null)await stopped;
+  }
+}
+server.close();console.log('Evidence directory:',dir);

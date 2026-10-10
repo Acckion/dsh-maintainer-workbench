@@ -13,7 +13,7 @@ export async function discoverWorkspace(path:string, dataDir:string):Promise<Par
  // Exclude task directories owned by another profile or an earlier local host.
  let ancestor=canonical;
  while(dirname(ancestor)!==ancestor){
-  if(['analysis','worktrees'].includes(basename(ancestor)) && await stat(join(dirname(ancestor),'workbench.sqlite')).then(s=>s.isFile()).catch(()=>false))return;
+  if(['analysis','worktrees','conversations'].includes(basename(ancestor)) && await stat(join(dirname(ancestor),'workbench.sqlite')).then(s=>s.isFile()).catch(()=>false))return;
   ancestor=dirname(ancestor);
  }
  let root=canonical,head='',branch='',dirty=false,isGit=false;

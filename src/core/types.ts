@@ -252,6 +252,7 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 export interface Job {
+  conversationCategory?: import('./conversations.ts').ConversationCategory;
   caseId?: string;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
   goal?: "resolve";
