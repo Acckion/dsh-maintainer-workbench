@@ -93,14 +93,17 @@ try {
         const flow=page.getByRole('region',{name:'事项处理流程',exact:true});
         if(name==='Plan')return flow.getByRole('button',{name:'调整分类与计划',exact:true}).click();
         const back=flow.getByRole('button',{name:'返回当前阶段',exact:true});if(await back.count())await back.click();
-        return flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true}).click();
+        const control=flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true});if(await control.count())return control.click();
       };
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.locator('.mw-reader-topline').count(), 0);
       await page.locator('.mw-reader-header h2').evaluate(el=>{const text=[...el.childNodes].find(n=>n.nodeType===Node.TEXT_NODE && n.textContent.trim());text.textContent='[Bug]: plugin load is CPU-bound on module compilation - one heavy channel plugin entry costs 5-13 seconds cold and three channel plugins use most of the startup budget '.repeat(2);});
-      const refNumber=await page.locator('.mw-reader-number').boundingBox();
-      const refLink=await page.locator('.mw-title-reference>a').boundingBox();
-      assert.ok(Math.abs((refNumber.y+refNumber.height/2)-(refLink.y+refLink.height/2))<3, 'number and GitHub link stay on the same toolbar with long titles');
+      assert.equal(await page.locator('.mw-reader-tabbar .mw-reader-number').count(),0);
+      if(width>760)await page.getByRole('button',{name:'Summary',exact:true}).click();
+      else await page.locator('select[aria-label="GitHub 原始内容"]').selectOption('summary');
+      assert.equal(await page.locator('.mw-summary-facts .mw-reader-number').count(),1);
+      if(width>760)await page.getByRole('button',{name:'处理流程',exact:true}).click();
+      else await page.locator('select[aria-label="AI 功能"]').selectOption('overview');
       assert.equal(await page.locator('.mw-reader-meta > .mw-reader-top-actions').count(), 1);
       if(width<=760)await page.getByRole('button',{name:'返回来源列表',exact:true}).click();
       const listTab = await page.locator('.mw-global-tabs').boundingBox();
@@ -198,8 +201,8 @@ try {
       await page.getByText('处理计划与进度已保存',{exact:false}).first().waitFor();
 
       await openIssue('fixture/queue#132');
-      const resume=page.getByRole('button',{name:'等待填写补充信息',exact:true});
-      assert.equal(await resume.isDisabled(),true);
+      assert.equal(await page.getByRole('button',{name:'根据补充信息继续',exact:true}).count(),0);
+      assert.equal(await page.getByRole('button',{name:'保存补充输入',exact:true}).isDisabled(),true);
       await page.getByLabel('Expected queue behavior?',{exact:true}).fill('Keep queue order');
       await page.getByRole('button',{name:'保存补充输入',exact:true}).click();
       await page.getByText('已保存补充输入，可继续处理',{exact:true}).waitFor();
@@ -268,6 +271,7 @@ try {
       await summary.scrollIntoViewIfNeeded();
       await page.screenshot({ path: join(dir, `final-review-${width}.png`), fullPage: true });
       await selectPanel('Work');
+      await page.getByText(/命令与验证记录 ·/).click();
       await page.getByRole('button', { name: '读取保存的原始工具日志', exact: true }).click();
       await page.getByText(/Fixture assertion failed/, { exact: false }).last().waitFor();
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
@@ -282,7 +286,7 @@ try {
       assert.equal(w.workspaces.list().find(item=>item.id===cleanupId).status,'removed');assert.equal(await git(cleanupPath,['rev-parse',store.get('jobs',cleanupId).branch]),cleanupSha);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
       await page.screenshot({path:join(dir,`workspace-cleanup-${width}.png`),fullPage:true});
-      await page.getByRole('button',{name:'仓库设置',exact:true}).click();
+      await page.getByRole('button',{name:'Settings',exact:true}).click();
       await page.getByRole('heading',{name:'仓库设置',exact:true}).waitFor();
       const selectedBefore=await page.getByRole('combobox',{name:'选择仓库'}).inputValue();
       const globalBefore=store.settings().syncLimit;

@@ -116,7 +116,18 @@ jobs:
           elif [ "$status" = 404 ]; then
             # Immutable commit tags prevent older concurrent builds from moving
             # the master alias backwards. Every commit can still be published.
-            npm publish ./dsh-maintainer-workbench.tgz --access public --tag "commit-$SOURCE_SHA" --ignore-scripts --provenance
+            # npm provenance supports public source repositories only. OIDC
+            # authentication also works for private repositories.
+            private=$(gh api "repos/$GH_REPO" --jq .private)
+            if [ "$private" = false ]; then
+              provenance=true
+            elif [ "$private" = true ]; then
+              provenance=false
+            else
+              echo 'Unable to determine source repository visibility.' >&2
+              exit 1
+            fi
+            npm publish ./dsh-maintainer-workbench.tgz --access public --tag "commit-$SOURCE_SHA" --ignore-scripts --provenance="$provenance"
           else
             echo "npm registry lookup failed: HTTP $status" >&2
             exit 1

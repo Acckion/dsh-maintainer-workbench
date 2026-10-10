@@ -352,6 +352,17 @@ export function RepositoryDetail({
   const content = (
     <>
       <header className="mw-reader-header">
+            {hasGitHub && (
+              <button
+                className="mw-icon-button mw-reader-refresh"
+                title="刷新详情"
+                aria-label="刷新详情"
+                disabled={loading}
+                onClick={refresh}
+              >
+                <RefreshCw size={16} />
+              </button>
+            )}
         <h2>
           {returnToList && (
             <button
@@ -451,37 +462,12 @@ export function RepositoryDetail({
                 </a>
               )}
             </span>
-            <strong>{summary?.author ?? issue.author}</strong>
-            <span className="mw-reader-number">#{issue.number}</span>
-            <span>
-              {summary
-                ? `创建于 ${when(summary.createdAt)}`
-                : `同步于 ${when(issue.updatedAt)}`}
-            </span>
-            {summary?.headRef && (
-              <>
-                <code>{summary.headRef}</code>
-                <span>→</span>
-                <code>{summary.baseRef}</code>
-              </>
-            )}
           </div>
           <div className="mw-reader-top-actions">
             {isAgent(tab) && renderAgentActions && (
               <div className="mw-reader-stage-actions">
                 {renderAgentActions(tab as AgentTab)}
               </div>
-            )}
-            {hasGitHub && !isAgent(tab) && (
-              <button
-                className="mw-icon-button"
-                title="刷新详情"
-                aria-label="刷新详情"
-                disabled={loading}
-                onClick={refresh}
-              >
-                <RefreshCw size={16} />
-              </button>
             )}
             {!embedded && (
               <button
@@ -518,15 +504,24 @@ export function RepositoryDetail({
           </details>
         )}
         {tab === "summary" && (
-          <div className="mw-reader-summary">
-            <article>
-              <div className="mw-reader-card-header">
-                {summary?.author ?? issue.author} · 正文{" "}
-                {!summary && <small>同步时的快照</small>}
-              </div>
-              <RepositoryMarkdown text={summary?.body ?? issue.body} />
-            </article>
-            <aside>
+          <>
+          <div className="mw-summary-facts">
+            <strong>{summary?.author ?? issue.author}</strong>
+            <span className="mw-reader-number">#{issue.number}</span>
+            <span>
+              {summary
+                ? `创建于 ${when(summary.createdAt)}`
+                : `同步于 ${when(issue.updatedAt)}`}
+            </span>
+            {summary?.headRef && (
+              <>
+                <code>{summary.headRef}</code>
+                <span>→</span>
+                <code>{summary.baseRef}</code>
+              </>
+            )}
+          </div>
+            <aside className="mw-summary-properties">
               <h4>标签</h4>
               <div className="mw-tags">
                 {(summary?.labels ?? issue.labels).map((label) => (
@@ -552,7 +547,17 @@ export function RepositoryDetail({
                 </>
               )}
             </aside>
+          <div className="mw-reader-summary">
+            <article>
+              <div className="mw-reader-card-header">
+                {summary?.author ?? issue.author} · 正文{" "}
+                {!summary && <small>同步时的快照</small>}
+              </div>
+              <RepositoryMarkdown text={summary?.body ?? issue.body} />
+            </article>
+
           </div>
+          </>
         )}
         {tab === "summary" && issue.type === "pr" && hasGitHub && (
           <section>

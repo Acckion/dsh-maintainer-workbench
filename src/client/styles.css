@@ -580,8 +580,6 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 @container content (max-width:560px){.mw-layout-tabs .mw-workarea:has(>.mw-reader-embedded)>.mw-list-panel{display:none}}
 
 .mw-stage-panel>header h3{font-size:18px;margin:0}.mw-stage-panel>header .mw-tag{font-size:11px}
-.mw-stage-focus{font-size:12px;color:var(--mw-muted,#63786e)}
-.mw-stage-source{font-size:11px;color:var(--mw-muted,#63786e)}
 .mw-stage-view-controls{gap:4px;border-bottom:1px solid var(--mw-border,#dce5df);margin:0;padding-bottom:8px}
 .mw-stage-view-controls button{padding:7px 12px;border-radius:6px;text-decoration:none!important}
 .mw-stage-view-controls button[aria-pressed=true]{background:var(--mw-selected,#e5f1eb);font-weight:600}
@@ -878,3 +876,54 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw.mw-layout-tabs .mw-task-row:is(.selected,.focused),.mw.mw-layout-tabs .mw-task-row:is(.selected,.focused):hover{background:transparent;box-shadow:inset 2px 0 var(--mw-tab-accent);border-left:0}
 .mw.mw-layout-tabs .mw-task-row:is(.selected,.focused) strong{color:var(--mw-tab-accent)}
 .mw.mw-layout-tabs .mw-task-icon{background:transparent;color:var(--muted)}
+
+.mw-stage-progress{display:flex;flex-direction:column;gap:12px;padding:20px;border-radius:10px;background:var(--mw-surface-soft,#f5f6f7);overflow-wrap:anywhere}
+.mw-stage-progress-heading{display:flex;align-items:center;gap:10px}.mw-stage-progress-heading h4{margin:0;font-size:16px;font-weight:600}
+.mw-stage-progress-hint,.mw-stage-progress-footer small{color:var(--mw-muted,#63786e);font-size:12px}
+.mw-stage-progress-footer{display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-top:4px}.mw-stage-progress-footer small{margin-left:auto}
+.mw-stage-progress.failed{border-left:3px solid var(--mw-danger-text,#b44848)}
+.mw-stage-panel>.mw-stage-view-controls{justify-content:flex-end;border:0;margin:0;padding:0}
+.mw-stage-execution{display:flex;flex-direction:column;gap:16px;min-width:0}.mw-stage-execution-toolbar{display:flex;gap:8px;flex-wrap:wrap}
+.mw-stage-log{max-height:420px;overflow:auto;overscroll-behavior:contain;border:1px solid var(--mw-border,#dce5df);border-radius:8px;padding:16px}
+.mw-stage-log h4{margin:0 0 12px}.mw-stage-log .mw-job-log{border-bottom:1px solid var(--mw-border,#dce5df);padding:10px 0}.mw-stage-log .mw-job-log:last-child{border-bottom:0}.mw-stage-log time{font-size:11px;color:var(--mw-muted,#63786e)}
+.mw-stage-execution details>summary,.mw-stage-context>summary{margin:0!important;padding:8px 0;font-size:12px}
+.mw-stage-input{display:flex;flex-direction:column;gap:12px}.mw-stage-input label{display:flex;flex-direction:column;gap:6px;margin:12px 0}.mw-stage-input textarea{width:100%;resize:vertical}
+@media(max-width:760px){.mw-stage-progress{padding:16px}.mw-stage-progress-footer{align-items:flex-start;flex-direction:column}.mw-stage-progress-footer small{margin-left:0}.mw-stage-log{padding:12px;max-height:360px}}
+/* Keep repository synchronization and its timestamp at the trailing edge. */
+.mw .mw-global-tabs .mw-tab-sync{margin-left:auto;flex-shrink:0}
+.mw .mw-global-tabs .mw-sync-time{flex-shrink:0}
+
+/* Native window dragging is limited to unused header and navigation space. */
+.mw[data-mw-host] :is(.mw-header-controls,.mw-global-tabs,.mw-reader-tabbar){-webkit-app-region:drag;app-region:drag}
+.mw[data-mw-host] :is(.mw-header-controls,.mw-global-tabs,.mw-reader-tabbar) :is(button,a,input,select,textarea,label,summary,[role=button]){-webkit-app-region:no-drag;app-region:no-drag}
+
+/* Detail refresh belongs to the upper-right corner, outside the metadata strip. */
+.mw .mw-reader-header>.mw-reader-refresh{position:absolute;top:14px;right:20px}
+.mw .mw-reader-header:has(>.mw-reader-refresh) h2{padding-right:32px}
+.mw .mw-reader-dialog .mw-reader-header>.mw-reader-refresh{right:60px}
+
+.mw .mw-reader-header>.mw-reader-refresh{right:12px}
+.mw .mw-reader-dialog .mw-reader-header>.mw-reader-refresh{right:52px}
+.mw .mw-workflow-toolbar[hidden]{display:none}
+.mw .mw-workflow-current-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
+
+/* Shared SVG chevron for every native disclosure, including menus and file diffs. */
+.mw details>summary{list-style:none;cursor:pointer}
+.mw details>summary::-webkit-details-marker{display:none}
+.mw details>summary::marker{content:''}
+.mw details>summary::before{content:'';display:inline-block;width:14px;height:14px;flex:0 0 14px;margin-right:6px;vertical-align:-2px;background:currentColor;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m9 5 7 7-7 7' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/contain no-repeat;transform:rotate(0deg);transition:transform .12s ease}
+.mw details[open]>summary::before{transform:rotate(90deg)}
+@media(prefers-reduced-motion:reduce){.mw details>summary::before{transition:none}}
+
+/* Repository metadata belongs to Summary, not the navigation row. */
+.mw .mw-summary-facts{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-bottom:16px;font-size:12px;color:var(--muted)}
+.mw .mw-summary-facts strong{font-weight:400;color:var(--ink)}
+.mw .mw-summary-facts code{padding:4px 8px;border-radius:var(--mw-control-radius);background:var(--mw-control-bg);white-space:normal;overflow-wrap:anywhere;max-width:100%}
+
+/* Summary properties sit below identity metadata and above the description. */
+.mw .mw-summary-properties{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:0 0 16px;margin-bottom:16px;border-bottom:1px solid var(--mw-border);font-size:12px;color:var(--muted)}
+.mw .mw-summary-properties h4,.mw .mw-summary-properties p{margin:0}
+.mw .mw-summary-properties h4{font-size:12px;color:var(--ink);font-weight:500}
+.mw .mw-summary-properties .mw-tags{display:flex;flex-wrap:wrap;gap:6px}
+.mw .mw-summary-properties>code{overflow-wrap:anywhere}
+.mw .mw-reader-summary{grid-template-columns:minmax(0,1fr)}

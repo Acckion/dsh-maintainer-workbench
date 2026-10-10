@@ -229,3 +229,16 @@ batch operation entry now opens the latest master's advanced operations menu.
 - Issue #3 的原生会话记录包含 `DeepSeek Messages stream: event precedes message_start` / `MALFORMED_RESPONSE`；当前官方适配器在流翻译时直接抛出该异常，未经过宿主的请求错误恢复入口。仅从现有日志无法确定服务端、代理链路或适配器兼容性的根因。
 - 仅在当前任务会话尚未收到任何流内容时，将这一种确定的异常接入宿主恢复入口。每个请求步骤最多重试 2 次，每个任务会话累计最多 4 次；恢复不重新派发阶段，也不重跑已有工具操作。其他协议错误、已收到内容后的异常及工具循环阻塞不按此规则恢复。上限耗尽后保留原始错误、诊断与工作区，要求明确重试。
 - `npm run check`：类型检查、376 项自动测试及构建通过。新增测试模拟适配器直接抛错，验证同会话恢复、上限停止、无重复工具操作，以及其他异常和部分流的拒绝恢复。未重新调用真实模型，服务端恢复效果仍需 Issue #3 实测。
+
+### State-focused stage content (2026-10-09)
+
+Integrated master `525260a`. `npm run check` passed (356 tests, typecheck and
+build). Timeline, maintenance and navigation browser fixtures passed at desktop
+1440px and mobile 390px. State presentation, actionable input, hidden cancel,
+raw execution evidence and historical read-only behavior are covered. Results
+arriving while reading execution details preserve the selected view. Evidence
+and synthetic-data screenshots: `docs/evidence/workflow-progress-2026-10-09/`.
+
+### 2026-10-10：工作流分支合并最新 master
+
+合并 `origin/master` (`8e5c27b`)，保留其阶段进度、待补充信息、执行详情和导航界面，以及本分支的编排、文档证据与 Messages 异常有限恢复。唯一冲突为验证文档的独立追加段落，均保留。合并后 `npm run check` 通过（384 项测试、类型检查与构建）；timeline、maintenance 浏览器夹具在 1440px 与 390px 通过，使用本机 Edge。navigation 夹具未完成：默认预览服务未启动，启动隔离静态服务后 Edge 访问 4317 仍超时（本机 HTTP 检查返回 200）；不能据此报告导航验收通过。浏览器检查使用隔离夹具，没有真实模型调用或外部写入。
