@@ -511,6 +511,7 @@ export function handler(
             kind: z.enum(kinds),
             sourceJobId: z.string().optional(),
             instructions: z.string().max(8000).optional(),
+            supplementalInfo: z.string().max(8000).optional(),
             forceNew: z.boolean().optional(),
             goal: z.enum(["resolve"]).optional(),
           })
@@ -521,6 +522,7 @@ export function handler(
           workbench.enqueue(p.issueIds, p.kind, {
             sourceJobId: p.sourceJobId,
             instructions: p.instructions,
+            supplementalInfo: p.supplementalInfo,
             forceNew: p.forceNew,
             goal: p.goal,
           }),

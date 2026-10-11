@@ -588,6 +588,7 @@ body[data-ds-dark-theme] .mw .mw-repo-switch select{background:transparent}
 .mw-stage-facts{display:grid;grid-template-columns:80px 1fr;gap:8px;font-size:13px}.mw-stage-facts dd{margin:0}
 @media(max-width:760px){.mw-stage-panel{padding:18px 16px}.mw-workflow-current{flex-direction:row}.mw-workflow-current .mw-text-button{flex-shrink:0}}
 .mw-stage-panel>header>.mw-workflow-actions{margin-left:auto}.mw-stage-result>section>details{margin-top:8px}
+.mw-stage-launcher{display:flex;flex-direction:column;gap:8px;width:100%;min-width:240px;max-width:480px}.mw-stage-launcher label{display:flex;flex-direction:column;gap:4px}.mw-stage-launcher textarea{width:100%;box-sizing:border-box}.mw-stage-launcher .mw-callout{margin:0}.mw-stage-launcher .mw-button{align-self:flex-start}
 .mw-workflow-card { border:1px solid var(--mw-border); border-radius:12px; padding:18px; margin:12px 0; background:var(--mw-surface); }
 .mw-workflow-progress { display:flex; flex-wrap:wrap; gap:20px; padding-left:24px; color:var(--mw-muted); }
 .mw-workflow-card details { margin:12px 0; }

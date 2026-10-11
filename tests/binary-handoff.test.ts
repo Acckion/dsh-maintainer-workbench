@@ -42,7 +42,7 @@ for (const mixed of [false, true]) test(`${mixed ? 'mixed text/binary' : 'binary
   t.after(async () => { await w.close(); await rm(dir, { recursive: true, force: true }); });
   let sourceJobId: string | undefined;
   for (const kind of ['fix', 'validate', 'review'] as const) {
-    sourceJobId = w.enqueue([store.issues()[0].id], kind, { sourceJobId }).created[0];
+    sourceJobId = w.enqueue([store.issues()[0].id], kind, { sourceJobId, instructions: 'Implement and verify the fixture binary change, retaining all binary patch data.' }).created[0];
     w.pump(); await w.drain();
     const job = store.get<Job>('jobs', sourceJobId)!;
     assert.equal(job.status, kind === 'validate' ? 'completed' : 'awaiting_review', job.error);
