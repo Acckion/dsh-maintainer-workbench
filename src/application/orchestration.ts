@@ -1,3 +1,4 @@
+import { scopeResolved, stepResolved } from "../workflow/manual.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { randomUUID } from "node:crypto";
 import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
@@ -172,7 +173,7 @@ export class Orchestration {
     const kind: JobKind = suggested;
     if (!["docs", "fix", "investigate", "review", "triage"].includes(kind))
       throw new Error("当前建议只需准备答复或跟踪，请在事项中处理");
-    if (!plan.goal || !plan.scope || !plan.acceptanceCriteria.length)
+    if (!scopeResolved(issue) && (!plan.goal || !plan.scope || !plan.acceptanceCriteria.length))
       throw new Error("请明确目标、范围及具体验收条件");
     const blocker =
       issue.type === "pr" ? undefined : planBlocker({ ...issue, plan }, kind);
@@ -288,6 +289,7 @@ export class Orchestration {
   completed(job: Job): void {
     const issue = this.wb.store.get<Issue>("issues", job.issueId);
     if (!issue || ["queued", "running"].includes(job.status)) return;
+    if (issue.processing?.revokedRunIds?.includes(job.id)) return;
     if (job.caseId && job.caseId !== issue.processing?.id) return;
     if (["waiting_input", "waiting_environment"].includes(job.status)) {
       if (job.workflowRunId === issue.orchestration?.run?.id)
@@ -395,6 +397,7 @@ export class Orchestration {
   private advance(updated: Issue, job: Job) {
     const run = updated.orchestration!.run!;
     if (job.kind === "docs" || job.kind === "fix") {
+      if (stepResolved(updated.processing, "validate")) { this.schedule(updated, "review", job.id); return; }
       if (!job.patch) {
         this.stop(updated, "blocked", "没有可验证补丁，请检查执行结果");
         return;
@@ -447,6 +450,12 @@ export class Orchestration {
           ? "自动执行已结束，请最终审核；审查发现由维护者决定处置"
           : "请核对产物并选择下一步",
       );
+  }
+  continueManual(id: string, kind: JobKind, sourceJobId?: string) {
+    const issue = this.issue(id), run = issue.orchestration?.run;
+    if (!run || run.status !== "paused") return;
+    this.put(issue, { ...issue.orchestration, run: { ...run, status: "running", reason: "遵守用户阶段决定，继续已授权目标" } });
+    return this.schedule(this.issue(id), kind, sourceJobId);
   }
   replacement(jobId: string, result: { created: string[]; reused: string[] }) {
     const job = this.wb.store.get<Job>("jobs", jobId);

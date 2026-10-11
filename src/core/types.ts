@@ -52,6 +52,7 @@ export interface IssuePlan {
   category: IssueCategory;
   goal: string;
   reproduction: string;
+  reproductionMode?: "omit" | "best_effort" | "required";
   expected: string;
   actual: string;
   scope: string;

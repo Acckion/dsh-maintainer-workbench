@@ -159,3 +159,18 @@ test('remote base drift during publication checks prevents even a branch push', 
     assert.equal(pushes, 0); assert.equal(posts, 0);
   } finally { if (token === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = token; }
 });
+
+
+test('manual skip of failed validation allows delivery of the exact real patch without fabricating success', async t => {
+  const f = await setup(t, 'failed');
+  const state = f.store.processing.current(f.issue.id)!;
+  f.w.manualSteps.submit({issueId:f.issue.id,caseId:state.id,stage:'validate',mode:'skip',text:'我已检查这份补丁，继续审查',requestId:'manual-validation',expectedVersion:state.version});
+  const review = await f.run('review', f.fix.id);
+  const result = await f.w.review(review.id, 'approve', 'accepted');
+  assert.equal(result.delivery?.implementationJobId, f.fix.id);
+  assert.equal(result.delivery?.validationJobId, undefined);
+  assert.equal(validationState(f.store.get<Job>('jobs', f.check.id)!.artifact)?.state, 'failed');
+  await f.w.review(f.fix.id, 'approve', 'accepted');
+  assert.equal(f.store.get<Job>('jobs', f.fix.id)!.status, 'approved');
+  assert.equal(f.writes(), 0);
+});

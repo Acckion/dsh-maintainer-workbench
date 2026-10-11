@@ -1,3 +1,9 @@
+import {
+  manualSource,
+  scopeResolved,
+  stepResolved,
+  stepDisposition,
+} from "./manual.ts";
 import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
@@ -62,12 +68,16 @@ export function stageBlocker(
     return "PR 审查只能选择 Pull Request";
   if (
     ["fix", "docs"].includes(kind) &&
+    !scopeResolved(issue) &&
     issue.plan?.decision === "accepted" &&
     issue.processing?.planSourceFingerprint &&
     issue.processing.planSourceFingerprint !==
       issue.processing.sourceFingerprint
   )
     return "输入已变化，请重新确认目标、范围与验收条件";
+  if (stepDisposition(issue.processing, kind)?.mode === "takeover")
+    return "此步骤由用户手动完成；重新打开后可交给 Agent";
+  if (stepResolved(issue.processing, kind)) return "用户已跳过或手动完成此步骤";
   return planBlocker(issue, kind);
 }
 
@@ -87,11 +97,13 @@ export function availableActions(
         ? "preflight"
         : "triage";
   else if (job.artifactState === "stale")
-    primary = issue.origin
-      ? "investigate"
-      : issue.type === "pr"
-        ? "preflight"
-        : "triage";
+    primary = scopeResolved(issue)
+      ? job.kind
+      : issue.origin
+        ? "investigate"
+        : issue.type === "pr"
+          ? "preflight"
+          : "triage";
   else if (artifact?.stage === "triage") {
     primary =
       artifact.route === "implement"
@@ -169,7 +181,17 @@ export function availableActions(
     ["completed", "cancelled", "deferred"].includes(issue.processing.lifecycle)
   )
     primary = undefined;
+  const cursor = issue.processing?.manualCursor;
+  if (cursor)
+    primary =
+      stepDisposition(issue.processing, cursor)?.mode === "takeover"
+        ? undefined
+        : ["decision", "track"].includes(cursor)
+          ? undefined
+          : (cursor as JobKind);
+  const revoked = !!job && !!issue.processing?.revokedRunIds?.includes(job.id);
   const validSource =
+    !revoked &&
     job?.result &&
     job.artifactState !== "stale" &&
     ["completed", "awaiting_review", "approved"].includes(job.status)
@@ -183,7 +205,9 @@ export function availableActions(
           "investigate",
           "fix",
           "docs",
-          ...(validSource?.patch ? (["validate", "review"] as JobKind[]) : []),
+          ...(validSource?.patch || cursor === "validate" || cursor === "review"
+            ? (["validate", "review"] as JobKind[])
+            : []),
         ];
   const labels: Partial<Record<JobKind, string>> = {
     triage: "分析此 Issue",
@@ -195,8 +219,14 @@ export function availableActions(
     validate: "验证改动",
   };
   const stages = kinds.map((kind) => {
+    const source = cursor ? manualSource(issue, history, kind) : validSource;
     const blockers = [
-      stageBlocker(issue, kind, validSource),
+      ["validate", "review"].includes(kind) &&
+      issue.type === "issue" &&
+      !source?.patch
+        ? "当前没有可用于此操作的补丁；可以提交人工结果或跳过"
+        : undefined,
+      stageBlocker(issue, kind, source),
       history.some((j) => ["running", "queued"].includes(j.status))
         ? "当前事项已有排队或运行中的任务"
         : undefined,
@@ -206,7 +236,7 @@ export function availableActions(
       label: labels[kind] ?? kindNames[kind],
       enabled: !blockers.length,
       blockedReasons: blockers,
-      sourceJobId: validSource?.id,
+      sourceJobId: source?.id,
     };
   });
   const controls: NonNullable<WorkflowActions["controls"]> = [];
@@ -219,7 +249,11 @@ export function availableActions(
       enabled: true,
       blockedReasons: [],
     });
-  else if (job && ["failed", "cancelled", "rejected"].includes(job.status))
+  else if (
+    !cursor &&
+    job &&
+    ["failed", "cancelled", "rejected"].includes(job.status)
+  )
     controls.push({
       kind: "retry",
       runId: job.id,

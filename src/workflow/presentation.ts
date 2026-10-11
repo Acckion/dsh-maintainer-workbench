@@ -23,7 +23,7 @@ const categories: Record<string, string> = {
   unknown: "待分类",
 };
 const focus: Record<string, string[]> = {
-  bug: ["复现条件与根因", "修复范围与回归证据"],
+  bug: ["根因判断与变更范围", "验收条件与回归证据"],
   feature: ["用户目标与范围", "兼容性与验收条件"],
   docs: ["与源码的一致性", "示例与链接"],
   question: ["引用依据", "答复准确性与未确认内容"],
@@ -115,7 +115,7 @@ export function stageLabel(
       ? "补充调查"
       : ((
           {
-            bug: "复现与定位",
+            bug: "定位与范围",
             feature: "需求澄清",
             docs: "文档核对",
             question: "查证与答复",
@@ -163,7 +163,7 @@ export function templateStages(
   return [
     "triage",
     "investigate",
-    "decision",
+    ...(category === "bug" ? [] : ["decision" as const]),
     category === "docs" ? "docs" : "fix",
     "validate",
     "review",
@@ -261,6 +261,8 @@ export function actionLabel(kind: JobKind, issue: Issue, job?: Job): string {
 export function eventDescription(event: ProcessingEvent): string {
   const p = event.payload;
   switch (p.type) {
+    case "step.manual":
+      return `用户${({ supplement: "补充结果", takeover: "接管步骤", skip: "跳过步骤", complete: "手动完成", reopen: "重新打开步骤" } as const)[p.record.mode]}${p.record.text ? `：${p.record.text}` : ""}`;
     case "planning.recorded":
       return "处理计划与进度已保存";
     case "run.observed":

@@ -144,7 +144,15 @@ export function IssuePlanning({
         {plan.category === "bug" && (
           <>
             <label>
-              复现条件与步骤
+              复现策略
+              <select aria-label="复现策略" value={plan.reproductionMode ?? "omit"} onChange={e => edit("reproductionMode", e.target.value as IssuePlan["reproductionMode"])}>
+                <option value="omit">不主动复现（默认）</option>
+                <option value="best_effort">让 Agent 尝试复现</option>
+                <option value="required">必须复现后继续</option>
+              </select>
+            </label>
+            <label>
+              复现条件与步骤（可选）
               <textarea
                 aria-label="复现条件与步骤"
                 rows={3}

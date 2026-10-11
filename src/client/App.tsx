@@ -173,7 +173,9 @@ export function App({
   useEffect(() => {
     void refresh();
     const id = setInterval(() => void refresh(), 2000);
-    return () => clearInterval(id);
+    const updated = () => void refresh();
+    window.addEventListener("maintainer:manual-updated", updated);
+    return () => { clearInterval(id); window.removeEventListener("maintainer:manual-updated", updated); };
   }, [refresh]);
   useEffect(() => {
     if (state && !state.repos.some((r) => r.id === repoId))
@@ -231,7 +233,7 @@ export function App({
   };
   const moveFocusToDetail = () =>
     focusDetail({
-      frame: requestAnimationFrame,
+      frame: (callback) => requestAnimationFrame(callback),
       focus: (id) => {
         const element = document.getElementById(id) as HTMLElement | null;
         element?.focus({ preventScroll: true });

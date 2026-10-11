@@ -9,7 +9,8 @@ const fieldLabels: Record<keyof IssuePlan, string> = {
   goal: "维护目标",
   scope: "修改范围与排除项",
   acceptanceCriteria: "验收条件（每行一项）",
-  reproduction: "复现条件与步骤",
+  reproduction: "复现条件与步骤（可选）",
+  reproductionMode: "复现策略",
   expected: "预期行为",
   actual: "实际行为",
   category: "类型",
@@ -57,6 +58,7 @@ export function WorkflowCard({
                 scope: draft.scope,
                 acceptanceCriteria: draft.acceptanceCriteria,
                 reproduction: draft.reproduction,
+                reproductionMode: issue.plan?.reproductionMode ?? draft.reproductionMode,
                 expected: draft.expected,
                 actual: draft.actual,
                 decision: "accepted",
@@ -181,6 +183,7 @@ export function WorkflowCard({
             )}
             {editing && (
               <div className="mw-issue-planning">
+                {plan.category === "bug" && issue.type === "issue" && <label>复现策略<select aria-label="复现策略" value={plan.reproductionMode ?? "omit"} onChange={e => edit("reproductionMode", e.target.value)}><option value="omit">不主动复现（默认）</option><option value="best_effort">让 Agent 尝试复现</option><option value="required">必须复现后继续</option></select></label>}
                 {(
                   [
                     "goal",

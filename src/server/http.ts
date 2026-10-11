@@ -218,7 +218,7 @@ export function handler(
         })
         .passthrough()
         .parse(input);
-      if (version.expectedVersion !== undefined) {
+      if (path !== "/processing/step" && version.expectedVersion !== undefined) {
         const itemId =
           version.issueId ??
           (version.issueIds?.length === 1 ? version.issueIds[0] : undefined) ??
@@ -245,6 +245,10 @@ export function handler(
             !!p.confirmedStopped,
           );
         send(res, 200, { ok: true });
+        return;
+      }
+      if (path === "/processing/step") {
+        send(res, 200, workbench.manualSteps.submit(input));
         return;
       }
       if (path === "/processing/wait/cancel") {

@@ -1,3 +1,4 @@
+import { scopeResolved, stepResolved } from "./manual.ts";
 import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
@@ -8,6 +9,7 @@ export function nextGoalStep(
   issue: Issue,
 ): { next?: JobKind; pause?: string } {
   if (
+    issue.processing?.revokedRunIds?.includes(job.id) ||
     !job.goal ||
     !!job.workflowRunId ||
     ["queued", "running", "waiting_input", "waiting_environment"].includes(
@@ -24,19 +26,19 @@ export function nextGoalStep(
   if (job.kind === "investigate") {
     if ((issue.plan?.category ?? issue.analysis?.category) === "question")
       return { pause: "答复草稿已准备，请核对引用依据后审核并发布" };
-    if (issue.plan?.decision !== "accepted")
+    if (issue.plan?.decision !== "accepted" && !scopeResolved(issue))
       return { pause: "调查已完成，请确认目标、范围和验收条件后开始修复" };
-    const kind = issue.plan.category === "docs" ? "docs" : "fix";
+    const kind = issue.plan?.category === "docs" ? "docs" : "fix";
     const blocker = planBlocker(issue, kind);
     return blocker ? { pause: blocker } : { next: kind };
   }
   if (["fix", "docs"].includes(job.kind))
     return job.patch && job.result
-      ? { next: "validate" }
+      ? { next: stepResolved(issue.processing, "validate") ? "review" : "validate" }
       : { pause: "尚无可验证的改动，请检查实施结果" };
   if (job.kind === "validate") {
     const validation = validationState(job.artifact);
-    return validation?.state === "passed"
+    return stepResolved(issue.processing, "validate") || validation?.state === "passed"
       ? { next: "review" }
       : { pause: validation?.reason ?? "验证证据不足，等待确认" };
   }

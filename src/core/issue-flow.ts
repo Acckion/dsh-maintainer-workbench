@@ -1,3 +1,4 @@
+import { manualContext, scopeResolved } from "../workflow/manual.ts";
 import { z } from "zod";
 import type { InformationRequest, Issue, IssuePlan, JobKind } from "./types.ts";
 
@@ -5,6 +6,7 @@ export const issuePlanSchema = z.object({
   category: z.enum(["bug", "feature", "docs", "question", "maintenance"]),
   goal: z.string().trim().max(2000),
   reproduction: z.string().trim().max(4000),
+  reproductionMode: z.enum(["omit", "best_effort", "required"]).optional(),
   expected: z.string().trim().max(2000),
   actual: z.string().trim().max(2000),
   scope: z.string().trim().max(2000),
@@ -35,6 +37,7 @@ export function defaultPlan(issue: Issue): IssuePlan {
 export function planBlocker(issue: Issue, kind: JobKind): string | undefined {
   const plan = issue.plan;
   if (!["fix", "docs"].includes(kind)) return;
+  if (scopeResolved(issue)) return;
   if (!plan)
     return issue.analysis?.category === "question"
       ? "使用提问请先准备答复；若需代码变更，请先明确转换后的事项类型。"
@@ -49,9 +52,9 @@ export function planBlocker(issue: Issue, kind: JobKind): string | undefined {
     return "实施前请补齐目标和至少一项验收条件。";
   if (
     plan.category === "bug" &&
-    (!plan.reproduction || !plan.expected || !plan.actual)
+    plan.reproductionMode === "required" && !plan.reproduction
   )
-    return "缺陷实施前请记录复现条件、预期和实际行为；不能复现时先调查。";
+    return "用户要求必须复现，请先处理此要求，或由用户修改、跳过此步骤。";
   if (plan.category === "docs" && kind === "fix")
     return "文档事项请使用文档维护短路径。";
 }
@@ -111,6 +114,7 @@ export function issuePromptContext(issue: Issue): unknown {
     processing: processing
       ? {
           phase: processing.phase,
+          manualSteps: processing.manualSteps,
           lifecycle: processing.lifecycle,
           waits: processing.waits.filter((w) => w.state === "open").slice(-12),
         }
@@ -128,5 +132,5 @@ export function issuePromptContext(issue: Issue): unknown {
 }
 export function issueTaskGuidance(issue: Issue): string {
   const category = issue.plan?.category ?? issue.analysis?.category;
-  return `Issue plan and informationRequests are explicit maintainer context. Respect accepted scope and acceptance criteria. Do not repeat questions already asked; new replies are evidence to reassess, not proof that all missing information is supplied. ${category === "bug" ? "For a bug, establish reproduction conditions, expected versus actual behavior and before/after regression evidence. If unreproducible, state the blocker." : category === "feature" ? "For a feature, follow the maintainer decision, scope exclusions and acceptance criteria; do not invent requirements or require a pre-existing failing test." : category === "docs" ? "Use the short documentation path: inspect the specified pages/examples, modify only the accepted scope, and run relevant documentation checks." : category === "question" ? "Prepare a source-backed answer draft; do not implement code, close the Issue or publish automatically." : "Use evidence to establish the appropriate issue-specific path."}`;
+  return `Issue plan and informationRequests are explicit maintainer context. Respect accepted scope and acceptance criteria. Do not repeat questions already asked; new replies are evidence to reassess, not proof that all missing information is supplied. ${category === "bug" ? "For a bug, locate the cause and define change scope using source, existing logs, tests and maintainer input. Active reproduction is optional and omitted by default; never block solely because reproduction is absent. Follow reproductionMode: best_effort allows one bounded attempt within the investigation budget; record failure and continue source diagnosis. required is an explicit user condition until the user changes or skips it. Never fabricate executed tests." : category === "feature" ? "For a feature, follow the maintainer decision, scope exclusions and acceptance criteria; do not invent requirements or require a pre-existing failing test." : category === "docs" ? "Use the short documentation path: inspect the specified pages/examples, modify only the accepted scope, and run relevant documentation checks." : category === "question" ? "Prepare a source-backed answer draft; do not implement code, close the Issue or publish automatically." : "Use evidence to establish the appropriate issue-specific path."}` + manualContext(issue);
 }

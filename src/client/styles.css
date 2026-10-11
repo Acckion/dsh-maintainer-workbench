@@ -927,3 +927,11 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw .mw-summary-properties .mw-tags{display:flex;flex-wrap:wrap;gap:6px}
 .mw .mw-summary-properties>code{overflow-wrap:anywhere}
 .mw .mw-reader-summary{grid-template-columns:minmax(0,1fr)}
+
+.mw-manual-step{border-top:1px solid var(--mw-border);padding-top:12px;margin-top:4px}
+.mw-manual-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mw-manual-controls .mw-text-button{color:var(--mw-muted);font-size:13px}
+.mw-manual-editor{padding-top:12px;display:flex;flex-direction:column;gap:12px}
+.mw-manual-editor label{display:flex;flex-direction:column;gap:8px}
+.mw-manual-editor textarea{width:100%;box-sizing:border-box;resize:vertical;background:var(--mw-surface-soft);color:var(--mw-text);border:1px solid var(--mw-border);border-radius:8px;padding:12px}
+.mw-manual-result{background:var(--mw-surface-soft);border-radius:8px;padding:12px 16px}

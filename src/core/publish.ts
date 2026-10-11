@@ -1,3 +1,4 @@
+import { stepResolved } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { lightweight } from "./artifacts.ts";
@@ -46,7 +47,7 @@ function publicationStamp(
   action: PublishAction,
   mode: "publish" | "reconcile" = "publish",
 ): string {
-  return previewStamp(
+  const stamp = previewStamp(
     action === "comment" && job.result
       ? {
           ...job,
@@ -56,6 +57,7 @@ function publicationStamp(
     action,
     mode,
   );
+  return createHash("sha256").update(JSON.stringify([stamp, store.processing.current(job.issueId)?.manualSteps])).digest("hex");
 }
 async function existingPublication(
   job: Job,
@@ -114,7 +116,7 @@ async function remoteInputs(
   github: GitHub,
 ): Promise<string> {
   assertInputCurrent(store, job, repo);
-  await assertReviewEvidence(job);
+  if (!stepResolved(store.get<Issue>("issues", job.issueId)?.processing, "review")) await assertReviewEvidence(job);
   if (job.prContext) {
     const current = await github.pullRequest(
       { ...repo, fullName: repo.githubName ?? repo.fullName },
@@ -303,6 +305,7 @@ export async function publish(
   )
     throw new Error("审批或产物内容已变化，发布预览已失效；请重新打开预览");
   assertInputCurrent(store, job, repo);
+  const manualDecisions = JSON.stringify(store.processing.current(job.issueId)?.manualSteps);
   let delivery: DeliveryTarget | undefined;
   if (job.deliveryReviewId) {
     delivery = await resolveDelivery(
@@ -317,6 +320,7 @@ export async function publish(
   }
   const assertBinding = () => {
     const current = store.get<Job>("jobs", job.id);
+    if (JSON.stringify(store.processing.current(job.issueId)?.manualSteps) !== manualDecisions) throw new Error("发布前用户阶段决定已变化，请重新查看交付预览");
     if (
       !current ||
       current.status !== "approved" ||

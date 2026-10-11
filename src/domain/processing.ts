@@ -71,6 +71,17 @@ export interface RemoteObservation {
   complete: boolean;
 }
 
+export interface ManualStepRecord {
+  id: string;
+  stage: import("./timeline.ts").TimelineStage;
+  mode: "supplement" | "takeover" | "skip" | "complete" | "reopen";
+  text: string;
+  actor: "user";
+  at: string;
+  sourceFingerprint: string;
+  runIds: string[];
+}
+
 export interface ProcessingCase {
   id: string;
   workItemId: string;
@@ -81,6 +92,9 @@ export interface ProcessingCase {
   reason: string;
   waits: ProcessingWait[];
   activeRunIds: string[];
+  manualSteps?: ManualStepRecord[];
+  manualCursor?: import("./timeline.ts").TimelineStage;
+  revokedRunIds?: string[];
   sourceFingerprint: string;
   currentRunId?: string;
   planFingerprint?: string;
@@ -94,6 +108,7 @@ export interface ProcessingCase {
 }
 
 export type ProcessingEventPayload =
+  | { type: "step.manual"; record: ManualStepRecord; nextStage?: import("./timeline.ts").TimelineStage }
   | { type: "planning.recorded"; planning: WorkflowState }
   | { type: "workflow.upgraded"; from: string; to: string }
   | {

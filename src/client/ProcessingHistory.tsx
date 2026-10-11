@@ -5,6 +5,7 @@ import type { ProcessingCase, ProcessingEvent } from "../domain/processing.ts";
 import { request } from "./api.ts";
 
 const eventNames: Record<ProcessingEvent["payload"]["type"], string> = {
+  "step.manual": "用户阶段决定",
   "planning.recorded": "处理计划与进度已保存",
   "source.observed": "事项材料已同步",
   "decision.recorded": "维护者决定已记录",
