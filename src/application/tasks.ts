@@ -22,6 +22,7 @@ import {
 import { validationAcceptance } from "../core/validation-acceptance.ts";
 import { validationInstructions } from "../core/validation-context.ts";
 import { stageBlocker } from "../workflow/actions.ts";
+import { stageInput } from "../workflow/stage-input.ts";
 const modelChoiceSchema = z.object({
   provider: z.string().min(1).max(200), model: z.string().min(1).max(500),
   reasoningEffort: z.string().min(1).max(100).optional(),
@@ -68,6 +69,7 @@ export class TaskService extends ServiceBase {
     options: EnqueueOptions = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
+    options = { ...options, instructions: options.instructions?.trim() ? options.instructions : options.supplementalInfo };
     const ids = [
       ...new Set(
         z
@@ -91,8 +93,7 @@ export class TaskService extends ServiceBase {
       // Code tasks run in a fresh worktree pinned to baseSha. The source
       // checkout's index and uncommitted files are never task input.
       if (
-        (["preflight", "ci"].includes(kind) ||
-          (kind === "review" && !options.sourceJobId)) &&
+        ["preflight", "ci"].includes(kind) &&
         issue.type !== "pr"
       )
         throw new Error("PR 审查只能选择 Pull Request");
@@ -109,13 +110,6 @@ export class TaskService extends ServiceBase {
         options.sourceJobId ? this.job(options.sourceJobId) : undefined,
       );
       if (blocker) throw new Error(blocker);
-      if (
-        kind === "triage" &&
-        issue.informationRequests?.some((r) => r.state === "asked")
-      )
-        throw new Error(
-          "补充信息尚未收到新回复，请先核对或结束已有追问，避免重复分诊。",
-        );
       return { issue, repo };
     });
     if (options.sourceJobId) {
@@ -148,6 +142,14 @@ export class TaskService extends ServiceBase {
         )
       )
         throw new Error("来源产物已过期，请先重新分析");
+    }
+    for (const { issue, repo } of candidates) {
+      const input = stageInput(issue, kind, this.store.jobs().filter(job => job.issueId === issue.id).map(job => ({
+        ...job,
+        artifactState: job.revision !== revision(issue, repo, job.kind) ? "stale" : job.artifactState,
+      })));
+      if (input.required && !(options.supplementalInfo ?? options.instructions)?.trim())
+        throw new Error(`用户补充信息为必填：${input.reasons.join("；")}`);
     }
     if (kind === "validate")
       options = {
@@ -246,6 +248,7 @@ export class TaskService extends ServiceBase {
           handoff,
           sourceJobId: options.sourceJobId,
           instructions: options.instructions?.slice(0, 8000),
+          supplementalInfo: options.supplementalInfo?.slice(0, 8000),
           id,
           caseId: this.store.processing.current(issue.id)?.id,
           repoId: repo.id,
@@ -315,6 +318,7 @@ export class TaskService extends ServiceBase {
     const result = this.hooks.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
+      supplementalInfo: job.supplementalInfo,
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
@@ -372,6 +376,7 @@ export class TaskService extends ServiceBase {
     return this.hooks.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
+      supplementalInfo: job.supplementalInfo,
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
@@ -392,6 +397,7 @@ export class TaskService extends ServiceBase {
         sourceJobId: job.sourceJobId,
         forceNew: true,
         instructions: job.instructions,
+        supplementalInfo: job.supplementalInfo,
         goal: job.goal,
         goalId: job.goalId,
         workflowRunId: job.workflowRunId,

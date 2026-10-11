@@ -1,7 +1,7 @@
-import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
+import { stageInput, stageSource } from "./stage-input.ts";
 
 export interface WorkflowAction {
   kind: JobKind;
@@ -9,6 +9,7 @@ export interface WorkflowAction {
   enabled: boolean;
   blockedReasons: string[];
   sourceJobId?: string;
+  input?: import("./stage-input.ts").StageInput;
 }
 export interface WorkflowActions {
   controls?: {
@@ -40,35 +41,18 @@ export function stageBlocker(
     return "答复已记录，请先恢复处理后再启动任务";
   if (
     issue.processing?.waits.some(
-      (w) => w.state === "open" && w.type === "user_input",
-    )
-  )
-    return "等待用户补充输入，请先回答当前请求";
-  if (
-    issue.processing?.waits.some(
       (w) => w.state === "open" && w.type === "environment_ready",
     ) &&
     !["triage", "preflight"].includes(kind)
   )
     return "等待仓库环境准备";
-  if (issue.informationRequests?.some((r) => r.state === "asked"))
-    return "补充信息尚未收到新回复，请先核对或结束已有追问";
   if (kind === "triage" && issue.type === "pr")
     return "PR 请使用变更预检，不执行 Issue 分诊";
   if (
-    (["preflight", "ci"].includes(kind) || (kind === "review" && !source)) &&
+    ["preflight", "ci"].includes(kind) &&
     issue.type !== "pr"
   )
     return "PR 审查只能选择 Pull Request";
-  if (
-    ["fix", "docs"].includes(kind) &&
-    issue.plan?.decision === "accepted" &&
-    issue.processing?.planSourceFingerprint &&
-    issue.processing.planSourceFingerprint !==
-      issue.processing.sourceFingerprint
-  )
-    return "输入已变化，请重新确认目标、范围与验收条件";
-  return planBlocker(issue, kind);
 }
 
 /** The server attaches this projection; UI renders it without inventing transitions. */
@@ -169,12 +153,7 @@ export function availableActions(
     ["completed", "cancelled", "deferred"].includes(issue.processing.lifecycle)
   )
     primary = undefined;
-  const validSource =
-    job?.result &&
-    job.artifactState !== "stale" &&
-    ["completed", "awaiting_review", "approved"].includes(job.status)
-      ? job
-      : undefined;
+  const inputs = [...history.filter(j => j.id !== job?.id), ...(job ? [job] : [])];
   const kinds: JobKind[] =
     issue.type === "pr"
       ? ["preflight", "review", "ci", "investigate", "fix", "docs", "validate"]
@@ -183,7 +162,7 @@ export function availableActions(
           "investigate",
           "fix",
           "docs",
-          ...(validSource?.patch ? (["validate", "review"] as JobKind[]) : []),
+          "validate", "review",
         ];
   const labels: Partial<Record<JobKind, string>> = {
     triage: "分析此 Issue",
@@ -195,10 +174,11 @@ export function availableActions(
     validate: "验证改动",
   };
   const stages = kinds.map((kind) => {
+    const source = stageSource(issue, kind, inputs);
     const blockers = [
-      stageBlocker(issue, kind, validSource),
-      history.some((j) => ["running", "queued"].includes(j.status))
-        ? "当前事项已有排队或运行中的任务"
+      stageBlocker(issue, kind, source),
+      history.some((j) => j.kind === kind && ["running", "queued"].includes(j.status))
+        ? "本节点已有排队或运行中的任务"
         : undefined,
     ].filter((s): s is string => !!s);
     return {
@@ -206,7 +186,8 @@ export function availableActions(
       label: labels[kind] ?? kindNames[kind],
       enabled: !blockers.length,
       blockedReasons: blockers,
-      sourceJobId: validSource?.id,
+      sourceJobId: source?.id,
+      input: stageInput(issue, kind, inputs),
     };
   });
   const controls: NonNullable<WorkflowActions["controls"]> = [];

@@ -28,7 +28,7 @@ async function setup(t: TestContext, kind: Job['kind'] = 'investigate') {
     throw Error('Unexpected fixture request: ' + url);
   });
   const workbench = new Workbench(store, '/tmp/maintainer-publication-fixture', undefined, github, false);
-  const id = workbench.enqueue([issue.id], kind).created[0];
+  const id = workbench.enqueue([issue.id], kind, { instructions: 'Investigate this fixture issue and prepare a source-backed reply for explicit publication review.' }).created[0];
   store.put('jobs', { ...store.get<Job>('jobs', id)!, status: 'completed', result: fixtureAnalysis(issue, kind) });
   await workbench.review(id, 'approve', 'Approve only the saved report');
   const token = process.env.GITHUB_TOKEN; process.env.GITHUB_TOKEN = 'fixture';

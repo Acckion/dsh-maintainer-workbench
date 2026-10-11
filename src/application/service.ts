@@ -5,6 +5,7 @@ import type { WorkspaceManager } from "../infrastructure/git/workspace-manager.t
 export interface EnqueueOptions {
   sourceJobId?: string;
   instructions?: string;
+  supplementalInfo?: string;
   forceNew?: boolean;
   goal?: "resolve";
   goalId?: string;

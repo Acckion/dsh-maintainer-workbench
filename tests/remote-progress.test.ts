@@ -67,5 +67,5 @@ test('CI task persists exact Actions evidence and bounded failed-job logs before
  const w=new Workbench(store,'/tmp/remote-ci-input-test',async({job,issue})=>{observed=true;assert.equal(job.ciEvidence?.logs[0].attempt,1);assert.equal(job.ciEvidence?.logs[0].text.length,16000);assert.equal(job.ciEvidence?.logs[0].truncated,true);return {result:{...(await fixtureRunner({repo,issue,related:[],job,settings:store.settings(),signal:new AbortController().signal,progress:()=>{}})).result},artifact:{schemaVersion:1,stage:'ci',summary:'unknown',coverage:'fixture',evidence:[],nextSteps:[],responseDraft:'',classification:'unknown',facts:[],hypotheses:[],proposedChanges:[],blockers:[]},engine:'fixture'};},github,false);
  // Input wiring test: no clone, checkout or real model; the runner has no tools.
  w.prepareRepository=async()=>{};
- try{const id=w.enqueue([pr.id],'ci').created[0];w.pump();await w.drain();assert.ok(observed);assert.equal(store.jobs().find(j=>j.id===id)?.ciEvidence?.snapshot.headSha,sha);}finally{await w.close();}
+ try{const id=w.enqueue([pr.id],'ci',{instructions:'Diagnose failed Actions jobs for this exact PR head and preserve bounded log evidence.'}).created[0];w.pump();await w.drain();assert.ok(observed);assert.equal(store.jobs().find(j=>j.id===id)?.ciEvidence?.snapshot.headSha,sha);}finally{await w.close();}
 });
