@@ -340,12 +340,11 @@ export class TaskService extends ServiceBase {
     if (revision(current, this.repo(job.repoId), job.kind) !== job.revision)
       throw new Error("输入版本已变化，请从收件箱重新派发");
     if (
-      this.nativeRunner &&
       job.status === "failed" &&
       job.formatRecovery &&
       job.rawOutput &&
       !job.result &&
-      (job.worktree || job.analysisPath)
+      (!this.nativeRunner || job.worktree || job.analysisPath)
     ) {
       const now = new Date().toISOString();
       const recovered: Job = {

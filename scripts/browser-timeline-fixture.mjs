@@ -463,6 +463,24 @@ try {
       await current.focus();
       await current.press("ArrowRight");
       assert.equal(mutations, 0);
+      // Report failure preserves execution output and offers report-only recovery.
+      store.put("jobs", {
+        ...investigation, status: "failed", result: undefined, artifact: undefined,
+        rawOutput: '{"summary":"unfinished',
+        error: "报告整理失败，自动整理已停止；原始输出和执行记录已保留。",
+        formatRecovery: { baseSha: investigation.baseSha, patchHash: "fixture-hash", reason: "truncated", repairAttempts: 1 },
+      });
+      await nav.getByRole("button", { name: /^补充调查/ }).click();
+      await expect(panel).toContainText("报告待整理");
+      await expect(panel.getByRole("heading", { name: "报告整理失败", exact: true })).toBeVisible();
+      await expect(panel.getByRole("button", { name: "重新整理报告", exact: true })).toBeEnabled();
+      await expect(panel).not.toContainText("本次执行失败");
+      assert.equal(await panel.getByRole("button", { name: "接受此报告", exact: true }).count(), 0);
+      await panel.getByRole("tab", { name: "执行记录", exact: true }).click();
+      await panel.getByText("未解析的原始输出", { exact: true }).click();
+      await expect(panel.locator("pre")).toContainText('{"summary":"unfinished');
+      await panel.getByRole("tab", { name: "进度与结果", exact: true }).click();
+      await page.screenshot({ path: join(root, `timeline-report-recovery-${width}.png`), fullPage: true });
       // Native-like input pause uses the existing durable input service.
       store.put("jobs", { ...investigation, status: "waiting_input" });
       w.processing.requestInput(

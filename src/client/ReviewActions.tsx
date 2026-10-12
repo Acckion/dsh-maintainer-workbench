@@ -109,7 +109,7 @@ export function ReviewActions({
           >
             <RefreshCw size={14} />
             {executionExplanation(job, native, []).formatRetry
-              ? "仅整理已保存输出"
+              ? "重新整理报告"
               : "重新执行"}
           </button>
         ) : (

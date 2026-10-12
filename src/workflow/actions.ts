@@ -1,3 +1,4 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
 import {
   manualSource,
   scopeResolved,
@@ -268,7 +269,7 @@ export function availableActions(
     controls.push({
       kind: "retry",
       runId: job.id,
-      label: "重试任务",
+      label: reportNeedsRecovery(job) ? "重新整理报告" : "重试任务",
       enabled:
         job.artifactState !== "stale" &&
         issue.state === "open" &&

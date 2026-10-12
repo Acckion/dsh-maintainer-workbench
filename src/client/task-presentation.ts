@@ -1,3 +1,4 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
 import type { Job } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
 export type TaskFilter =
@@ -62,7 +63,7 @@ export function taskGroups(jobs: Job[], includeQuick = false): TaskGroup[] {
         ["running", "queued"].includes(job.status),
       )
         ? "running"
-        : ["failed", "cancelled", "rejected"].includes(latest.status) ||
+        : reportNeedsRecovery(latest) ? "attention" : ["failed", "cancelled", "rejected"].includes(latest.status) ||
             validationState(latest.artifact)?.state === "failed"
           ? "failed"
           : (latest.goalPauseReason && latest.status !== "approved") ||

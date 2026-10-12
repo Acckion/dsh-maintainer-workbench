@@ -1,3 +1,4 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
 import {
   kindNames,
   type Issue,
@@ -180,12 +181,13 @@ export function jobNodeState(job: Job): {
   if (job.status === "running" || job.status === "queued")
     return {
       status: job.status,
-      result: job.status === "running" ? "执行中" : "排队中",
+      result: job.formatOnly ? (job.status === "running" ? "正在整理报告" : "等待整理报告") : job.status === "running" ? "执行中" : "排队中",
     };
   if (job.status === "waiting_environment")
     return { status: "waiting", result: "等待环境准备" };
   if (job.status === "waiting_input")
     return { status: "waiting", result: "等待补充输入" };
+  if (reportNeedsRecovery(job)) return { status: "blocked", result: "报告待整理" };
   if (["failed", "rejected", "cancelled"].includes(job.status))
     return {
       status: "blocked",

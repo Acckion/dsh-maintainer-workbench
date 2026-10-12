@@ -104,7 +104,7 @@ export class WorkspaceService extends ServiceBase {
     )
       cleanupReasons.push("产物仍等待输入、审核或交付，保留工作区");
     if (job.formatRecovery && !closed)
-      cleanupReasons.push("输出格式恢复仍需要此目录");
+      cleanupReasons.push("报告整理仍需要此目录");
     if (["in_use", "preparing", "ready", "cleaning"].includes(record.status)) {
       cleanupReasons.push("执行器持有写入所有权");
       recoveryReasons.push("执行器持有写入所有权");
