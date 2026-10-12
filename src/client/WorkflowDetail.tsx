@@ -114,7 +114,6 @@ export function WorkflowDetail({
       attemptId: job?.id !== state.currentRunId ? job?.id : undefined,
     };
   });
-  const [seenVersion, setSeenVersion] = useState(state.version);
   const generation = useRef(0);
   const timeline =
     loaded?.caseId === (cycle || state.id) &&
@@ -215,7 +214,6 @@ export function WorkflowDetail({
     (!!attempt && attempt.id !== timeline.currentRunId);
   const choose = (value: Selection) => {
     setSelection(value);
-    setSeenVersion(state.version);
     try {
       localStorage.setItem(
         `maintainer.stage:${issue.id}:${state.id}`,
@@ -285,11 +283,6 @@ export function WorkflowDetail({
             select={select}
           />
           {viewingHistory && <NextAction timeline={timeline} back={back} />}
-          {viewingHistory && seenVersion < state.version && (
-            <p className="mw-callout">
-              当前阶段有更新。查看历史不会改变正在执行的任务。
-            </p>
-          )}
           {selected && (
             <StagePanel
               selected={selected}
@@ -332,7 +325,6 @@ export function WorkflowDetail({
               currentJob={currentJob}
               history={history}
               readOnly={readOnly}
-              viewingHistory={viewingHistory}
               selection={selection}
               choose={choose}
               render={render}

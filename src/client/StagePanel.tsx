@@ -20,7 +20,6 @@ interface Props {
   currentJob?: Job;
   history: Job[];
   readOnly: boolean;
-  viewingHistory: boolean;
   selection: StageSelection;
   choose: (value: StageSelection) => void;
   render: (
@@ -45,7 +44,6 @@ export function StagePanel({
   currentJob,
   history,
   readOnly,
-  viewingHistory,
   selection,
   choose,
   render,
@@ -151,16 +149,6 @@ export function StagePanel({
           <div className="mw-workflow-actions">{actions}</div>
         )}
       </header>
-      {viewingHistory && selected.status !== "future" && (
-        <p className="mw-stage-history">
-          正在查看历史阶段或尝试 · 只读 · 当前任务继续保留
-        </p>
-      )}
-      {attempt?.artifactState === "stale" && (
-        <p className="mw-stage-history">
-          此结果对应旧版本，不能用于当前审批或交付。
-        </p>
-      )}
       <StageTabs
         items={tabs}
         selected={detail}
@@ -224,12 +212,6 @@ export function StagePanel({
                     ? "此步骤由用户跳过。"
                     : "用户提交的阶段结果"}
                 </p>
-                {manualRecord.sourceFingerprint !==
-                  issue.processing?.sourceFingerprint && (
-                  <p className="mw-muted">
-                    此结果来自较早的事项版本；用户决定仍有效。
-                  </p>
-                )}
                 {manualRecord.text && (
                   <p style={{ whiteSpace: "pre-wrap" }}>{manualRecord.text}</p>
                 )}

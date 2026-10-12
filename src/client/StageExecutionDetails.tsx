@@ -84,7 +84,7 @@ export function StageExecutionDetails({
           <dt>产物状态</dt>
           <dd>
             {job.artifactState === "stale"
-              ? "已过期，不能用于当前交付"
+              ? "已过期"
               : "请以阶段结论及审核状态为准"}
           </dd>
         </dl>

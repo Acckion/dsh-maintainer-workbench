@@ -13,7 +13,7 @@ export function NextAction({
     <aside className="mw-workflow-current" aria-label="当前处理与下一步">
       <span>
         {timeline.historical
-          ? "历史周期仅供查看"
+          ? "历史周期"
           : `当前进度：${current?.label} · ${current?.result}`}
       </span>
       <div className="mw-workflow-current-actions">
