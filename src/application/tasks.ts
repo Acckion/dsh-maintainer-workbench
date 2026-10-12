@@ -11,6 +11,7 @@ import {
 import { lightweight, type FindingDecision } from "../core/artifacts.ts";
 import { resolveDelivery, type DeliveryTarget } from "../core/delivery.ts";
 import { documentAcceptance } from "../core/document-acceptance.ts";
+import { copyExecutionLogs } from '../core/execution-evidence.ts';
 import { collectPatch } from "../core/git.ts";
 import { assertReviewEvidence } from "../core/review-evidence.ts";
 import { revision } from "../core/revision.ts";
@@ -359,9 +360,10 @@ export class TaskService extends ServiceBase {
         finishedAt: undefined,
         error: undefined,
         waitingReason: undefined,
-        sessionId: undefined,
+        sessionId: job.sessionId ?? job.toolDiagnostics?.sessionId,
         publications: undefined,
       };
+      copyExecutionLogs(this.dataDir, job, recovered.id);
       this.store.put("jobs", recovered);
       this.store.audit(
         "job.format_retry",

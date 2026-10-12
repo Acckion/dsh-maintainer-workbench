@@ -464,23 +464,37 @@ try {
       await current.press("ArrowRight");
       assert.equal(mutations, 0);
       // Report failure preserves execution output and offers report-only recovery.
+      const legacyTimeline = async (route) => {
+        const value = await (await route.fetch()).json();
+        if (value.nodes) {
+          for (const node of value.nodes) if (node.result === "报告待整理") node.result = "执行失败";
+          for (const control of value.actions?.controls ?? []) if (control.kind === "retry") control.label = "重试任务";
+        }
+        await route.fulfill({ json: value });
+      };
+      await page.route("**/processing/timeline**", legacyTimeline);
+      const savedReport = '{"summary":"保存的报告","inputRequest":{"reason":"没有追问","fields":[]}}';
       store.put("jobs", {
         ...investigation, status: "failed", result: undefined, artifact: undefined,
-        rawOutput: '{"summary":"unfinished',
-        error: "报告整理失败，自动整理已停止；原始输出和执行记录已保留。",
-        formatRecovery: { baseSha: investigation.baseSha, patchHash: "fixture-hash", reason: "truncated", repairAttempts: 1 },
+        rawOutput: savedReport,
+        error: '结果整理仍失败，已保留原始输出：' + JSON.stringify([{ code: "too_small", minimum: 1, type: "array", path: ["inputRequest", "fields"] }]),
+        formatRecovery: { baseSha: investigation.baseSha, patchHash: "fixture-hash", reason: "schema", repairAttempts: 1 },
       });
       await nav.getByRole("button", { name: /^补充调查/ }).click();
+      await expect(nav.getByRole("button", { name: /^补充调查/ })).toContainText("报告待整理");
       await expect(panel).toContainText("报告待整理");
       await expect(panel.getByRole("heading", { name: "报告整理失败", exact: true })).toBeVisible();
       await expect(panel.getByRole("button", { name: "重新整理报告", exact: true })).toBeEnabled();
       await expect(panel).not.toContainText("本次执行失败");
+      await expect(panel).toContainText("报告包含空的补充信息请求，请重新整理报告。");
+      await expect(panel.getByRole("region", { name: "处理进度", exact: true })).not.toContainText('"code"');
       assert.equal(await panel.getByRole("button", { name: "接受此报告", exact: true }).count(), 0);
       await panel.getByRole("tab", { name: "执行记录", exact: true }).click();
       await panel.getByText("未解析的原始输出", { exact: true }).click();
-      await expect(panel.locator("pre")).toContainText('{"summary":"unfinished');
+      await expect(panel.locator("pre")).toContainText(savedReport);
       await panel.getByRole("tab", { name: "进度与结果", exact: true }).click();
       await page.screenshot({ path: join(root, `timeline-report-recovery-${width}.png`), fullPage: true });
+      await page.unroute("**/processing/timeline**", legacyTimeline);
       // Native-like input pause uses the existing durable input service.
       store.put("jobs", { ...investigation, status: "waiting_input" });
       w.processing.requestInput(

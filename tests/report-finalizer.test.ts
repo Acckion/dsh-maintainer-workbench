@@ -12,9 +12,33 @@ import { Workbench } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
 import { seedFixture } from './support/fixtures.ts';
 import type { Job, Runner } from '../src/core/types.ts';
+import { inputRequestSchema } from '../src/domain/input.ts';
 
 const triage = { schemaVersion: 1, stage: 'triage', summary: '需要调查', coverage: '仅元数据', evidence: [], nextSteps: [], responseDraft: '', category: 'bug', priority: 'P2', labels: [], module: 'unknown', impact: 'unknown', missingInfo: [], duplicateOf: null, duplicateReason: '', route: 'investigate', routeReason: '需要源码证据' };
 const signal = new AbortController().signal;
+
+test('empty optional input requests do not trigger model recovery or erase real information gaps', async () => {
+  for (const inputRequest of [null, { reason: '没有需要追问的问题', fields: [] }]) {
+    const original = { ...triage, route: 'needs_info', missingInfo: ['真实待补充资料'], inputRequest };
+    const before = JSON.stringify(original), budget = reportRecoveryBudget(), progress: string[] = [];
+    const artifact = await finalizeReport({ kind: 'triage', text: before, budget, signal, progress: text => progress.push(text), recover: async () => { throw Error('should not call model'); } });
+    assert.equal(artifact.inputRequest, undefined);
+    assert.equal(artifact.stage === 'triage' && artifact.route, 'needs_info');
+    assert.deepEqual(artifact.stage === 'triage' && artifact.missingInfo, ['真实待补充资料']);
+    assert.equal(budget.attempts, 0); assert.equal(JSON.stringify(original), before);
+    assert.ok(progress.some(text => text.includes('空的补充信息请求')));
+  }
+  assert.equal(inputRequestSchema.safeParse({ reason: '人工输入接口仍需真实问题', fields: [] }).success, false);
+});
+
+test('real questions and invalid question fields remain subject to the strict report contract', async () => {
+  const request = { reason: '需要选择范围', fields: [{ id: 'scope', question: '是否包含 Windows？', required: true, purpose: 'decision', actor: 'maintainer' }] };
+  const artifact = await finalizeReport({ kind: 'triage', text: JSON.stringify({ ...triage, inputRequest: request }), budget: reportRecoveryBudget(), signal, progress: () => {}, recover: async () => { throw Error('should not call model'); } });
+  assert.deepEqual(artifact.inputRequest, request);
+  for (const inputRequest of [{ ...request, fields: [{ id: 'scope', question: '' }] }, { ...request, fields: [request.fields[0], request.fields[0]] }, { ...request, fields: 'none' }, {}]) {
+    await assert.rejects(finalizeReport({ kind: 'triage', text: JSON.stringify({ ...triage, inputRequest }), budget: reportRecoveryBudget(true), signal, progress: () => {}, recover: async () => { throw Error('unexpected'); } }), ArtifactFormatError);
+  }
+});
 
 test('report finalization repairs punctuation locally and supplies only the host envelope', async () => {
   const { schemaVersion, stage, ...body } = triage;

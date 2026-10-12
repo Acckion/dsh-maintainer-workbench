@@ -1,4 +1,4 @@
-import { reportNeedsRecovery } from "../core/report-state.ts";
+import { reportNeedsRecovery, reportFailureMessage } from "../core/report-state.ts";
 import type { ReactNode } from "react";
 import { Loader2, Clock3, CircleAlert } from "lucide-react";
 import type { Audit, Issue, Job } from "../core/types.ts";
@@ -94,7 +94,7 @@ export function StageProgress({
       ) : (
         <p role={failure ? "alert" : "status"}>
           {failure
-            ? job.error || "未保存具体失败原因，请查看执行详情。"
+            ? reportFailureMessage(job) || "未保存具体失败原因，请查看执行详情。"
             : (permission?.reason ??
               environment?.reason ??
               external?.reason ??

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ExecutionRecord, Job } from './types.ts';
 
@@ -29,4 +29,17 @@ export function saveExecutionLog(dataDir: string, jobId: string, recordId: strin
 export function readExecutionLog(dataDir: string, job: Job, recordId: string): { raw: string; truncated: boolean } {
   if (!job.executionRecords?.some(record => record.id === recordId)) throw new Error('该任务没有此工具记录');
   return JSON.parse(readFileSync(logPath(dataDir, job.id, recordId), 'utf8'));
+}
+
+/** Report-only retries reuse host evidence; keep full logs accessible under the new run as well. */
+export function copyExecutionLogs(dataDir: string, source: Job, targetRunId: string): void {
+  for (const record of source.executionRecords ?? []) {
+    const target = logPath(dataDir, targetRunId, record.id);
+    mkdirSync(join(target, '..'), { recursive: true });
+    try { copyFileSync(logPath(dataDir, source.id, record.id), target); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      // Older runs may contain metadata without a full log. Never synthesize a log from it.
+    }
+  }
 }
