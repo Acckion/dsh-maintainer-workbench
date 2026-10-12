@@ -1,4 +1,5 @@
-import type { Issue, Job } from "../core/types.ts";
+import { useEffect, useState } from "react";
+import { kindNames, type Issue, type Job, type JobKind } from "../core/types.ts";
 import { availableActions, type WorkflowAction } from "../workflow/actions.ts";
 import { actionLabel } from "../workflow/presentation.ts";
 
@@ -27,10 +28,15 @@ export function AssistantActions({
     job?.actionsAvailable ??
     issue.actionsAvailable ??
     availableActions(issue, job, history);
-  const control = actions.controls?.[0];
-  if (control?.kind === "resume" && !control.enabled) return null;
-  if (control) {
-    const button = (
+  const firstControl = actions.controls?.[0];
+  const control = firstControl?.kind === "resume" && !firstControl.enabled ? undefined : firstControl;
+  const [selected, setSelected] = useState<JobKind>();
+  const [supplement, setSupplement] = useState(instructions ?? "");
+  useEffect(() => { setSupplement(instructions ?? ""); }, [issue.id, instructions]);
+  useEffect(() => { setSelected(undefined); }, [issue.id, actions.primary?.kind]);
+  const stage = actions.stages.find(action => action.kind === selected) ?? actions.primary ?? actions.stages[0];
+  const additionalReasons = stage?.input?.reasons.filter(reason => !stage.input?.warnings.includes(reason)) ?? [];
+  const controlButton = control && (
       <button
         className="mw-button primary"
         disabled={busy || !control.enabled}
@@ -58,74 +64,60 @@ export function AssistantActions({
         {control.label}
       </button>
     );
-    return control.kind === "cancel" ? (
-      <details className="mw-assistant-more">
-        <summary>更多</summary>
-        <div>{button}</div>
-      </details>
-    ) : (
-      button
-    );
-  }
-  const run = (action: WorkflowAction, goal: boolean) =>
+  const run = (action: WorkflowAction) =>
     act(
-      action.kind === "triage" ? "/classify" : "/jobs",
+      "/jobs",
       {
         issueIds: [issue.id],
         kind: action.kind,
         sourceJobId: action.sourceJobId,
-        instructions,
+        instructions: supplement,
+        supplementalInfo: supplement,
+        forceNew: true,
         expectedVersion: actions.expectedVersion,
-        goal:
-          goal &&
-          ["investigate", "fix", "docs"].includes(action.kind) &&
-          !(issue.type === "pr" && action.kind === "investigate")
-            ? "resolve"
-            : undefined,
       },
       "已启动任务，结果会保存在此事项中",
     );
   return (
     <>
-      {actions.primary && (
-        <button
-          className="mw-button primary"
-          title={actions.primary.blockedReasons.join("；")}
-          disabled={busy || !actions.primary.enabled}
-          onClick={() => void run(actions.primary!, true)}
-        >
-          {actionLabel(actions.primary.kind, issue, job)}
-        </button>
+      {control?.kind !== "cancel" && controlButton}
+      {stage && (
+        <div className="mw-stage-launcher">
+          <label>
+            独立执行节点
+            <select aria-label="独立执行节点" value={stage.kind} onChange={event => setSelected(event.target.value as JobKind)}>
+              {actions.stages.map(action => <option key={action.kind} value={action.kind}>{kindNames[action.kind]}</option>)}
+            </select>
+          </label>
+          {stage.input?.warnings.map(warning => <p key={warning} className="mw-callout amber" role="status">{warning}</p>)}
+          {!!additionalReasons.length &&
+            <p className="mw-callout amber">{additionalReasons.join("；")} 请在补充信息中明确本次执行要求。</p>}
+          <label>
+            用户补充信息（{stage.input?.required ? "必填" : "可选"}）
+            <textarea aria-label="用户补充信息" required={stage.input?.required} value={supplement} rows={3}
+              onChange={event => setSupplement(event.target.value)} placeholder="说明本节点的目标、范围、已有背景，以及验证或审查的对象。" />
+          </label>
+          <button
+            className="mw-button primary"
+            title={stage.blockedReasons.join("；") || (stage.input?.required && !supplement.trim() ? "请先填写用户补充信息" : undefined)}
+            disabled={busy || !stage.enabled || (stage.input?.required && !supplement.trim())}
+            onClick={() => void run(stage)}
+          >
+            {actionLabel(stage.kind, issue, job)}
+          </button>
+          {!!stage.blockedReasons.length && <p className="mw-callout amber">{stage.blockedReasons.join("；")}</p>}
+        </div>
       )}
-      {(actions.stages.some((a) => a.kind !== actions.primary?.kind) ||
-        (!projected && job)) && (
-        <details className="mw-assistant-more">
-          <summary>更多</summary>
-          <div>
-            {actions.stages
-              .filter((action) => action.kind !== actions.primary?.kind)
-              .map((action) => (
-                <button
-                  key={action.kind}
-                  className="mw-button"
-                  disabled={busy || !action.enabled}
-                  title={action.blockedReasons.join("；")}
-                  onClick={() => void run(action, false)}
-                >
-                  {actionLabel(action.kind, issue, job)}
-                </button>
-              ))}
-            {!projected && job && (
-              <button
-                className="mw-button"
-                onClick={() => openEvidence(job.id)}
-              >
-                查看执行记录
-              </button>
-            )}
-          </div>
-        </details>
-      )}
+      {((!projected && job) || control?.kind === "cancel") && <details className="mw-assistant-more">
+        <summary>更多</summary>
+        <div>
+          {control?.kind === "cancel" && controlButton}
+          {!projected && job &&
+          <button className="mw-button" onClick={() => openEvidence(job.id)}>
+            查看执行记录
+          </button>}
+        </div>
+      </details>}
     </>
   );
 }

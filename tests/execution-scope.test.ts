@@ -46,7 +46,7 @@ test('standalone test claims stay not_run in storage, JSON export, and stage han
     await new Promise<void>(resolve => server.close(() => resolve()));
     await w.close(); await rm(dir, { recursive: true, force: true });
   });
-  const id = w.enqueue([store.issues()[0].id], 'validate').created[0];
+  const id = w.enqueue([store.issues()[0].id], 'validate', { instructions: 'Validate the recorded repository scope; retain checks not actually executed as not_run.' }).created[0];
   w.pump(); await w.drain();
   const job = store.get<Job>('jobs', id)!;
   assert.equal(job.status, 'completed', job.error);
@@ -54,7 +54,7 @@ test('standalone test claims stay not_run in storage, JSON export, and stage han
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   const exported = await (await fetch(`http://127.0.0.1:${(server.address() as { port: number }).port}/maintainer/api/export/${id}`)).json();
   assertNotRun(exported);
-  const next = w.enqueue([job.issueId], 'investigate', { sourceJobId: id }).created[0];
+  const next = w.enqueue([job.issueId], 'investigate', { sourceJobId: id, instructions: 'Investigate the supplied validation limitations without inheriting execution claims.' }).created[0];
   const inherited = store.get<Job>('jobs', next)!.handoff!.find(h => h.id === id)!.artifact!;
   assert.ok('tests' in inherited);
   assert.deepEqual(inherited.tests.map(t => t.status), ['not_run', 'not_run']);
