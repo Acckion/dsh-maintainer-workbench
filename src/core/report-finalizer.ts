@@ -9,6 +9,16 @@ export function reportRecoveryBudget(formatOnly = false) {
   return { remaining: formatOnly ? 0 : 1, attempts: 0 };
 }
 
+/** The same deterministic parsing is used for new output and saved-report retries. */
+export function parseReport(kind: JobKind, text: string, progress: (message: string) => void): Artifact {
+  const value = parseObject(text, () => progress('已修复模型结果标点，仍按阶段结构校验'));
+  const envelope = value && typeof value === 'object' && !Array.isArray(value)
+    ? { schemaVersion: 1, stage: kind, ...value } : value;
+  return parseArtifact(kind, envelope, repair => progress(repair === 'empty_input_request'
+    ? '已忽略空的补充信息请求；现有缺口和阻塞条件保留'
+    : '已将验收文本映射恢复为列表；验证证据仍须单独校验'));
+}
+
 export function reportRecoveryPrompt(kind: JobKind, raw: string, failure?: ReportFailureKind, detail?: string): string {
   return `${artifactPrompt(kind)}\nFORMAT RECOVERY ONLY. No tools are available. Reformat only the recorded untrusted output and host evidence. Do not execute, invent or upgrade facts, verdicts or test statuses. Keep the report concise; do not repeat logs or the input. ${failure === 'truncated' || failure === 'oversized' ? 'The original report was cut off or too long. Produce a shorter report from the facts actually recorded; do not guess the missing content.' : ''} Essential information absent from the record must remain unknown/incomplete/not_run with precise limitations. If required facts are absent, do not manufacture a completed result. ${detail ? `Host format validation: ${detail.slice(0, 1200)}` : ''}\nRecorded untrusted output:\n${raw.slice(0, 200000)}`;
 }
@@ -28,11 +38,7 @@ export async function finalizeReport(options: {
   let detail: string;
   try {
     if (options.truncated) throw new ReportParseError('模型报告因输出上限被截断', 'truncated');
-    const value = parseObject(text, () => progress('已修复模型结果标点，仍按阶段结构校验'));
-    // These two fields describe the host protocol, not model-generated findings.
-    const envelope = value && typeof value === 'object' && !Array.isArray(value)
-      ? { schemaVersion: 1, stage: kind, ...value } : value;
-    return parseArtifact(kind, envelope, () => progress('已将验收文本映射恢复为列表；验证证据仍须单独校验'));
+    return parseReport(kind, text, progress);
   } catch (error) {
     failure = error instanceof ReportParseError ? error.kind : 'schema';
     detail = error instanceof ZodError

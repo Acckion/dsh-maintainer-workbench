@@ -19,3 +19,13 @@ test('valid checklists and unrelated schemas retain their original strict contra
  let repaired=false;assert.deepEqual(parseArtifact('docs',base,()=>repaired=true),base);assert.equal(repaired,false);
  assert.throws(()=>parseArtifact('validate',{...base,stage:'validate',environment:'local',blockers:[],tests:{check:'passed'}}));
 });
+
+test('optional empty requests and textual checklists normalize together without changing evidence or blockers', () => {
+ const value={...base,inputRequest:{reason:'没有问题',fields:[]},acceptanceCriteria:{目标:'待核对'},limitations:['依赖未安装']};
+ const before=JSON.stringify(value),repairs:string[]=[];
+ const artifact=parseArtifact('docs',value,repair=>repairs.push(repair));
+ assert.equal(artifact.inputRequest,undefined);assert.deepEqual('tests' in artifact && artifact.tests,base.tests);
+ assert.deepEqual('limitations' in artifact && artifact.limitations,value.limitations);
+ assert.deepEqual(repairs,['empty_input_request','acceptance_criteria']);assert.equal(JSON.stringify(value),before);
+ assert.throws(()=>parseArtifact('docs',{...value,tests:[{command:'check',status:'invented',output:'unknown'}]}));
+});

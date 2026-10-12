@@ -13,6 +13,7 @@ import type { AgentTab } from "./RepositoryDetail.tsx";
 import { WorkflowTimeline } from "./WorkflowTimeline.tsx";
 import { ProcessingRecords } from "./ProcessingRecords.tsx";
 import { NextAction } from "./NextAction.tsx";
+import { reportPresentation } from './report-presentation.ts';
 
 interface Props {
   openSession?: (id: string) => void;
@@ -116,11 +117,11 @@ export function WorkflowDetail({
   const generation = useRef(0);
   const workflowRef = useRef<HTMLElement>(null);
   const navigateToExecution = useRef(false);
-  const timeline =
+  const timeline = reportPresentation(
     loaded?.caseId === (cycle || state.id) &&
     (cycle || loaded.version === state.version)
       ? loaded
-      : fallback;
+      : fallback, history);
   useEffect(() => {
     const controller = new AbortController(),
       current = ++generation.current;

@@ -12,9 +12,11 @@ import {
   type ServiceDependencies,
 } from "../application/service.ts";
 import { waitFor } from "../core/abort.ts";
-import { asAnalysis, lightweight } from "../core/artifacts.ts";
+import { asAnalysis, lightweight, withoutExecutedTests } from "../core/artifacts.ts";
 import { documentAcceptance } from "../core/document-acceptance.ts";
-import { ArtifactFormatError } from "../core/execution-errors.ts";
+import { ArtifactFormatError, ReportParseError } from "../core/execution-errors.ts";
+import { parseReport } from "../core/report-finalizer.ts";
+import { ZodError } from "zod";
 import { saveExecutionLog } from "../core/execution-evidence.ts";
 import { reconcileTestExecutions } from "../core/execution-links.ts";
 import { reviewFollowups } from "../core/finding-followup.ts";
@@ -365,15 +367,27 @@ export class StageWorker extends ServiceBase {
         this.saveJob(job);
       }
       const runner = this.nativeRunner ?? modelRunner;
-      output = await runner({
+      let savedArtifact: Job['artifact'];
+      if (job.formatOnly && job.rawOutput && !['truncated', 'oversized'].includes(job.formatRecovery?.reason ?? '')) {
+        try { savedArtifact = parseReport(job.kind, job.rawOutput, progress); }
+        catch (error) {
+          if (!(error instanceof ReportParseError) && !(error instanceof ZodError)) throw error;
+        }
+      }
+      if (savedArtifact) {
+        if (!this.nativeRunner) savedArtifact = withoutExecutedTests(savedArtifact);
+        progress('已在本地整理保存的报告，未调用模型或重新执行任务');
+        output = { artifact: savedArtifact, result: asAnalysis(savedArtifact), engine: 'local / saved report' };
+      } else output = await runner({
         repo,
         issue: job.issueSnapshot,
         related,
         job,
         settings,
         signal: controller.signal,
-        progress,
+        progress: job.formatOnly ? (message) => progress(message) : progress,
         recordDiagnostics: (diagnostics) => {
+          if (job.formatOnly) return; // The tool-free formatter is not the source of execution evidence.
           job = { ...job, toolDiagnostics: diagnostics };
           this.saveJob({ ...this.job(job.id), toolDiagnostics: diagnostics });
         },
