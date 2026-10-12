@@ -31,6 +31,8 @@ export function GlobalSettingsFields({settings,update,panel,native,hostPreset}: 
         value={settings.autoTriage} change={autoTriage=>update({...settings,autoTriage})}/>
       <Toggle label="自动快速预检新增或已更新的 PR" description="同步后自动分析变更范围与审查重点；使用所选模型，不自动修改或发布"
         value={settings.autoPreflight??false} change={autoPreflight=>update({...settings,autoPreflight})}/>
+      <Toggle label="自动审查 PR" description="同步后自动预检并审查就绪的 PR；只读，结果保存，不自动修改或发布"
+        value={settings.autoReview??false} change={autoReview=>update({...settings,autoReview})}/>
     </>}
     {panel !== "automation" && <details className="mw-preference-details"><summary>高级执行选项</summary>
       {number('timeoutMs','超时时间（秒）',1,1800,'超过此时间的任务停止并保留记录',1000)}

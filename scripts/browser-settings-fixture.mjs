@@ -69,6 +69,8 @@ try {
   assert.equal(await page.getByText('全局默认设置',{exact:true}).count(),0);
   await expect.poll(()=>store.settings().syncLimit).toBe(0);
   await page.getByRole('switch',{name:'自动快速预检新增或已更新的 PR',exact:true}).check();
+  await page.getByRole('switch',{name:'自动审查 PR',exact:true}).check();
+  await expect.poll(()=>store.settings().autoReview).toBe(true);
   await page.getByRole('button',{name:'执行',exact:true}).click();
   await page.getByLabel('并发任务',{exact:true}).fill('3');
   await expect.poll(()=>store.settings().concurrency).toBe(3);

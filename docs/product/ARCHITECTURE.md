@@ -179,3 +179,11 @@ SQLite 新增：
 导航夹具需先启动独立预览，并通过 `WORKBENCH_TEST_URL=http://127.0.0.1:<端口>/` 指定实际服务根路径；浏览器可通过 `PLAYWRIGHT_CHROMIUM_PATH` 指定已安装的 Chromium。
 
 2026-10-09 合并版本验证：严格类型检查、287 项行为测试及完整构建通过；真实 Harness 的本地模型夹具验证提问暂停/显式续跑、修复和补丁绑定验证；维护与导航浏览器夹具在 1440px / 390px 通过。上述验证使用模拟 GitHub/模型响应，不包含真实仓库外部发布或模型质量评估。
+
+### Repository maintenance workspace
+
+Repository uses a split list/detail workspace with Overview, Configure, Results and History. Each maintenance category retains its own scope draft per repository in local browser storage; the durable report, execution status, patch and review evidence remain in the workbench database. Starting a maintenance task stays on Repository, while execution and review links open the existing task workflow.
+
+`POST /organize` optionally accepts `auditJobId`. The application validates a completed, current-revision, same-repository audit before including bounded report evidence in the new task context. The report is reference material, not permission or executable instructions. Failed, stale and cross-repository references are rejected. Documentation may instead target an open PR, using the existing PR-specific execution path.
+
+The dedicated browser fixture (`npm run test:browser:repository`) uses a synthetic Git repository and scripted model; it checks saved results, scope drafts, audit handoff, task creation/cancellation, history and narrow-screen list/detail navigation without external writes.

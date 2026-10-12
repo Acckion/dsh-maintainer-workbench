@@ -674,7 +674,7 @@ export function App({
           id="mw-main"
           tabIndex={-1}
           ref={mainRef}
-          className={`mw-main ${["inbox", "tasks", "reviews"].includes(page) ? "mw-queue-page" : ""}`}
+          className={`mw-main ${["inbox", "tasks", "reviews", "organize"].includes(page) ? "mw-queue-page" : ""}`}
           data-page={page}
         >
           {loadError && (
@@ -747,22 +747,18 @@ export function App({
                   repoId={repoId}
                   busy={!!busy}
                   run={async (data) => {
-                    const r = await action(
-                      "organize",
-                      "/organize",
-                      data,
-                      "整理任务已派发",
-                    );
-                    if (r) {
-                      setPage("tasks");
-                      setTaskFilter("all");
-                      setJobFocus(r.created[0] ?? r.reused[0]);
-                    }
+                    const r = await action("organize", "/organize", data, "整理任务已派发");
+                    return r?.created[0] ?? r?.reused[0];
                   }}
+                  act={(path, data, message) => action("repository-task", path, data, message)}
                   open={(id) => {
-                    setPage("tasks");
+                    rememberOrigin(id);
+                    navigate("tasks", repoId, true);
                     setTaskFilter("all");
+                    setFocused(undefined);
                     setJobFocus(id);
+                    setReaderRequest(undefined);
+                    moveFocusToDetail();
                   }}
                 />
               )}
@@ -811,47 +807,7 @@ export function App({
                             action("workflow-batch", path, data, message)
                           }
                         />
-                        <details className="mw-batch-advanced">
-                          <summary>更多操作</summary>
-                          <button
-                            disabled={!selected.length || !!busy}
-                            onClick={() => void enqueue("triage")}
-                          >
-                            <Sparkles size={14} />
-                            分诊 / 预检
-                          </button>
-                          <button
-                            disabled={!selected.length || !!busy}
-                            onClick={() => void enqueue("investigate")}
-                          >
-                            <Search size={14} />
-                            调查
-                          </button>
-                          <select
-                            aria-label="更多批量操作"
-                            value=""
-                            disabled={!selected.length || !!busy}
-                            onChange={(e) =>
-                              e.target.value &&
-                              void enqueue(
-                                e.target.value.replace("rerun:", "") as JobKind,
-                                selected,
-                                e.target.value.startsWith("rerun:"),
-                              )
-                            }
-                          >
-                            <option value="">更多操作</option>
-                            <option value="fix">修复与验证</option>
-                            <option value="preflight">PR 预检</option>
-                            <option value="review">PR 审查</option>
-                            <option value="rerun:review">
-                              重新运行 PR 审查（原始 PR）
-                            </option>
-                            <option value="validate">验证变更</option>
-                            <option value="ci">诊断 CI</option>
-                            <option value="docs">文档维护</option>
-                          </select>
-                        </details>
+
                       </div>
                     </div>
                     <div className="mw-issues" id="mw-inbox-items">
