@@ -41,6 +41,17 @@ test("start action belongs to its destination, never the saved source stage", ()
   assert.equal(actionsForStage(view, next)?.primary?.kind, "investigate");
   assert.equal(actionsForStage(view, next)?.expectedVersion, 7);
   assert.equal(actionsForStage({ ...view, historical: true }, next), undefined);
+  // Available task kinds are capabilities, not permission to launch from any node.
+  const stages = ["triage", "investigate", "fix"].map((kind) => ({
+    kind: kind as "triage" | "investigate" | "fix",
+    label: kind,
+    enabled: true,
+    blockedReasons: [],
+  }));
+  const populated = { ...view, actions: { ...view.actions!, stages } };
+  assert.equal(actionsForStage(populated, saved), undefined);
+  assert.deepEqual(actionsForStage(populated, next)?.stages, [stages[1]]);
+  assert.equal(actionsForStage({ ...populated, historical: true }, next), undefined);
 });
 test("live controls remain with the current run rather than future stages", () => {
   const actions = {

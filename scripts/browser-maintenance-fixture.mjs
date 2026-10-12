@@ -66,7 +66,7 @@ try {
     const cleanupPath=join(dir,'cleanup-repo');await mkdir(cleanupPath);await git(cleanupPath,['init','-b','main']);await writeFile(join(cleanupPath,'README.md'),'Cleanup fixture\n');await git(cleanupPath,['add','.']);await git(cleanupPath,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
     const cleanupSha=await git(cleanupPath,['rev-parse','HEAD']),cleanupRepo={...repo,id:'fixture/cleanup',fullName:'fixture/cleanup',mode:'local',localKind:'git',localPath:cleanupPath,headSha:cleanupSha,profile:{...repo.profile,revision:cleanupSha}};
     store.put('repos',cleanupRepo);const cleanupIssue={...store.issues()[0],id:'fixture/cleanup:maintenance',repoId:cleanupRepo.id,origin:'repository',number:0,title:'Cleanup fixture',url:''};store.put('issues',cleanupIssue);
-    const cleanupId=w.enqueue([cleanupIssue.id],'investigate',{supplementalInfo:'仅调查临时清理测试仓库，收集工作区证据；不修改或发布文件'}).created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
+    const cleanupId=w.enqueue([cleanupIssue.id],'investigate',{instructions:'仅调查临时清理测试仓库，收集工作区证据；不修改或发布文件'}).created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
     const api = handler(w, localRejection), files = { '/': ['preview.html', 'text/html'], '/app.js': ['app.js', 'application/javascript'], '/app.css': ['app.css', 'text/css'] };
     const server = createServer(async (req, res) => {
       if (req.url?.startsWith('/maintainer/api')) return api(req, res);
@@ -91,9 +91,8 @@ try {
         if(width>760)await page.getByRole('button',{name:'处理流程',exact:true}).click();
         else await page.locator('select[aria-label="AI 功能"]').selectOption('overview');
         const flow=page.getByRole('region',{name:'事项处理流程',exact:true});
-        if(name==='Plan')return flow.getByRole('button',{name:'调整分类与计划',exact:true}).click();
         const back=flow.getByRole('button',{name:'返回当前阶段',exact:true});if(await back.count())await back.click();
-        const control=flow.getByRole('button',{name:name==='Work'?'查看执行详情':'查看阶段结果',exact:true});if(await control.count())return control.click();
+        const tab=flow.getByRole('tab',{name:name==='Plan'?'处理计划':name==='Work'?'执行记录':'进度与结果',exact:true});await tab.click();
       };
       assert.equal(await page.getByLabel('关闭详情', {exact:true}).count(), 0);
       assert.equal(await page.locator('.mw-reader-topline').count(), 0);
@@ -147,7 +146,7 @@ try {
       await openIssue('fixture/queue#140');
       await selectPanel('Plan');
       const planCard = page.getByRole('region',{name:'处理建议与进度',exact:true});
-      await planCard.getByText('Fixture orchestrated sync',{exact:true}).waitFor();
+      await planCard.locator('p').filter({hasText:'Fixture orchestrated sync'}).first().waitFor();
       assert.equal(await planCard.getByRole('textbox').count(),0);
       await planCard.screenshot({path:join(dir,`workflow-plan-${width}.png`)});
       await planCard.getByRole('button',{name:'确认并开始',exact:true}).click();
@@ -160,8 +159,6 @@ try {
 
       await openIssue('fixture/queue#131');
       await selectPanel('Plan');
-      const advanced=page.getByText('高级操作',{exact:true}).last();
-      if (!await advanced.locator('..').evaluate(el=>el.open)) await advanced.click();
       await page.getByText(/补充信息与追问记录/).click();
       await page.getByLabel('已提出的问题（每行一项）', { exact: true }).fill('Which version?\nReproduction steps?');
       await page.getByRole('button', { name: '记录已提出的追问', exact: true }).click();
@@ -178,18 +175,18 @@ try {
 
       await openIssue('fixture/queue#129');
       await selectPanel('Plan');
-      await page.getByText('Fixture sourced docs',{exact:true}).waitFor();
+      await page.locator('p').filter({hasText:'Fixture sourced docs'}).first().waitFor();
       assert.equal(await page.getByText(confirmationRequest.fields[0].question,{exact:true}).count(),0);
       assert.equal(await page.getByRole('button',{name:'确认并开始',exact:true}).count(),1);
       assert.equal(await page.getByRole('heading',{name:'尚未分析',exact:true}).count(),0);
       assert.equal(await page.getByText('点击“开始处理”整理现有材料和建议。',{exact:true}).count(),0);
-      await page.getByRole('button',{name:'修改建议',exact:true}).click();
+      await page.getByText('编辑目标、范围与验收',{exact:true}).click();
       await page.getByRole('region',{name:'处理建议与进度',exact:true}).getByLabel('维护目标',{exact:true}).fill('Fixture sourced docs revised');
       await page.waitForFunction(async()=>{const r=await fetch('/maintainer/api/item-draft?id=fixture%2Fqueue%23129');return (await r.json()).plan?.goal==='Fixture sourced docs revised';});
       assert.equal(store.get('issues',proposed.id).plan,undefined);
       await page.reload();await page.getByRole('button',{name:/^Issues(?: \d+)?$/}).click();await openIssue('fixture/queue#129');
       await selectPanel('Plan');
-      await page.getByRole('region',{name:'处理建议与进度',exact:true}).getByText('Fixture sourced docs revised',{exact:true}).waitFor();
+      await page.getByRole('region',{name:'处理建议与进度',exact:true}).locator('p').filter({hasText:'Fixture sourced docs revised'}).first().waitFor();
       await page.screenshot({path:join(dir,`workflow-plan-${width}.png`),fullPage:true});
       await page.getByRole('button',{name:'确认并开始',exact:true}).click();
       await page.getByText('已确认计划，系统将连续执行并整理最终审核',{exact:true}).waitFor();
@@ -197,7 +194,7 @@ try {
       assert.equal(store.processing.current(proposed.id).planning.run.id, store.get('issues',proposed.id).orchestration.run.id);
       assert.equal(JSON.parse(store.db.prepare('SELECT data FROM issues WHERE id=?').get(proposed.id).data).orchestration, undefined);
       await selectPanel('Work');
-      await page.getByText('处理记录与操作追踪',{exact:true}).click();await page.getByText('处理状态与事件历史',{exact:true}).click();
+      await page.getByText('处理状态与事件历史',{exact:true}).click();
       await page.getByRole('heading',{name:'此周期的处理计划',exact:true}).waitFor();
       await page.getByText('处理计划与进度已保存',{exact:false}).first().waitFor();
 
@@ -217,7 +214,7 @@ try {
       await page.screenshot({path:join(dir,`processing-input-${width}.png`),fullPage:true});
 
       await selectPanel('Work');
-      await page.getByText('处理记录与操作追踪',{exact:true}).click();await page.getByText('处理状态与事件历史',{exact:true}).click();
+      await page.getByText('处理状态与事件历史',{exact:true}).click();
       await page.getByText('补充输入已提交',{exact:true}).waitFor();
       await page.getByLabel('查看处理周期',{exact:true}).selectOption(inputIssue.processing.id);
       await page.getByText('补充输入已提交',{exact:true}).waitFor();
@@ -233,7 +230,7 @@ try {
       await page.getByRole('button',{name:'读取 job 42 日志',exact:true}).click();
       await page.getByText('FIXTURE_ACTIONS_ASSERTION_FAILED',{exact:true}).waitFor();
       await page.screenshot({path:join(dir,`remote-progress-${width}.png`),fullPage:true});
-      await selectPanel('Review');await page.getByText('发现处置与讨论串',{exact:true}).click();await page.getByText('批量处置审查发现', { exact: true }).click();
+      await selectPanel('Review');await page.getByText('批量处置审查发现', { exact: true }).click();
       await page.getByLabel('P1 · Fixture regression', { exact: true }).check();
       await page.getByLabel('批量处置', { exact: true }).selectOption('needs_evidence');
       await page.getByRole('button', { name: '应用到 1 项发现', exact: true }).click();
@@ -265,7 +262,7 @@ try {
       // Selected stage preserves evidence and the guarded local decision actions.
       const summary = page.getByRole('region', { name: '选中阶段', exact: true });
       await summary.getByRole('button',{name:'sum.ts:1',exact:true}).waitFor();
-      await summary.getByText('审核与交付操作',{exact:true}).click();
+      const reviewActions=summary.getByText('审核与交付操作',{exact:true});if(await reviewActions.count())await reviewActions.click();
       assert.equal(await summary.getByRole('button', { name: '接受此报告', exact: true }).count(), 1);
       assert.equal(await page.getByRole('button', { name: '接受此报告', exact: true }).count(), 1);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

@@ -194,7 +194,6 @@ try {
         .getByRole("navigation", { name: "处理阶段" })
         .getByRole("button", { name: /^补充调查/ })
         .click();
-      await actionPage.getByLabel("用户补充信息", {exact:true}).fill("依据当前 PR 审查报告，补足源码范围与独立核查证据");
       await actionPage
         .getByRole("button", { name: "补足审查证据", exact: true })
         .click();
@@ -239,6 +238,8 @@ try {
         nav = flow.getByRole("navigation", { name: "处理阶段", exact: true }),
         panel = flow.getByRole("region", { name: "选中阶段", exact: true });
       await nav.getByRole("button", { name: /^测试审查/ }).waitFor();
+      await expect(flow.getByRole("combobox", { name: "独立执行节点", exact: true })).toHaveCount(0);
+      await expect(flow.getByRole("textbox", { name: "用户补充信息", exact: true })).toHaveCount(0);
       assert.equal(
         await flow.getByText("PR · 测试 / 夹具", { exact: true }).count(),
         0,
@@ -274,7 +275,6 @@ try {
         .getByRole("navigation", { name: "处理阶段" })
         .getByRole("button", { name: /^补充调查/ })
         .click();
-      await panel.getByLabel("用户补充信息", {exact:true}).fill("依据当前 PR 审查报告，补足源码范围与独立核查证据");
       assert.ok(
         await panel
           .getByRole("button", { name: "补足审查证据", exact: true })
@@ -332,12 +332,12 @@ try {
         const box = await panel.boundingBox();
         const center = (r) => r.y + r.height / 2;
         assert.ok(
-          action.x >= box.x && action.x + action.width <= box.x + box.width + 1,
-          "independent stage launcher must stay within the panel",
+          Math.abs(center(title) - center(action)) <= 1,
+          "title and action must align",
         );
         assert.ok(
-          title.y >= box.y && title.y + title.height <= box.y + box.height + 1,
-          "stage heading must remain within the selected panel",
+          title.y - box.y < 24,
+          "stage title must have compact top spacing",
         );
       }
       await page.screenshot({
