@@ -2,7 +2,6 @@ import { stepDisposition } from "../workflow/manual.ts";
 import { ManualStepForm, manualStepAccess } from "./ManualStepForm.tsx";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Issue, Job } from "../core/types.ts";
-import { eventDescription } from "../workflow/presentation.ts";
 import type { ProcessingCase } from "../domain/processing.ts";
 import type { ProcessingTimeline, TimelineNode } from "../domain/timeline.ts";
 import { projectTimeline } from "../workflow/timeline.ts";
@@ -12,7 +11,7 @@ import { StagePanel, type StageSelection } from "./StagePanel.tsx";
 import { API, request } from "./api.ts";
 import type { AgentTab } from "./RepositoryDetail.tsx";
 import { WorkflowTimeline } from "./WorkflowTimeline.tsx";
-import { ExecutionResources } from "./ExecutionResources.tsx";
+import { ProcessingRecords } from "./ProcessingRecords.tsx";
 import { NextAction } from "./NextAction.tsx";
 
 interface Props {
@@ -115,6 +114,8 @@ export function WorkflowDetail({
     };
   });
   const generation = useRef(0);
+  const workflowRef = useRef<HTMLElement>(null);
+  const navigateToExecution = useRef(false);
   const timeline =
     loaded?.caseId === (cycle || state.id) &&
     (cycle || loaded.version === state.version)
@@ -242,8 +243,21 @@ export function WorkflowDetail({
   };
   // Never expose current controls while an older cycle is still loading.
   const cycleLoading = !!cycle && timeline.caseId !== cycle;
+  useEffect(() => {
+    if (!navigateToExecution.current || cycleLoading) return;
+    const panel =
+      workflowRef.current?.querySelector<HTMLElement>(".mw-stage-panel");
+    if (!panel) return;
+    navigateToExecution.current = false;
+    panel.scrollIntoView({ block: "start" });
+    panel.focus({ preventScroll: true });
+  }, [selection, cycleLoading]);
   return (
-    <section className="mw-workflow-detail" aria-label="事项处理流程">
+    <section
+      ref={workflowRef}
+      className="mw-workflow-detail"
+      aria-label="事项处理流程"
+    >
       <div className="mw-workflow-toolbar" hidden={cycles.length <= 1}>
         <div className="mw-workflow-views">
           {cycles.length > 1 && (
@@ -350,32 +364,26 @@ export function WorkflowDetail({
               }
             />
           )}
-          <details className="mw-item-resources">
-            <summary>工作区与会话 · {history.length} 次执行</summary>
-            <p className="mw-muted">按事项、阶段和尝试汇总工作区与会话。各阶段保留独立工作区；验证与审核通过来源任务和补丁关联。路径来自执行记录，目录当前状态可在全局设置的工作区页检查。</p>
-            <ExecutionResources jobs={history} currentCaseId={state.id} openSession={openSession} openExecution={run => {
-              setCycle(run.caseId && run.caseId !== state.id ? run.caseId : "");
-              setLoaded(undefined);
-              choose({view:"stage", detail:"execution", attemptId:run.id});
-            }} />
-            {!history.length && <p>暂无执行记录。</p>}
-          </details>
-          <details className="mw-stage-activity">
-            <summary>阶段活动记录 · {timeline.eventTotal}</summary>
-            <p className="mw-muted">
-              按实际发生顺序记录；同一阶段的重试保留在尝试列表中。
-              {timeline.eventTotal > timeline.events.length &&
-                "此处显示最近 100 条；完整记录可在执行详情中展开事件历史。"}
-            </p>
-            <ol>
-              {timeline.events.map((e) => (
-                <li key={e.id} title={e.payload.type}>
-                  <time>{new Date(e.receivedAt).toLocaleString("zh-CN")}</time>{" "}
-                  · {eventDescription(e)}
-                </li>
-              ))}
-            </ol>
-          </details>
+          <ProcessingRecords
+            timeline={timeline}
+            jobs={history}
+            openSession={openSession}
+            openExecution={(run) => {
+              const nextCycle = run.caseId
+                ? run.caseId === state.id
+                  ? ""
+                  : run.caseId
+                : timeline.historical
+                  ? timeline.caseId
+                  : "";
+              if (nextCycle !== cycle) {
+                setCycle(nextCycle);
+                setLoaded(undefined);
+              }
+              navigateToExecution.current = true;
+              choose({ view: "stage", detail: "execution", attemptId: run.id });
+            }}
+          />
         </>
       )}
     </section>

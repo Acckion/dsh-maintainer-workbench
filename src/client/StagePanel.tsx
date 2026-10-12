@@ -88,7 +88,7 @@ export function StagePanel({
     : "result";
   const panelId = useId();
   return (
-    <section className="mw-stage-panel" aria-label="选中阶段">
+    <section className="mw-stage-panel" aria-label="选中阶段" tabIndex={-1}>
       <header>
         <h3>{selected.label}</h3>
         <span

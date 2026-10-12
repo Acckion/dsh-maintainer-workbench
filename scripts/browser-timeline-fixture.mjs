@@ -238,8 +238,12 @@ try {
         nav = flow.getByRole("navigation", { name: "处理阶段", exact: true }),
         panel = flow.getByRole("region", { name: "选中阶段", exact: true });
       await nav.getByRole("button", { name: /^测试审查/ }).waitFor();
-      await expect(flow.getByRole("combobox", { name: "独立执行节点", exact: true })).toHaveCount(0);
-      await expect(flow.getByRole("textbox", { name: "用户补充信息", exact: true })).toHaveCount(0);
+      await expect(
+        flow.getByRole("combobox", { name: "独立执行节点", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        flow.getByRole("textbox", { name: "用户补充信息", exact: true }),
+      ).toHaveCount(0);
       assert.equal(
         await flow.getByText("PR · 测试 / 夹具", { exact: true }).count(),
         0,
@@ -546,16 +550,48 @@ try {
         path: join(root, `timeline-attempt-history-${width}.png`),
         fullPage: true,
       });
-      const resources = flow.locator('.mw-item-resources');
-      await resources.locator(':scope > summary').click();
-      assert.ok(await resources.locator('.mw-resource-row').count() >= 3);
-      await resources.locator('.mw-stage-resources').first().locator(':scope > summary').click();
-      await resources.getByText('隔离工作区路径', {exact:true}).first().click();
-      await expect(resources).toContainText('/fixture/worktrees/timeline-preflight');
-      await resources.getByRole('button', {name:'查看执行记录',exact:true}).first().click();
-      await expect(panel).not.toContainText('正在查看历史');
-      assert.equal(await panel.getByRole('button',{name:'接受此报告',exact:true}).count(),0);
-      await page.screenshot({path:join(root,`item-resources-${width}.png`),fullPage:true});
+      const records = flow.locator(".mw-processing-records");
+      await records.locator(":scope > summary").click();
+      assert.equal(
+        await records.locator("details").count(),
+        0,
+        "records must not nest disclosures",
+      );
+      assert.equal(
+        await flow.locator(".mw-item-resources, .mw-stage-activity").count(),
+        0,
+      );
+      const preflightRecord = records.locator(
+        '[data-run-id="timeline-preflight"]',
+      );
+      await expect(preflightRecord).toContainText(
+        "/fixture/worktrees/timeline-preflight",
+      );
+      await preflightRecord
+        .getByRole("button", { name: "复制路径", exact: true })
+        .click();
+      await expect(preflightRecord.getByRole("status")).toContainText(
+        "路径已复制",
+      );
+      await records.locator(":scope > summary").scrollIntoViewIfNeeded();
+      await page.screenshot({
+        path: join(root, `processing-records-${width}.png`),
+        fullPage: true,
+      });
+      await preflightRecord
+        .getByRole("button", { name: "执行详情", exact: true })
+        .click();
+      await expect(panel).toBeFocused();
+      await expect(
+        panel.getByRole("region", { name: "执行详情", exact: true }),
+      ).toBeVisible();
+      await expect(panel).not.toContainText("正在查看历史");
+      assert.equal(
+        await panel
+          .getByRole("button", { name: "接受此报告", exact: true })
+          .count(),
+        0,
+      );
       // New source cycle: archived attempts remain readable, with all write controls hidden.
       store.put("issues", { ...store.get("issues", item.id), state: "closed" });
       store.put("issues", {
@@ -567,6 +603,16 @@ try {
         .getByLabel("查看阶段周期", { exact: true })
         .selectOption(caseId);
       await expect(flow).toContainText("历史周期");
+      await records.locator(":scope > summary").click();
+      await records
+        .locator('[data-run-id="timeline-preflight"]')
+        .getByRole("button", { name: "执行详情", exact: true })
+        .click();
+      await expect(panel).toBeFocused();
+      await expect(
+        panel.getByRole("region", { name: "执行详情", exact: true }),
+      ).toBeVisible();
+      await expect(flow).not.toContainText("正在读取历史周期");
       assert.equal(
         await flow
           .getByRole("button", { name: "补足审查证据", exact: true })
