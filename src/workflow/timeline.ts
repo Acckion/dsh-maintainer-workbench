@@ -270,7 +270,6 @@ export function projectTimeline(
       anchor =
         route.indexOf(issue.type === "pr" ? "review" : "investigate") - 1;
     for (const stage of route.slice(anchor + 1)) add(stage);
-    for (const action of actions?.stages ?? []) add(action.kind);
     if (
       currentStage === "investigate" &&
       issue.type === "pr" &&
@@ -295,15 +294,13 @@ export function projectTimeline(
     }
   }
   for (const n of nodes.filter((n) => n.status === "future")) {
-    const action = actions?.stages.find(a => a.kind === n.stage);
     n.conditions = n.conditions.length
       ? n.conditions
       : n.stage === "decision"
-        ? ["可独立确认目标、范围与证据；缺少调查或审查结果时，请补充判断依据"]
+        ? ["先完成前序调查或审查，核对目标、范围与证据"]
         : n.stage === "track"
           ? ["维护者确认产物后，预览并确认交付；发布后跟踪远端活动"]
-          : ["可独立执行此节点，依据当前输入收集新的执行证据"];
-    if (action) n.conditions.push(...(action.input?.reasons ?? []), ...action.blockedReasons);
+          : ["前序阶段完成且输入版本仍有效后，按服务端条件继续"];
     if (draft && (n.stage === "decision" || n.stage === "track"))
       n.conditions.push(
         "当前 PR 是 Draft，需核对作者的暂缓条件；审查完成不代表可以合并",

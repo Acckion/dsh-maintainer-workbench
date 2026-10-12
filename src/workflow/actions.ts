@@ -8,7 +8,6 @@ import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
-import { stageInput, stageSource } from "./stage-input.ts";
 
 export interface WorkflowAction {
   kind: JobKind;
@@ -16,7 +15,6 @@ export interface WorkflowAction {
   enabled: boolean;
   blockedReasons: string[];
   sourceJobId?: string;
-  input?: import("./stage-input.ts").StageInput;
 }
 export interface WorkflowActions {
   controls?: {
@@ -48,15 +46,23 @@ export function stageBlocker(
     return "答复已记录，请先恢复处理后再启动任务";
   if (
     issue.processing?.waits.some(
+      (w) => w.state === "open" && w.type === "user_input",
+    )
+  )
+    return "等待用户补充输入，请先回答当前请求";
+  if (
+    issue.processing?.waits.some(
       (w) => w.state === "open" && w.type === "environment_ready",
     ) &&
     !["triage", "preflight"].includes(kind)
   )
     return "等待仓库环境准备";
+  if (issue.informationRequests?.some((r) => r.state === "asked"))
+    return "补充信息尚未收到新回复，请先核对或结束已有追问";
   if (kind === "triage" && issue.type === "pr")
     return "PR 请使用变更预检，不执行 Issue 分诊";
   if (
-    ["preflight", "ci"].includes(kind) &&
+    (["preflight", "ci"].includes(kind) || (kind === "review" && !source)) &&
     issue.type !== "pr"
   )
     return "PR 审查只能选择 Pull Request";
@@ -72,7 +78,7 @@ export function stageBlocker(
   if (stepDisposition(issue.processing, kind)?.mode === "takeover")
     return "此步骤由用户手动完成；重新打开后可交给 Agent";
   if (stepResolved(issue.processing, kind)) return "用户已跳过或手动完成此步骤";
-  return undefined;
+  return planBlocker(issue, kind);
 }
 
 /** The server attaches this projection; UI renders it without inventing transitions. */
@@ -175,7 +181,6 @@ export function availableActions(
     ["completed", "cancelled", "deferred"].includes(issue.processing.lifecycle)
   )
     primary = undefined;
-  const inputs = [...history.filter(j => j.id !== job?.id), ...(job ? [job] : [])];
   const cursor = issue.processing?.manualCursor;
   if (cursor)
     primary =
@@ -200,7 +205,9 @@ export function availableActions(
           "investigate",
           "fix",
           "docs",
-          "validate", "review",
+          ...(validSource?.patch || cursor === "validate" || cursor === "review"
+            ? (["validate", "review"] as JobKind[])
+            : []),
         ];
   const labels: Partial<Record<JobKind, string>> = {
     triage: "分析此 Issue",
@@ -212,11 +219,16 @@ export function availableActions(
     validate: "验证改动",
   };
   const stages = kinds.map((kind) => {
-    const source = cursor ? manualSource(issue, history, kind) : stageSource(issue, kind, inputs);
+    const source = cursor ? manualSource(issue, history, kind) : validSource;
     const blockers = [
+      ["validate", "review"].includes(kind) &&
+      issue.type === "issue" &&
+      !source?.patch
+        ? "当前没有可用于此操作的补丁；可以提交人工结果或跳过"
+        : undefined,
       stageBlocker(issue, kind, source),
-      history.some((j) => j.kind === kind && ["running", "queued"].includes(j.status))
-        ? "本节点已有排队或运行中的任务"
+      history.some((j) => ["running", "queued"].includes(j.status))
+        ? "当前事项已有排队或运行中的任务"
         : undefined,
     ].filter((s): s is string => !!s);
     return {
@@ -225,7 +237,6 @@ export function availableActions(
       enabled: !blockers.length,
       blockedReasons: blockers,
       sourceJobId: source?.id,
-      input: stageInput(issue, kind, inputs),
     };
   });
   const controls: NonNullable<WorkflowActions["controls"]> = [];

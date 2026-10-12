@@ -37,7 +37,7 @@ try {
       }),
       false,
     );
-    const id = wb.enqueue([issue.id], "investigate", {instructions:"调查当前 Issue 的启动时重复加载问题，收集根因与证据"}).created[0];
+    const id = wb.enqueue([issue.id], "investigate").created[0];
     wb.processing.requestInput(
       issue.id,
       {
@@ -103,6 +103,8 @@ try {
       });
       const panel = flow.getByRole("region", { name: "选中阶段", exact: true });
       const nav = flow.getByRole("navigation", { name: "处理阶段" });
+      await expect(flow.getByRole("combobox", { name: "独立执行节点", exact: true })).toHaveCount(0);
+      await expect(flow.getByRole("textbox", { name: "用户补充信息", exact: true })).toHaveCount(0);
       await expect(
         nav.getByRole("button", { name: /^定位与范围/ }),
       ).toBeVisible();

@@ -68,7 +68,6 @@ test("concurrent changes to the same path never mix worktrees, indexes, or froze
       .slice(0, 2)
       .map((i) => i.id),
     "fix",
-    { instructions: "Implement each fixture item independently in its isolated worktree." },
   );
   f.w.pump();
   await f.w.drain();
@@ -108,7 +107,7 @@ test("immutable handoff reconstructs the exact tree and rejects a corrupted snap
       engine: "local fixture",
     };
   });
-  const id = f.w.enqueue([f.store.issues()[0].id], "fix", { instructions: "Implement the fixture change using its isolated worktree only." }).created[0];
+  const id = f.w.enqueue([f.store.issues()[0].id], "fix").created[0];
   f.w.pump();
   await f.w.drain();
   const validation = f.w.enqueue([f.store.issues()[0].id], "validate", {
@@ -259,7 +258,7 @@ test("continuing after user input rebuilds a partial patch in a fresh worktree",
     return { artifact, result: asAnalysis(artifact), engine: "local fixture" };
   });
   const issue = f.store.issues()[0],
-    id = f.w.enqueue([issue.id], "fix", { instructions: "Implement the fixture change using its isolated worktree only." }).created[0];
+    id = f.w.enqueue([issue.id], "fix").created[0];
   f.w.pump();
   await f.w.drain();
   const waiting = f.store.get<Job>("jobs", id)!;
@@ -293,7 +292,7 @@ test("cleanup removes an ended directory but preserves its branch, snapshot and 
     return { result: fixtureAnalysis(issue, "fix"), engine: "fixture" };
   });
   const issue = f.store.issues()[0],
-    id = f.w.enqueue([issue.id], "fix", { instructions: "Implement the fixture change using its isolated worktree only." }).created[0];
+    id = f.w.enqueue([issue.id], "fix").created[0];
   f.w.pump();
   await f.w.drain();
   const job = f.store.get<Job>("jobs", id)!;
@@ -325,7 +324,7 @@ test("cleanup rejects patch drift and a stale preview without deleting new work"
     result: fixtureAnalysis(issue, job.kind),
     engine: "fixture",
   }));
-  const id = f.w.enqueue([f.store.issues()[0].id], "investigate", { instructions: "Inspect the fixture repository without modifying source; preserve workspace ownership." }).created[0];
+  const id = f.w.enqueue([f.store.issues()[0].id], "investigate").created[0];
   f.w.pump();
   await f.w.drain();
   const job = f.store.get<Job>("jobs", id)!;
@@ -352,7 +351,7 @@ test("interrupted ownership requires confirmed shutdown and does not replay Agen
     calls++;
     throw Error("Fixture crash");
   });
-  const id = f.w.enqueue([f.store.issues()[0].id], "investigate", { instructions: "Inspect the fixture repository without modifying source; preserve workspace ownership." }).created[0];
+  const id = f.w.enqueue([f.store.issues()[0].id], "investigate").created[0];
   f.w.pump();
   await f.w.drain();
   const manager = new WorkspaceManager(f.store, f.dir);
@@ -380,7 +379,7 @@ test("restart reconciles removal completed before the durable cleanup receipt", 
     result: fixtureAnalysis(issue, job.kind),
     engine: "fixture",
   }));
-  const id = f.w.enqueue([f.store.issues()[0].id], "investigate", { instructions: "Inspect the fixture repository without modifying source; preserve workspace ownership." }).created[0];
+  const id = f.w.enqueue([f.store.issues()[0].id], "investigate").created[0];
   f.w.pump();
   await f.w.drain();
   const job = f.store.get<Job>("jobs", id)!,
@@ -404,7 +403,7 @@ test("a substituted worktree symlink never permits inspecting or deleting the us
     result: fixtureAnalysis(issue, job.kind),
     engine: "fixture",
   }));
-  const id = f.w.enqueue([f.store.issues()[0].id], "investigate", { instructions: "Inspect the fixture repository without modifying source; preserve workspace ownership." }).created[0];
+  const id = f.w.enqueue([f.store.issues()[0].id], "investigate").created[0];
   f.w.pump();
   await f.w.drain();
   const job = f.store.get<Job>("jobs", id)!;

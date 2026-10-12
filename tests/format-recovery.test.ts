@@ -41,7 +41,7 @@ for (const kind of ['validate', 'review', 'ci'] as const) {
       return { result: fixtureAnalysis(issue, job.kind), engine: 'test' };
     });
     // Seed the execution-stage job directly; PR fetching/routing has separate tests.
-    const id = f.workbench.enqueue([f.store.issues()[0].id], 'validate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' }).created[0];
+    const id = f.workbench.enqueue([f.store.issues()[0].id], 'validate').created[0];
     f.store.put('jobs', { ...f.store.get<Job>('jobs', id)!, kind });
     const failed = await f.run();
     assert.equal(failed.status, 'failed');
@@ -74,7 +74,7 @@ test('malformed output does not make a mutated validation workspace recoverable'
     recordOutput?.('malformed output');
     throw new ArtifactFormatError('schema validation failed');
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'validate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'validate');
   const failed = await f.run();
   assert.equal(failed.status, 'failed');
   assert.match(failed.error!, /修改了代码/);
@@ -92,7 +92,7 @@ test('genuine format-only retries retain the reviewed execution patch without re
     }
     return { result: fixtureAnalysis(issue, job.kind), engine: 'test' };
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'fix');
   const failed = await f.run();
   assert.ok(failed.formatRecovery);
   f.workbench.retry(failed.id);
@@ -115,7 +115,7 @@ for (const tamper of ['patch', 'head'] as const) {
       recordOutput?.('malformed output');
       throw new ArtifactFormatError('schema validation failed');
     });
-    f.workbench.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+    f.workbench.enqueue([f.store.issues()[0].id], 'fix');
     const failed = await f.run();
     if (tamper === 'patch') await writeFile(join(failed.worktree!, 'value.txt'), 'different change\n');
     else await git(failed.worktree!, ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-m', 'unreviewed history']);
@@ -135,7 +135,7 @@ test('execution errors with recorded output retry as fresh work, not format-only
     recordOutput?.('partial progress, not a completed result');
     throw new Error('permission or tool execution failed');
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'investigate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'investigate');
   const failed = await f.run();
   f.workbench.retry(failed.id);
   await f.run();
@@ -154,7 +154,7 @@ for (const formatFails of [false, true]) test(`format-only recovery rejects conc
     if (formatFails) throw new ArtifactFormatError('still malformed');
     return { result: fixtureAnalysis(issue, job.kind), engine: 'test' };
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'fix');
   const failed = await f.run();
   f.workbench.retry(failed.id);
   const retried = await f.run();
@@ -179,7 +179,7 @@ test('cancellation during checkpoint capture stays cancelled and cannot enable f
     }
     return value;
   }) as Store['get'];
-  f.workbench.enqueue([f.store.issues()[0].id], 'validate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'validate');
   const job = await f.run();
   assert.equal(cancelled, true);
   assert.equal(job.status, 'cancelled');

@@ -94,7 +94,7 @@ test('stale issue input cannot approve an old result', async () => {
 
 test('restart preserves queued tasks but does not replay a running modification', async () => {
   const { store, workbench, issue } = fixture(false);
-  const id = workbench.enqueue([issue.id], 'fix', { instructions: 'Implement the fixture change in the recorded repository worktree.' }).created[0];
+  const id = workbench.enqueue([issue.id], 'fix').created[0];
   store.put('jobs', { ...store.get<Job>('jobs', id)!, status: 'running', waitingReason: '等待权限审批', rawOutput: '{"partial":true}', worktree: '/tmp/preserved-worktree', formatRecovery: { baseSha: 'fixture-base', patchHash: 'fixture-patch' } });
   const recovered = new Workbench(store, '/tmp/maintainer-tests', undefined, undefined, false);
   const job = store.get<Job>('jobs', id)!;
@@ -169,7 +169,7 @@ test('local execution produces an actual patch and blocks approval after worktre
   const workbench = new Workbench(store, dir, runner);
   const repo = { id: 'owner/repo', fullName: 'owner/repo', description: '', defaultBranch: 'main', headSha: sha, localPath: path, mode: 'github' as const, syncedAt: null, syncWarning: null };
   store.put('repos', repo); store.put('issues', { id: 'owner/repo#1', repoId: repo.id, number: 1, type: 'issue', title: 'sum returns wrong answer', body: 'sum(2,1) should be 3', author: 'dev', labels: [], state: 'open', comments: 0, updatedAt: '2026-09-22', url: 'https://github.com/owner/repo/issues/1' });
-  const id = workbench.enqueue(['owner/repo#1'], 'fix', { instructions: 'Implement the fixture change in the recorded repository worktree.' }).created[0]; await workbench.drain();
+  const id = workbench.enqueue(['owner/repo#1'], 'fix').created[0]; await workbench.drain();
   const job = store.get<Job>('jobs', id)!; assert.equal(job.status, 'awaiting_review'); assert.match(job.patch!, /a\+b/);
   assert.match(await readFile(join(path, 'sum.js'), 'utf8'), /a-b/);
   await writeFile(join(job.worktree!, 'sum.js'), 'export const sum = () => 0;\n');
@@ -202,7 +202,7 @@ test('fix -> real failing/passing test -> review -> commit/push -> draft PR requ
     return { result, engine: 'deterministic-local-test-runner' };
   };
   const workbench = new Workbench(store, directory, runner); store.put('repos', repo); store.put('issues', issue);
-  const id = workbench.enqueue([issue.id], 'fix', { instructions: 'Implement the fixture change in the recorded repository worktree.' }).created[0]; await workbench.drain(); await workbench.review(id, 'approve', 'local fixture checked');
+  const id = workbench.enqueue([issue.id], 'fix').created[0]; await workbench.drain(); await workbench.review(id, 'approve', 'local fixture checked');
   const requests: { url: string; body?: unknown }[] = [];
   const fake: typeof fetch = async (input, init) => {
     const url = String(input); requests.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });

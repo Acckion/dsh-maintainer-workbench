@@ -26,7 +26,7 @@ async function setup(t:TestContext, validationStatus:'passed'|'failed'|'not_run'
   const gh=new GitHub('fixture',async(_url,init)=>{if(init?.method&&init.method!=='GET'){writes++;throw Error('No external writes in this test');}return Response.json({sha:remoteSha});});
   const runner:Runner=async({job})=>{let artifact;if(job.kind==='fix'){await writeFile(join(job.worktree!,'value.txt'),'after\n');artifact=artifactSchemas.fix.parse({...common,stage:'fix',changes:['value'],acceptanceCriteria:[],limitations:[],tests:[]});}else if(job.kind==='validate')artifact=validation(validationStatus);else artifact=artifactSchemas.review.parse({...common,stage:'review',findings:[],verdict:'no_findings',blockers:[]});return{artifact,result:asAnalysis(artifact),engine:'controlled test'};};
   const w=new Workbench(store,dir,runner,gh,false);
-  const run=async(kind:Job['kind'],sourceJobId?:string)=>{const id=w.enqueue([issue.id],kind,{sourceJobId,instructions:'Implement the fixture value change and validate/review the resulting exact patch.'}).created[0];w.pump();await w.drain();const job=store.get<Job>('jobs',id)!;assert.notEqual(job.status,'failed',job.error);return job;};
+  const run=async(kind:Job['kind'],sourceJobId?:string)=>{const id=w.enqueue([issue.id],kind,{sourceJobId}).created[0];w.pump();await w.drain();const job=store.get<Job>('jobs',id)!;assert.notEqual(job.status,'failed',job.error);return job;};
   const fix=await run('fix'),check=await run('validate',fix.id);
   t.after(async()=>{await w.close();await rm(dir,{recursive:true,force:true});});
   return{store,w,gh,fix,check,issue,repo:store.repos()[0],run,setRemote:(value:string)=>{remoteSha=value;},writes:()=>writes};
