@@ -125,7 +125,7 @@ test("input requests show the actual form in primary content rather than hiding 
     issue: withWait(wait("user_input")),
     input: React.createElement("form", null, "Actual questions"),
   });
-  assert.match(markup, /需要你补充信息/);
+  assert.match(markup, /需要补充资料/);
   assert.match(markup, /Actual questions/);
   assert.doesNotMatch(markup, /当前无需操作/);
 });

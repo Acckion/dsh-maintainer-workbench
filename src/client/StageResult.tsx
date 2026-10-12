@@ -1,3 +1,4 @@
+import {GapSummary} from './GapSummary.tsx';
 import type { Job } from "../core/types.ts";
 import { TestExecutionLink } from "./ExecutionEvidence.tsx";
 import type { DetailTab } from "./ReviewSummary.tsx";
@@ -29,8 +30,7 @@ export function StageResult({
     groups.push(["验收条件", artifact.acceptanceCriteria]);
   if (artifact && "limitations" in artifact)
     groups.push(["未验证范围", artifact.limitations]);
-  if (artifact?.stage === "triage")
-    groups.push(["信息缺口", artifact.missingInfo]);
+
   if (!artifact && job.result)
     groups.push([
       job.issueSnapshot.type === "pr" ? "审查覆盖缺口" : "信息缺口",
@@ -42,6 +42,7 @@ export function StageResult({
       : (job.result?.tests ?? []);
   return (
     <section className="mw-stage-result">
+      {artifact && <GapSummary plan={{gaps:artifact.gaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
       <p className="mw-stage-summary">
         {artifact?.summary ?? job.result?.summary ?? "暂无保存结果"}
       </p>

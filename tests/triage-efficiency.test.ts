@@ -47,7 +47,7 @@ test('PR automation is independently controlled, persistent and refreshes change
  let store=new Store(path);seedFixture(store);let repo=store.repos()[0];
  const pr={...store.issues()[0],type:'pr' as const,headSha:'a'.repeat(40),prBaseSha:'b'.repeat(40)};store.put('issues',pr);
  const github=new GitHub();github.pullRequest=async()=>({headSha:store.get<import('../src/core/types.ts').Issue>('issues',pr.id)!.headSha!,baseSha:pr.prBaseSha,headRef:'topic',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:null,checks:null,reviews:[],warnings:[]});
- let calls=0;const runner:import('../src/core/types.ts').Runner=async args=>{calls++;assert.equal(args.settings.maxTokens,1800);return fixtureRunner(args);};
+ let calls=0;const runner:import('../src/core/types.ts').Runner=async args=>{calls++;assert.equal(args.settings.maxTokens,6000);return fixtureRunner(args);};
  let wb=new Workbench(store,'/tmp/pr-auto',runner,github,false);
  await wb.poll();assert.equal(store.jobs().length,0);
  wb.updateSettings({...store.settings(),autoPreflight:true,autoTriage:false});await wb.poll();assert.equal(store.jobs().length,1);assert.equal(store.jobs()[0].kind,'preflight');

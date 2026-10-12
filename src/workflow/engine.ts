@@ -228,7 +228,7 @@ export function transition(
       next.lifecycle = "waiting";
       next.reason = payload.wait.reason;
     }
-  } else if (payload.type === "input.submitted") {
+  } else if ((payload.type === "input.submitted" || payload.type === "input.recorded")) {
     const wait = next.waits.find((w) => w.id === payload.waitId);
     if (
       !wait ||
@@ -237,11 +237,12 @@ export function transition(
       next.sourceFingerprint !== payload.targetFingerprint
     )
       throw new Error("输入请求已过期或已结束");
-    wait.state = "satisfied";
+    if(payload.answers) wait.answers=payload.answers;
+    if(payload.type==="input.submitted") wait.state = "satisfied";
     if (!terminal(next)) {
-      next.phase = "decision";
+      if(payload.type==="input.submitted") next.phase = "decision";
       next.lifecycle = "waiting";
-      next.reason = "已保存用户输入，请基于新证据继续处理";
+      next.reason = payload.type==="input.submitted" ? "已保存用户输入，可在原授权范围内继续核对；答复不是验证证据" : "已保存部分资料，必需信息仍未齐备；等待保留";
     }
   } else if (payload.type === "publication.confirmed") {
     if (payload.answerPublished && !terminal(next)) {

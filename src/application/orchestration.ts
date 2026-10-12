@@ -1,13 +1,15 @@
+import {blockingGaps, planGaps} from '../domain/gaps.ts';
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { randomUUID } from "node:crypto";
 import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
 import type { Workbench } from "../core/workbench.ts";
 import {
   draftFromJob,
+  planningInputRequest,
   planInputKey,
   type PlanDraft,
 } from "../core/change-plan.ts";
-import { issuePlanSchema, planBlocker } from "../core/issue-flow.ts";
+import { issuePlanSchema, planBlocker, readOnlyScope } from "../core/issue-flow.ts";
 import { validationState } from "../core/workflow-state.ts";
 
 import type {
@@ -166,7 +168,8 @@ export class Orchestration {
       ...issuePlanSchema.parse(value),
       decision: "accepted",
     });
-    const suggested = route ?? draft.route;
+    const requestedRoute = route ?? draft.route;
+    const suggested = ["fix","docs"].includes(requestedRoute) && readOnlyScope(plan.scope) ? "investigate" : requestedRoute;
     if (suggested === "answer" || suggested === "track")
       throw new Error("当前建议是答复或跟踪，请查看处理建议");
     const kind: JobKind = suggested;
@@ -177,6 +180,9 @@ export class Orchestration {
     const blocker =
       issue.type === "pr" ? undefined : planBlocker({ ...issue, plan }, kind);
     if (blocker) throw new Error(blocker);
+    const gaps = blockingGaps(planGaps(draft),kind);
+    if(gaps.some(g=>["reporter_information","maintainer_decision","environment","external_wait"].includes(g.kind)))
+      throw new Error(`当前阶段缺少前置条件：${gaps.map(g=>g.summary).join("；")}；请先调查或处理对应等待。`);
     const old = issue.orchestration?.run;
     if (old?.status === "running") {
       if (
@@ -285,18 +291,24 @@ export class Orchestration {
       return { created: [], reused: [] };
     }
   }
-  completed(job: Job): void {
+  completed(job: Job, allowAutoReview = true): void {
     const issue = this.wb.store.get<Issue>("issues", job.issueId);
     if (!issue || ["queued", "running"].includes(job.status)) return;
     if (job.caseId && job.caseId !== issue.processing?.id) return;
     if (["waiting_input", "waiting_environment"].includes(job.status)) {
+      if(['triage','preflight','investigate'].includes(job.kind) && job.result && job.artifact &&
+        !blockingGaps(job.artifact.gaps ?? [],job.kind).some(g=>g.kind==='system_check')) {
+        const repo=this.wb.store.get<import('../core/types.ts').Repo>('repos',issue.repoId)!;
+        const draft=draftFromJob(issue,repo,job);
+        this.put(issue,{...issue.orchestration,draft});
+      }
       if (job.workflowRunId === issue.orchestration?.run?.id)
         this.stop(
           issue,
           "blocked",
           job.waitingReason ??
             job.error ??
-            "等待输入或环境恢复，请在 Work 面板处理",
+            (job.kind==="investigate" ? "调查结论已保存，等待资料或环境；未授权实施修复" : "等待输入或环境恢复，请在 Work 面板处理"),
         );
       return;
     }
@@ -323,12 +335,13 @@ export class Orchestration {
           : {}),
       });
       if (
+        allowAutoReview &&
         job.kind === "preflight" &&
         job.artifact?.stage === "preflight" &&
         job.artifact.readiness === "review" &&
         (repo.policy?.autoReview ?? this.wb.store.settings().autoReview) &&
         !run &&
-        !draft.missingInfo.length &&
+        !planGaps(draft).some(g=>g.status!=="resolved") &&
         draft.goal &&
         draft.scope &&
         draft.acceptanceCriteria.length
@@ -394,6 +407,11 @@ export class Orchestration {
   }
   private advance(updated: Issue, job: Job) {
     const run = updated.orchestration!.run!;
+    const blockers=blockingGaps(job.artifact?.gaps ?? [],job.kind);
+    if(blockers.length){
+      this.stop(updated,'blocked',`阶段记录已保存，等待前置条件：${blockers.map(g=>g.summary).join('；')}`);
+      return;
+    }
     if (job.kind === "docs" || job.kind === "fix") {
       if (!job.patch) {
         this.stop(updated, "blocked", "没有可验证补丁，请检查执行结果");
@@ -448,6 +466,24 @@ export class Orchestration {
           : "请核对产物并选择下一步",
       );
   }
+  assertRecovery(job: Job) {
+    if (!job.workflowRunId) return;
+    const issue = this.issue(job.issueId), run = issue.orchestration?.run;
+    const repo = this.wb.store.get<import("../core/types.ts").Repo>("repos", issue.repoId)!;
+    if (!run || run.id !== job.workflowRunId || run.currentJobId !== job.id ||
+      (run.caseId && run.caseId !== issue.processing?.id) ||
+      (job.caseId && job.caseId !== issue.processing?.id))
+      throw new Error("原任务不再属于当前计划或处理周期，请重新确认");
+    if (run.inputKey !== planInputKey(issue, repo) || JSON.stringify(run.plan) !== JSON.stringify(issue.plan))
+      throw new Error("版本或计划已变化，请重新分析");
+  }
+  private renewed(issue: Issue, run: WorkflowRun): WorkflowRun {
+    const repo = this.wb.store.get<import("../core/types.ts").Repo>("repos", issue.repoId)!;
+    const deadlineAt = new Date(Date.now() + (repo.policy?.timeoutMs ?? this.wb.store.settings().timeoutMs) * 4).toISOString();
+    const maxSteps = Math.max(run.maxSteps, this.wb.store.jobs().filter(j => j.workflowRunId === run.id).length + 6);
+    this.wb.store.audit("workflow.budget_renewed", `${issue.id}: 维护者明确恢复当前计划；截止 ${run.deadlineAt} → ${deadlineAt}，步骤上限 ${run.maxSteps} → ${maxSteps}`);
+    return { ...run, deadlineAt, maxSteps };
+  }
   replacement(jobId: string, result: { created: string[]; reused: string[] }) {
     const job = this.wb.store.get<Job>("jobs", jobId);
     if (!job?.workflowRunId) return;
@@ -465,7 +501,7 @@ export class Orchestration {
       this.put(issue, {
         ...issue.orchestration,
         run: {
-          ...run,
+          ...this.renewed(issue, run),
           status: "running",
           currentJobId: nextId,
           reason: "已明确恢复当前步骤，保留原始记录",
@@ -503,25 +539,7 @@ export class Orchestration {
       JSON.stringify(run.plan) !== JSON.stringify(issue.plan)
     )
       throw new Error("版本或计划已变化，请重新分析");
-    if (
-      this.wb.store.jobs().filter((j) => j.workflowRunId === run.id).length >=
-      run.maxSteps
-    )
-      throw new Error("本次计划步骤预算已到上限，请重新确认计划");
-    if (Date.now() > Date.parse(run.deadlineAt))
-      throw new Error("本次执行预算已到期，请重新确认计划");
-    const result = this.wb.retry(run.currentJobId);
-    const current = this.issue(id);
-    this.put(current, {
-      ...current.orchestration,
-      run: {
-        ...run,
-        status: "running",
-        currentJobId: result.created[0] ?? result.reused[0],
-        reason: "维护者检查现场后明确重试，保留原失败记录",
-      },
-    });
-    return result;
+    return this.wb.retry(run.currentJobId);
   }
   resume(id: string) {
     const issue = this.issue(id),
@@ -542,11 +560,15 @@ export class Orchestration {
       : undefined;
     if (job && ["failed", "cancelled", "rejected"].includes(job.status))
       throw new Error("原执行状态不明或失败，请检查工作区后从高级操作明确重试");
+    if (job) this.assertRecovery(job);
+    if (this.wb.store.jobs().some(j => j.issueId === id && ["queued", "running"].includes(j.status)))
+      throw new Error("当前事项仍有执行中的任务，请等待完成");
+    if (job && ["waiting_input", "waiting_environment"].includes(job.status)) return this.wb.resume(job.id);
     const updated = {
       ...issue,
       orchestration: {
         ...issue.orchestration,
-        run: { ...run, status: "running" as const },
+        run: { ...this.renewed(issue, run), status: "running" as const },
       },
     };
     this.put(updated, updated.orchestration);
@@ -802,7 +824,40 @@ export class Orchestration {
         : "请开始整理现有材料与处理建议",
     };
   }
+  /** Restore an analysis wrongly paused for plan authorization; no execution is scheduled. */
+  recoverPlanConfirmation(jobId: string): boolean {
+    const job = this.wb.store.get<Job>("jobs", jobId);
+    if (!job || job.status !== "waiting_input" || job.workflowRunId || !job.result ||
+        !["triage", "preflight", "investigate"].includes(job.kind) || job.kind !== job.artifact?.stage ||
+        !job.artifact?.inputRequest || planningInputRequest(job.artifact, job.artifact.inputRequest)) return false;
+    const issue = this.wb.store.get<Issue>("issues", job.issueId);
+    const repo = this.wb.store.get<import("../core/types.ts").Repo>("repos", job.repoId);
+    if (!issue || !repo || !issue.processing || issue.state !== "open" || job.caseId !== issue.processing.id ||
+        job.revision !== importRevision(issue, repo, job.kind) ||
+        this.wb.store.jobs().some(j => j.issueId === issue.id && ["queued", "running"].includes(j.status))) return false;
+    const waits = issue.processing.waits.filter(w => w.state === "open" && w.type === "user_input" &&
+      w.requestedByRunId === job.id && w.targetFingerprint === issue.processing!.sourceFingerprint &&
+      JSON.stringify(w.requiredFields) === JSON.stringify(job.artifact!.inputRequest!.fields.map(f => f.id)));
+    if (!waits.length) return false;
+    this.wb.store.transaction(() => {
+      for (const wait of waits) this.wb.store.processing.dispatch(issue.id,
+        { type: "wait.cancelled", waitId: wait.id, reason: "此请求仅为计划确认，已转交计划草稿界面；未授权实施" },
+        "system", `plan-confirmation:${job.id}:${wait.id}`);
+      const artifact = { ...job.artifact!, inputRequest: undefined };
+      this.wb.saveJob({ ...job, artifact, status: "completed", waitingReason: undefined });
+      if (job.kind === "triage") {
+        this.wb.store.saveTriage(issue.id, job.revision, job.id, job.result!);
+        this.wb.store.put("issues", { ...this.wb.store.get<Issue>("issues", issue.id)!,
+          analysis: job.result, analysisRevision: job.revision });
+      }
+      this.completed(this.wb.store.get<Job>("jobs", job.id)!, false);
+      this.wb.store.audit("workflow.plan_confirmation_recovered", "已恢复计划草稿，等待维护者确认；原请求及报告保留在历史", job.id);
+    });
+    return true;
+  }
   reconcile(): void {
+    for (const job of this.wb.store.jobs())
+      if (job.status === "waiting_input") this.recoverPlanConfirmation(job.id);
     for (const issue of this.wb.store.issues()) {
       const run = issue.orchestration?.run;
       if (!run || run.status !== "running") continue;

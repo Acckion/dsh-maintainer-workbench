@@ -31,14 +31,17 @@ export function StageProgress({
           w.state === "open" &&
           (!w.requestedByRunId || w.requestedByRunId === job.id),
       ) ?? []);
+  const inputWait = waits.find(w=>w.type==="user_input");
   const userInput = waits.some((w) => w.type === "user_input");
   const permission = waits.find((w) => w.type === "host_permission");
   const environment = waits.find((w) => w.type === "environment_ready");
+  const external = waits.find(w=>['ci_completion','author_revision','reporter_reply'].includes(w.type));
   const failure = job.status === "failed";
   const waiting =
     userInput ||
     !!permission ||
     !!environment ||
+    !!external ||
     ["waiting_input", "waiting_environment"].includes(job.status);
   const latest = audit
     .filter((a) => a.jobId === job.id && a.action === "job.progress")
@@ -50,12 +53,12 @@ export function StageProgress({
   const title = failure
     ? "本次执行失败"
     : userInput
-      ? "需要你补充信息"
+      ? inputWait?.questions?.every(q=>q.actor==="reporter") ? "等待报告者资料" : inputWait?.questions?.every(q=>q.purpose==="decision") ? "需要维护者决定" : "需要补充资料"
       : permission
         ? "需要你授权工具执行"
         : environment
           ? "等待执行环境"
-          : waiting
+          : external ? "等待外部结果" : waiting
             ? "任务已暂停"
             : job.status === "queued"
               ? "等待执行"
@@ -85,13 +88,14 @@ export function StageProgress({
         <h4>{title}</h4>
       </div>
       {userInput ? (
-        input
+        <>{job.kind==="investigate" && job.result && <p>调查记录已保存：{job.result.summary}</p>}{input}</>
       ) : (
         <p role={failure ? "alert" : "status"}>
           {failure
             ? job.error || "未保存具体失败原因，请查看执行详情。"
             : (permission?.reason ??
               environment?.reason ??
+              external?.reason ??
               job.waitingReason ??
               (job.status === "running"
                 ? detail

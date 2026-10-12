@@ -2,6 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { githubRequest } from '../src/core/github-request.ts';
 import { GitHub } from '../src/core/github.ts';
+import { gzipSync } from 'node:zlib';
+
+test('gzip bytes sync repository issues even when the transport omits encoding headers', async () => {
+  for (const headers of [new Headers(), new Headers({ 'content-encoding': 'gzip' })]) {
+    const github = new GitHub('', (async (url) => {
+      const data = String(url).includes('/commits/') ? { sha: 'a'.repeat(40) }
+        : String(url).includes('/issues?') ? [{ number: 4, title: '测试文档', body: '新增检查清单',
+          user: { login: 'fixture' }, labels: [], state: 'open', comments: 0,
+          updated_at: '2026-10-09T12:00:00Z', html_url: 'https://github.com/fixture/repo/issues/4' }]
+        : { full_name: 'fixture/repo', private: false, description: '', default_branch: 'main' };
+      return new Response(gzipSync(JSON.stringify(data)), { headers });
+    }) as typeof fetch);
+    const result = await github.sync('fixture/repo');
+    assert.equal(result.issues[0].number, 4);
+    assert.equal(result.issues[0].body, '新增检查清单');
+  }
+});
+
+test('already decoded JSON with a retained gzip header is not decompressed twice', async () => {
+  const result = await githubRequest((async () => Response.json({ ok: true }, {
+    headers: { 'content-encoding': 'gzip', 'content-length': '99' },
+  })) as typeof fetch, 'https://api.github.com/user', {});
+  assert.deepEqual(await result.json(), { ok: true });
+  assert.equal(result.headers.get('content-encoding'), null);
+  assert.equal(result.headers.get('content-length'), null);
+});
+
+test('truncated gzip retries a safe read once without repeating a write', async () => {
+  const body = gzipSync(JSON.stringify({ ok: true })).subarray(0, 12);
+  for (const method of ['GET', 'POST']) {
+    let calls = 0;
+    await assert.rejects(githubRequest((async () => {
+      calls++;
+      return new Response(body);
+    }) as typeof fetch, 'https://api.github.com/user', { method }));
+    assert.equal(calls, method === 'GET' ? 2 : 1);
+  }
+});
 
 test('transient read failure retries with the same credentials', async () => {
   let calls = 0;

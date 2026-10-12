@@ -10,9 +10,11 @@ import { StagePanel, type StageSelection } from "./StagePanel.tsx";
 import { API, request } from "./api.ts";
 import type { AgentTab } from "./RepositoryDetail.tsx";
 import { WorkflowTimeline } from "./WorkflowTimeline.tsx";
+import { ExecutionResources } from "./ExecutionResources.tsx";
 import { NextAction } from "./NextAction.tsx";
 
 interface Props {
+  openSession?: (id: string) => void;
   issue: Issue;
   jobs: Job[];
   job?: Job;
@@ -58,6 +60,7 @@ const fallbackCase = (
 
 export function WorkflowDetail({
   issue,
+  openSession,
   jobs,
   job,
   legacyTab,
@@ -301,6 +304,16 @@ export function WorkflowDetail({
                   }
                 />
               )}
+          <details className="mw-item-resources">
+            <summary>工作区与会话 · {history.length} 次执行</summary>
+            <p className="mw-muted">按事项、阶段和尝试汇总工作区与会话。各阶段保留独立工作区；验证与审核通过来源任务和补丁关联。路径来自执行记录，目录当前状态可在全局设置的工作区页检查。</p>
+            <ExecutionResources jobs={history} currentCaseId={state.id} openSession={openSession} openExecution={run => {
+              setCycle(run.caseId && run.caseId !== state.id ? run.caseId : "");
+              setLoaded(undefined);
+              choose({view:"stage", detail:"execution", attemptId:run.id});
+            }} />
+            {!history.length && <p>暂无执行记录。</p>}
+          </details>
           <details className="mw-stage-activity">
             <summary>阶段活动记录 · {timeline.eventTotal}</summary>
             <p className="mw-muted">

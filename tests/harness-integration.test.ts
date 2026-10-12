@@ -32,7 +32,7 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   w.updateSettings({ ...store.settings(), provider: 'wrong-provider', model: 'wrong-model', agentPreset: 'inherit' });
   w.enqueue([issue.id], 'triage'); w.pump(); await w.drain();
   assert.equal(store.jobs()[0].status, 'completed');
-  assert.deepEqual(calls[0].agentOptions, { ...selection, maxTokens: 1800 });
+  assert.deepEqual(calls[0].agentOptions, { ...selection, maxTokens: 6000 });
   assert.equal(calls[0].archived,`maintainer-${store.jobs()[0].id}`); assert.equal(calls[0].preset, undefined); assert.deepEqual(calls[0].restriction, {allow:[]}); assert.deepEqual(store.jobs()[0].result?.tests, []);
   assert.ok(store.jobs()[0].rawOutput?.includes('],"category":'));
   assert.ok(store.audits().some(a => a.detail.includes('已修复模型结果')));
@@ -40,14 +40,14 @@ test('new native jobs inherit changing host model/reasoning and default preset, 
   selection = { provider: 'host-b', model: 'model-b', reasoningEffort: 'low' };
   assert.equal(w.snapshot().capabilities.host?.model, 'model-b');
   w.enqueue([store.issues()[1].id], 'triage'); w.pump(); await w.drain();
-  assert.deepEqual(calls[1].agentOptions, { ...selection, maxTokens: 1800 });
+  assert.deepEqual(calls[1].agentOptions, { ...selection, maxTokens: 6000 });
   assert.ok(texts.every(t => t.includes('Metadata routing only') && t.includes('sourceCodeRead')));
   w.updateSettings({...store.settings(),nativeDefaultModel:{provider:'configured',model:'cheap'},stageModels:{}});
   w.enqueue([issue.id],'triage',{forceNew:true}); w.pump();await w.drain();
-  assert.deepEqual(calls[2].agentOptions,{provider:'configured',model:'cheap',reasoningEffort:'medium',maxTokens:1800});
+  assert.deepEqual(calls[2].agentOptions,{provider:'configured',model:'cheap',reasoningEffort:'medium',maxTokens:6000});
   w.updateSettings({...store.settings(),stageModels:{triage:{provider:'configured',model:'advanced',reasoningEffort:'high'}}});
   w.enqueue([issue.id],'triage',{forceNew:true});w.pump();await w.drain();
-  assert.deepEqual(calls[3].agentOptions,{provider:'configured',model:'advanced',reasoningEffort:'high',maxTokens:1800});
+  assert.deepEqual(calls[3].agentOptions,{provider:'configured',model:'advanced',reasoningEffort:'high',maxTokens:6000});
   assert.deepEqual(permissions, ['read-only', 'read-only','read-only','read-only']);
   await w.close();
 });
@@ -75,4 +75,78 @@ test('format recovery creates a tool-free session and never reruns implementatio
   const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0],issue=store.issues()[0];const now=new Date().toISOString();
   const output=await harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'format-test',repoId:repo.id,issueId:issue.id,kind:'fix',status:'running',revision:'r',baseSha:sha,issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,worktree:root},settings:store.settings(),signal:new AbortController().signal,progress:()=>{}});
   assert.equal(count,2);assert.equal(mounted,1);assert.equal(restricted,1);assert.equal(output.artifact?.stage,'fix');store.close();
+});
+
+test('native docs loop stops model requests and keeps the specific blocker without implementation retry', async () => {
+  const root=await mkdtemp(join(tmpdir(),'maintainer-loop-'));
+  const store=new Store(':memory:');seedFixture(store);
+  let turns=0, disposed=false;
+  const listeners=new Map<string,any>();const guards:((e:any)=>string|undefined)[]=[];
+  const ctx={
+    agentDefaultModel:{currentSelection:()=>({provider:'p',model:'m'})},
+    llm:{listProviders:()=>[{id:'p'}]},
+    agentPresets:{resolve:async()=>({id:'standard'}),mount:async()=>{}},
+    permissionPresets:{defaultPreset:'workspace-write',resolve:()=>{},set:()=>{}},
+    workspaceRegistry:{create:async(path:string)=>({path,attachSession:async()=>{}})},
+    on:(name:string,fn:any)=>{listeners.set(name,fn);return()=>listeners.delete(name);},
+    agents:{create:async(options:any)=>{
+      await options.setup({tools:{register:()=>()=>{},schemas:()=>[],restrict:()=>{},guard:(g:any)=>guards.push(g)}});
+      return {dispose:async()=>{disposed=true;},agent:{session:{},cancel:()=>{},whenIdle:async()=>{},followup:()=>{
+        turns++;
+        queueMicrotask(async()=>{
+          try {
+            const execution={name:'bash',arguments:{command:"grep -nE '^#{1,4} ' AGENTS.md"}};
+            for(let i=0;i<4;i++) guards.forEach(g=>g(execution));
+            const stream=listeners.get('llm/stream')({sessionId:options.sessionId},()=>{throw Error('Blocked request reached model');});
+            const chunks=[];for await(const chunk of stream)chunks.push(chunk);
+            assert.equal(chunks[0].reason.failure.code,'WORKBENCH_TOOL_LOOP');
+            listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:chunks[0].reason}});
+          } catch(error) {listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'error',failure:{message:String(error)}}}});}
+        });
+      }}};
+    }},
+  } as unknown as Context;
+  try {
+    const issue=store.issues()[0],repo=store.repos()[0],now=new Date().toISOString();
+    await assert.rejects(harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'loop-test',repoId:repo.id,issueId:issue.id,kind:'docs',status:'running',revision:'r',baseSha:'a'.repeat(40),issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,worktree:root},settings:store.settings(),signal:new AbortController().signal,progress:()=>{}}),/重复工具调用阻塞/);
+    assert.equal(turns,1);assert.equal(disposed,true);assert.equal(listeners.size,0);
+  } finally {store.close();await rm(root,{recursive:true,force:true});}
+});
+
+for (const failures of [1,3]) test(`Messages pre-start recovery stays inside one native request and ${failures===1?'recovers':'stops at its limit'}`,async()=>{
+ const listeners=new Map<string,any>();let followups=0,downstream=0;const progress:string[]=[];let diagnostics:any;
+ const ctx={
+  agentDefaultModel:{currentSelection:()=>({provider:'p',model:'m'})},llm:{listProviders:()=>[{id:'p'}]},
+  agentPresets:{resolve:async()=>({id:'standard'})},permissionPresets:{resolve:()=>{},set:()=>{}},workspaceRegistry:{archiveSession:async()=>{}},
+  on:(name:string,fn:any)=>{listeners.set(name,fn);return()=>listeners.delete(name);},
+  agents:{create:async(options:any)=>{
+   await options.setup({tools:{schemas:()=>[],restrict:()=>{},guard:()=>{}}});
+   return {dispose:async()=>{},agent:{session:{},cancel:()=>{},whenIdle:async()=>{},followup:()=>{
+    followups++;
+    queueMicrotask(async()=>{
+     try{
+      let terminal=false;
+      for(let i=0;i<failures;i++){
+       const stream=listeners.get('llm/stream')({sessionId:options.sessionId},async function*(){throw Object.assign(new Error('DeepSeek Messages stream: event precedes message_start'),{code:'MALFORMED_RESPONSE'});});
+       const chunks=[];for await(const chunk of stream)chunks.push(chunk);
+       assert.equal(chunks.length,1);assert.equal(chunks[0].type,'finish');
+       const action=await listeners.get('agent/request-error')({agent:{session:{id:options.sessionId}},turn:1,step:1,signal:new AbortController().signal,failure:chunks[0].reason.failure},async()=>{downstream++;});
+       if(!action){terminal=true;break;}
+      }
+      if(terminal){listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'error',error:{code:'MALFORMED_RESPONSE',message:'DeepSeek Messages stream: event precedes message_start'}}}});return;}
+      const report={schemaVersion:1,stage:'triage',summary:'triage',coverage:'metadata',evidence:[],nextSteps:[],responseDraft:'',category:'bug',priority:'P2',labels:[],module:'unknown',impact:'unknown',missingInfo:[],duplicateOf:null,duplicateReason:'',route:'investigate',routeReason:'needs evidence'};
+      listeners.get('session/event')({id:options.sessionId},{type:'assistant/message',data:{message:{content:[{type:'text',text:JSON.stringify(report)}]}}});
+      listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'completed'}}});
+     }catch(e){listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'error',error:{message:String(e)}}}});}
+    });
+   }}};
+  }},
+ } as unknown as Context;
+ const store=new Store(':memory:');seedFixture(store);const issue=store.issues()[0],repo=store.repos()[0],now=new Date().toISOString();
+ try{
+  const run=harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'stream-test',repoId:repo.id,issueId:issue.id,kind:'triage',status:'running',revision:'r',baseSha:repo.headSha,issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,analysisPath:'/tmp'},settings:store.settings(),signal:new AbortController().signal,progress:m=>progress.push(m),recordDiagnostics:d=>{diagnostics=d;}});
+  if(failures===1)assert.equal((await run).artifact?.stage,'triage');else await assert.rejects(run,/有限重试已用尽/);
+  assert.equal(followups,1);assert.equal(downstream,0);assert.equal(diagnostics.calls,0);assert.equal(diagnostics.protocolRecovery.attempts,failures===1?1:2);assert.equal(listeners.size,0);
+  assert.ok(progress.some(m=>m.includes('恢复同一次请求')));
+ }finally{store.close();}
 });

@@ -1,3 +1,8 @@
+import { gunzip } from 'node:zlib';
+import { promisify } from 'node:util';
+
+const decompressGzip = promisify(gunzip);
+
 export class GitHubRequestError extends Error {
   constructor(public kind: 'network' | 'timeout' | 'auth' | 'permission' | 'rate_limit' | 'not_found' | 'server', message: string) {
     super(message);
@@ -30,8 +35,15 @@ export async function githubRequest(fetcher: typeof fetch, url: string, init: Re
       // Headers arriving is not completion: a socket may fail while reading JSON.
       // Buffer inside the same retry boundary so partial responses never escape.
       if (response.ok && response.body) {
-        const body = await response.arrayBuffer();
-        response = new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+        let body = Buffer.from(await response.arrayBuffer());
+        // Fetch normally decompresses responses. Some transports leave gzip bytes
+        // intact or omit the encoding header; inspect bytes to avoid double decoding.
+        if (body[0] === 0x1f && body[1] === 0x8b && body[2] === 0x08)
+          body = Buffer.from(await decompressGzip(body));
+        const headers = new Headers(response.headers);
+        headers.delete('content-encoding');
+        headers.delete('content-length');
+        response = new Response(body, { status: response.status, statusText: response.statusText, headers });
       }
     }
     catch (error) {

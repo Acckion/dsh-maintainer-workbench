@@ -2,9 +2,12 @@ import { useCallback, useEffect, useState } from "react";
 import type { WorkspaceInspection } from "../application/workspaces.ts";
 import type { WorkspaceRecord } from "../domain/workspaces.ts";
 import type { HostWorkspaces, HostWorkspace } from "./host-workspaces.ts";
+import type { Snapshot } from "../core/types.ts";
+import { ExecutionResources } from "./ExecutionResources.tsx";
+import { executionResourceGroups } from "./execution-resources.ts";
 import { request } from "./api.ts";
 
-export function WorkspacesPanel({host}: {host?:HostWorkspaces}) {
+export function WorkspacesPanel({host,openSession}: {host?:HostWorkspaces;openSession?:(id:string)=>void}) {
   const [development, setDevelopment] = useState<readonly HostWorkspace[]>(host?.source.getSnapshot().items ?? []);
   const [adding, setAdding] = useState(false), [addError, setAddError] = useState(""), [added,setAdded] = useState("");
   useEffect(() => {
@@ -29,7 +32,19 @@ export function WorkspacesPanel({host}: {host?:HostWorkspaces}) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [stopped, setStopped] = useState(false);
-  const refresh = useCallback(() => request("/workspaces").then(setItems), []);
+  const [context,setContext] = useState<Pick<Snapshot,"jobs"|"issues">>({jobs:[],issues:[]});
+  const refresh = useCallback(async () => {
+    const [workspaces,state] = await Promise.all([request("/workspaces"),request("/state")]);
+    setError(""); setItems(workspaces); setContext({jobs:state.jobs ?? [],issues:state.issues ?? []});
+  }, []);
+  const grouped = executionResourceGroups(context.jobs,context.issues,items);
+  const inspect = async (workspace:WorkspaceRecord) => {
+    setBusy(true);setError("");setPreview(undefined);setStopped(false);
+    try { setPreview(await request(`/workspaces/inspect?id=${encodeURIComponent(workspace.id)}`)); }
+    catch(e) {setError((e as Error).message);}
+    finally {setBusy(false);}
+  };
+  const inspectButton = (workspace:WorkspaceRecord) => workspace.status !== "removed" && <button className="mw-button" disabled={busy} onClick={()=>void inspect(workspace)}>检查与预览</button>;
   useEffect(() => {
     void refresh().catch((e) => setError(e.message));
   }, [refresh]);
@@ -66,9 +81,9 @@ export function WorkspacesPanel({host}: {host?:HostWorkspaces}) {
         {addError && <p role="alert">{addError}</p>}
       </section>
       <section className="mw-settings-card">
-      <h3>任务隔离目录</h3>
+      <h3>事项工作区与会话</h3>
       <p>
-        检查中断目录的所有权，或清理已结束的工作区。清理保留分支、补丁快照和执行证据。
+        按 Issue／PR → 阶段 → 尝试归组工作区与会话，包括轻量分析。检查和清理仍针对单个目录，保留分支、补丁快照和执行证据。
       </p>
       <button
         className="mw-button"
@@ -77,42 +92,15 @@ export function WorkspacesPanel({host}: {host?:HostWorkspaces}) {
       >
         刷新工作区
       </button>
-      {items
-        .filter((w) => w.status !== "removed")
-        .map((w) => (
-          <div className="mw-stage-event" key={w.id}>
-            <strong>
-              {w.repositoryId} · {w.purpose} · {w.status}
-            </strong>
-            <p>{w.path}</p>
-            <button
-              className="mw-button"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                setPreview(undefined);
-                setStopped(false);
-                try {
-                  setPreview(
-                    await request(
-                      `/workspaces/inspect?id=${encodeURIComponent(w.id)}`,
-                    ),
-                  );
-                } catch (e) {
-                  setError((e as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              检查与预览
-            </button>
-          </div>
-        ))}
-      {!items.some((w) => w.status !== "removed") && (
-        <p>暂无保留的任务工作区。</p>
-      )}
+      {grouped.groups.map(group=><details className="mw-item-resources" key={group.issue.id}>
+        <summary>{group.issue.repoId} · {group.issue.origin === "repository" ? "仓库维护" : `${group.issue.type === "pr" ? "PR" : "Issue"} #${group.issue.number}`} · {group.issue.title} · {group.jobs.length} 次执行</summary>
+        <ExecutionResources jobs={group.jobs} currentCaseId={group.issue.processing?.id} workspaces={group.workspaces} openSession={openSession} workspaceAction={inspectButton} />
+      </details>)}
+      {!!grouped.unassigned.filter(w=>w.status!=="removed").length && <details className="mw-item-resources"><summary>未关联事项的工作区</summary>
+        <p className="mw-muted">缺少对应执行记录，保留原有检查入口。</p>
+        {grouped.unassigned.filter(w=>w.status!=="removed").map(w=><div className="mw-resource-row" key={w.id}><strong>{w.repositoryId} · {w.purpose} · {w.status}</strong><p>{w.path}</p>{inspectButton(w)}</div>)}
+      </details>}
+      {!items.some(w=>w.status!=="removed") && <p>暂无保留的任务工作区。</p>}
       {error && <p role="alert">{error}</p>}
       {preview && (
         <div className="mw-callout amber" aria-label="工作区处置预览">

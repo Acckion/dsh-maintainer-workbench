@@ -1187,7 +1187,7 @@ export function App({
                 </div>
               )}
               {page === "settings" && (
-                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} />
+                <GlobalSettings native={host} hostWorkspaces={hostWorkspaces} openSession={openSession} />
               )}
               {page === "repository-settings" && (
                 <div className="mw-repository-settings">
@@ -1625,6 +1625,8 @@ export function App({
     if (!displayedIssue) return null;
     return (
       <WorkflowDetail
+        key={`${displayedIssue.id}:${displayedIssue.processing?.id}`}
+        openSession={openSession}
         issue={displayedIssue}
         jobs={jobs}
         job={job}
@@ -1691,10 +1693,18 @@ export function App({
       ) : (
         <>
           {renderProcessingAdvice(true)}
+          <ProcessingInput
+            issue={displayedIssue}
+            runId={job?.id}
+            busy={!!busy}
+            act={(path, data, message) =>
+              action("workflow", path, data, message)
+            }
+          />
           <details open={!displayedIssue.orchestration?.draft}>
             <summary>高级操作</summary>
             <IssuePlanning
-              start={(kind, expectedVersion) =>
+              start={(kind, expectedVersion, confirmedPlan) =>
                 action(
                   "workflow",
                   "/jobs",
@@ -1703,7 +1713,10 @@ export function App({
                     kind,
                     expectedVersion,
                     goal: "resolve",
-                    instructions: assistantInstructions[displayedIssue.id],
+                    instructions: [
+                      confirmedPlan ? `按已确认计划处理。目标：${confirmedPlan.goal}\n范围：${confirmedPlan.scope}\n验收：${confirmedPlan.acceptanceCriteria.join("\n")}\n复现与背景：${confirmedPlan.reproduction}` : "",
+                      assistantInstructions[displayedIssue.id],
+                    ].filter(Boolean).join("\n"),
                   },
                   "已按确认计划开始实施",
                 )

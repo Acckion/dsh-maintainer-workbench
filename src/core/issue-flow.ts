@@ -32,6 +32,12 @@ export function defaultPlan(issue: Issue): IssuePlan {
     }
   );
 }
+export function readOnlyScope(scope:string):boolean {
+  return /不(?:修改文件|改文件|实施修复|实施变更)|仅.{0,12}(?:只读|整理.*信息)|read[- ]only|do not (?:modify|edit)/i.test(scope);
+}
+export function unknownFact(value:string):boolean {
+ return !value.trim() || /尚未提供|尚未记录|无法复现|未能复现|待(?:报告者|补充|确认)|未知|不清楚|暂不清楚|not (?:provided|known|reproducible)|unknown/i.test(value);
+}
 export function planBlocker(issue: Issue, kind: JobKind): string | undefined {
   const plan = issue.plan;
   if (!["fix", "docs"].includes(kind)) return;
@@ -41,6 +47,7 @@ export function planBlocker(issue: Issue, kind: JobKind): string | undefined {
       : issue.analysis?.category === "feature"
         ? "功能请求实施前，请先保存需求目标、范围和验收条件，并记录维护者取舍。"
         : undefined;
+  if (readOnlyScope(plan.scope)) return "此计划仅授权只读调查，不能进入修复或文档修改；请先调查，实施需确认新范围。";
   if (plan.category === "question")
     return "使用提问请先准备答复；若需代码变更，请先明确转换后的事项类型。";
   if (plan.decision !== "accepted")
@@ -49,7 +56,7 @@ export function planBlocker(issue: Issue, kind: JobKind): string | undefined {
     return "实施前请补齐目标和至少一项验收条件。";
   if (
     plan.category === "bug" &&
-    (!plan.reproduction || !plan.expected || !plan.actual)
+    (unknownFact(plan.reproduction) || unknownFact(plan.expected) || unknownFact(plan.actual))
   )
     return "缺陷实施前请记录复现条件、预期和实际行为；不能复现时先调查。";
   if (plan.category === "docs" && kind === "fix")
@@ -115,6 +122,7 @@ export function issuePromptContext(issue: Issue): unknown {
           waits: processing.waits.filter((w) => w.state === "open").slice(-12),
         }
       : undefined,
+    providedInputs: processing?.waits.filter(w=>w.targetFingerprint===processing.sourceFingerprint && !['cancelled','superseded'].includes(w.state) && w.answers).slice(-3).map(w=>({waitId:w.id,sourceRunId:w.requestedByRunId,questions:w.questions?.slice(0,8),answers:Object.fromEntries(Object.entries(w.answers ?? {}).slice(0,8).map(([id,a])=>[id,{...a,value:a.value.slice(0,500)}])),coverage:"最多最近3个请求、每项8个字段、每个值500字符；完整资料保存在输入记录中",note:'用户提供的资料状态，未知项尚未解决；这些答复不是测试或运行验证证据'})),
     informationRequests: selected.map((request) => ({
       ...request,
       questions: request.questions.slice(0, 8),

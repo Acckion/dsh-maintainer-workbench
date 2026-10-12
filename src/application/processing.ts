@@ -4,7 +4,7 @@ import type { Store } from "../core/store.ts";
 import type { ProcessingWait } from "../domain/processing.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 
-import { inputRequestSchema } from "../domain/input.ts";
+import { inputRequestSchema, answerStateSchema, meaningfulAnswer, type InputAnswer } from "../domain/input.ts";
 
 export class ProcessingService {
   constructor(private store: Store) {}
@@ -101,7 +101,8 @@ export class ProcessingService {
         type: "user_input",
         state: "open",
         reason: request.reason,
-        requiredFields: request.fields.map((f) => f.id),
+        requiredFields: request.fields.filter(f=>f.required!==false).map((f) => f.id),
+        expectedActor: request.fields.every(f=>f.actor==="reporter") ? this.store.issues().find(i=>i.id===issueId)?.author : "maintainer",
         questions: request.fields,
         targetFingerprint: state.sourceFingerprint,
         requestedByRunId: runId,
@@ -127,6 +128,7 @@ export class ProcessingService {
     waitId: string,
     values: Record<string, string>,
     expectedVersion: number,
+    dispositions: Record<string, InputAnswer["state"]> = {},
   ): void {
     this.store.transaction(() => {
       this.assertVersion(issueId, expectedVersion);
@@ -136,29 +138,36 @@ export class ProcessingService {
       );
       if (!wait || wait.state !== "open")
         throw new Error("输入请求不存在或已结束");
-      const parsed = z.record(z.string().trim().min(1).max(4000)).parse(values);
-      if (
-        Object.keys(parsed).some(
-          (key) => !wait.requiredFields?.includes(key),
-        ) ||
-        wait.requiredFields?.some((key) => !parsed[key])
-      )
-        throw new Error("请完整填写此输入请求的字段");
+      const parsed = z.record(z.string().trim().max(4000)).parse(values);
+      const states = z.record(answerStateSchema).parse(dispositions);
+      const fieldIds = new Set(wait.questions?.map(q=>q.id) ?? wait.requiredFields ?? []);
+      if([...Object.keys(parsed),...Object.keys(states)].some(key=>!fieldIds.has(key)))
+        throw new Error("请完整填写此输入请求的字段，不能提交其他字段");
+      const answers:Record<string,InputAnswer>={...wait.answers};
+      for(const key of new Set([...Object.keys(parsed),...Object.keys(states)])) {
+        const value=parsed[key] ?? answers[key]?.value ?? "";
+        const state=states[key] ?? (value ? "provided" : answers[key]?.state ?? "unknown");
+        if(value || states[key]) answers[key]={value,state};
+      }
+      if(!Object.keys(answers).length) throw new Error("请提供资料或记录未知、无法提供状态");
+      const complete=(wait.requiredFields ?? []).every(key=>answers[key] && meaningfulAnswer(answers[key]));
       const record = {
         id: randomUUID(),
         waitId,
-        values: parsed,
+        values: Object.fromEntries(Object.entries(answers).map(([key,a])=>[key,a.value])),
+        answers,
         at: new Date().toISOString(),
       };
       this.store.processing.dispatch(
         issueId,
         {
-          type: "input.submitted",
+          type: complete ? "input.submitted" : "input.recorded",
+          answers,
           waitId,
           targetFingerprint: wait.targetFingerprint,
         },
         "user",
-        `input-response:${waitId}`,
+        `input-response:${record.id}`,
         expectedVersion,
       );
       this.store.db

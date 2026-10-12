@@ -11,6 +11,7 @@ import {git} from '../src/core/git.ts';
 import { Store } from '../src/core/store.ts';
 import { Workbench, revision } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
+import { artifactSchemas, asAnalysis } from '../src/core/artifacts.ts';
 import { planInputKey } from '../src/core/change-plan.ts';
 import { handler, localRejection } from '../src/server/http.ts';
 import { seedFixture, fixtureRunner, fixtureAnalysis } from '../tests/support/fixtures.ts';
@@ -24,10 +25,18 @@ try {
     const github = new GitHub('', async () => { throw Error('Unexpected external request'); });
     const w = new Workbench(store, dir, fixtureRunner, github, false), repo = store.repos()[0];
     const planned = {...store.issues()[0],id:`${repo.id}#140`,number:140,title:'Workflow fixture',url:'https://github.com/fixture/queue/issues/140'};
-    store.put('issues',{...planned,orchestration:{draft:{category:'feature',goal:'Fixture orchestrated sync',scope:'Sync only',reproduction:'',expected:'',actual:'',acceptanceCriteria:['Offline operation queues'],route:'fix',missingInfo:[],sources:[{field:'goal',source:planned.url,detail:'Fixture issue requirement'}],inputKey:planInputKey(planned,repo),generatedAt:new Date().toISOString()}}});
-    // Store assigns the new processing identity; bind the fixture plan after insertion.
-    const savedPlanned=store.get('issues',planned.id);
-    store.put('issues',{...savedPlanned,orchestration:{...savedPlanned.orchestration,draft:{...savedPlanned.orchestration.draft,inputKey:planInputKey(savedPlanned,repo)}}});
+    store.put('issues',planned);
+    store.put('issues',{...store.get('issues',planned.id),orchestration:{draft:{category:'feature',goal:'Fixture orchestrated sync',scope:'Sync only',reproduction:'',expected:'',actual:'',acceptanceCriteria:['Offline operation queues'],route:'fix',missingInfo:[],sources:[{field:'goal',source:planned.url,detail:'Fixture issue requirement'}],inputKey:planInputKey(store.get('issues',planned.id),repo),generatedAt:new Date().toISOString()}}});
+    const proposed={...store.issues()[0],id:'fixture/queue#129',number:129,title:'Fixture sourced plan'};store.put('issues',proposed);
+    const proposedItem=store.get('issues',proposed.id);
+    store.put('issues',{...proposedItem,orchestration:{draft:{category:'docs',goal:'Fixture sourced docs',scope:'README only',reproduction:'',expected:'',actual:'',acceptanceCriteria:['No broken links'],route:'docs',sources:[{field:'goal',source:proposedItem.url,detail:'Fixture explicit request'}],missingInfo:[],inputKey:planInputKey(proposedItem,repo),generatedAt:new Date().toISOString()}}});
+    const confirmationRequest={reason:'Confirm plan before execution',fields:[{id:'confirm_plan',question:'是否确认按本计划草稿实施：仅修改 README？'}]};
+    const planningReport=artifactSchemas.triage.parse({schemaVersion:1,stage:'triage',summary:'Fixture sourced plan ready',coverage:'Fixture issue',evidence:[],nextSteps:[],responseDraft:'',category:'docs',priority:'P3',labels:[],module:'docs',impact:'docs',missingInfo:[],duplicateOf:null,duplicateReason:'',route:'decision',routeReason:'Confirm plan',planDraft:store.get('issues',proposed.id).orchestration.draft,inputRequest:confirmationRequest});
+    const planningJob={id:'plan-confirmation-waiting',caseId:proposedItem.processing.id,repoId:repo.id,issueId:proposed.id,issueSnapshot:proposedItem,kind:'triage',status:'waiting_input',revision:revision(proposedItem,repo,'triage'),baseSha:repo.headSha,artifact:planningReport,result:asAnalysis(planningReport),attempt:1,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    store.put('jobs',planningJob);
+    w.processing.requestInput(proposed.id,confirmationRequest,planningJob.id);
+    assert.equal(w.orchestration.recoverPlanConfirmation(planningJob.id),true);
+    assert.equal(store.get('issues',proposed.id).plan,undefined);
     const pr = { ...store.issues()[3], type: 'pr', headSha: 'b'.repeat(40), prBaseSha: repo.headSha }; store.put('issues', pr);
     const artifact = { schemaVersion: 1, stage: 'review', summary: 'Fixture review', coverage: 'Fixture only', evidence: [], nextSteps: [], responseDraft: '', verdict: 'changes_requested', blockers: [], findings: [{ id: 'f1', title: 'Fixture regression', severity: 'P1', path: 'sum.ts', line: 1, trigger: 'addition', evidence: 'wrong result', recommendation: 'fix addition' }] };
     const job = { id: 'review-current', repoId: repo.id, issueId: pr.id, issueSnapshot: pr, kind: 'review', status: 'awaiting_review', revision: revision(pr, repo, 'review'), baseSha: pr.headSha, artifact, result: fixtureAnalysis(pr, 'review'), attempt: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), prContext: { headSha: pr.headSha, baseSha: pr.prBaseSha, headRef: 'feature', baseRef: 'main', headRepo: repo.fullName, draft: false, merged: false, mergeable: true, checks: [], reviews: [], warnings: [] }, handoff: [{ id: 'review-old', kind: 'review', revision: 'old', artifact }], findingFollowups: [{ sourceJobId: 'review-old', findingId: 'f1', status: 'unverified', evidence: 'Old finding needs current-version evidence' }] };
@@ -57,7 +66,7 @@ try {
     const cleanupPath=join(dir,'cleanup-repo');await mkdir(cleanupPath);await git(cleanupPath,['init','-b','main']);await writeFile(join(cleanupPath,'README.md'),'Cleanup fixture\n');await git(cleanupPath,['add','.']);await git(cleanupPath,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
     const cleanupSha=await git(cleanupPath,['rev-parse','HEAD']),cleanupRepo={...repo,id:'fixture/cleanup',fullName:'fixture/cleanup',mode:'local',localKind:'git',localPath:cleanupPath,headSha:cleanupSha,profile:{...repo.profile,revision:cleanupSha}};
     store.put('repos',cleanupRepo);const cleanupIssue={...store.issues()[0],id:'fixture/cleanup:maintenance',repoId:cleanupRepo.id,origin:'repository',number:0,title:'Cleanup fixture',url:''};store.put('issues',cleanupIssue);
-    const cleanupId=w.enqueue([cleanupIssue.id],'investigate').created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
+    const cleanupId=w.enqueue([cleanupIssue.id],'investigate',{supplementalInfo:'仅调查临时清理测试仓库，收集工作区证据；不修改或发布文件'}).created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
     const api = handler(w, localRejection), files = { '/': ['preview.html', 'text/html'], '/app.js': ['app.js', 'application/javascript'], '/app.css': ['app.css', 'text/css'] };
     const server = createServer(async (req, res) => {
       if (req.url?.startsWith('/maintainer/api')) return api(req, res);
@@ -133,6 +142,7 @@ try {
       await page.getByRole('button',{name:'确认计划并开始实施',exact:true}).click();
       await page.getByText('已按确认计划开始实施',{exact:true}).waitFor();
       assert.equal(store.jobs().find(item => item.kind === 'fix')?.issueSnapshot.plan?.goal, 'Fixture offline sync');
+      assert.match(store.jobs().find(item => item.kind === 'fix').instructions,/Fixture offline sync[\s\S]*Sync only[\s\S]*Offline operation queues/);
 
       await openIssue('fixture/queue#140');
       await selectPanel('Plan');
@@ -166,12 +176,37 @@ try {
       await page.getByText('已开始重新评估补充信息', { exact: true }).waitFor();
       assert.equal(store.get('issues','fixture/queue#131').informationRequests[0].state,'fulfilled');
 
+      await openIssue('fixture/queue#129');
+      await selectPanel('Plan');
+      await page.getByText('Fixture sourced docs',{exact:true}).waitFor();
+      assert.equal(await page.getByText(confirmationRequest.fields[0].question,{exact:true}).count(),0);
+      assert.equal(await page.getByRole('button',{name:'确认并开始',exact:true}).count(),1);
+      assert.equal(await page.getByRole('heading',{name:'尚未分析',exact:true}).count(),0);
+      assert.equal(await page.getByText('点击“开始处理”整理现有材料和建议。',{exact:true}).count(),0);
+      await page.getByRole('button',{name:'修改建议',exact:true}).click();
+      await page.getByRole('region',{name:'处理建议与进度',exact:true}).getByLabel('维护目标',{exact:true}).fill('Fixture sourced docs revised');
+      await page.waitForFunction(async()=>{const r=await fetch('/maintainer/api/item-draft?id=fixture%2Fqueue%23129');return (await r.json()).plan?.goal==='Fixture sourced docs revised';});
+      assert.equal(store.get('issues',proposed.id).plan,undefined);
+      await page.reload();await page.getByRole('button',{name:/^Issues(?: \d+)?$/}).click();await openIssue('fixture/queue#129');
+      await selectPanel('Plan');
+      await page.getByRole('region',{name:'处理建议与进度',exact:true}).getByText('Fixture sourced docs revised',{exact:true}).waitFor();
+      await page.screenshot({path:join(dir,`workflow-plan-${width}.png`),fullPage:true});
+      await page.getByRole('button',{name:'确认并开始',exact:true}).click();
+      await page.getByText('已确认计划，系统将连续执行并整理最终审核',{exact:true}).waitFor();
+      assert.equal(store.get('issues',proposed.id).orchestration.run.status,'running');
+      assert.equal(store.processing.current(proposed.id).planning.run.id, store.get('issues',proposed.id).orchestration.run.id);
+      assert.equal(JSON.parse(store.db.prepare('SELECT data FROM issues WHERE id=?').get(proposed.id).data).orchestration, undefined);
+      await selectPanel('Work');
+      await page.getByText('处理记录与操作追踪',{exact:true}).click();await page.getByText('处理状态与事件历史',{exact:true}).click();
+      await page.getByRole('heading',{name:'此周期的处理计划',exact:true}).waitFor();
+      await page.getByText('处理计划与进度已保存',{exact:false}).first().waitFor();
+
       await openIssue('fixture/queue#132');
       assert.equal(await page.getByRole('button',{name:'根据补充信息继续',exact:true}).count(),0);
-      assert.equal(await page.getByRole('button',{name:'保存补充输入',exact:true}).isDisabled(),true);
+      assert.equal(await page.getByRole('button',{name:'保存资料与未解决项',exact:true}).isDisabled(),true);
       await page.getByLabel('Expected queue behavior?',{exact:true}).fill('Keep queue order');
-      await page.getByRole('button',{name:'保存补充输入',exact:true}).click();
-      await page.getByText('已保存补充输入，可继续处理',{exact:true}).waitFor();
+      await page.getByRole('button',{name:'保存资料与未解决项',exact:true}).click();
+      await page.getByText('已保存资料；必需信息未齐备时等待保留',{exact:true}).waitFor();
       assert.equal(store.processing.current(inputIssue.id).waits.find(wait=>wait.id===inputWait.id).state,'satisfied');
       assert.equal(store.jobs().filter(item=>item.issueId===inputIssue.id).length,1);
       await page.getByRole('button',{name:'根据补充信息继续',exact:true}).click();
@@ -244,7 +279,8 @@ try {
       await page.screenshot({ path: join(dir, `maintenance-${width}.png`), fullPage: true });
       await page.getByRole('button',{name:'全局设置',exact:true}).click();
       await page.getByRole('button',{name:'工作区',exact:true}).click();
-      await page.getByRole('heading',{name:'任务隔离目录',exact:true}).waitFor();
+      await page.getByRole('heading',{name:'事项工作区与会话',exact:true}).waitFor();
+      await page.locator('.mw-item-resources').filter({hasText:'Cleanup fixture'}).locator(':scope > summary').click();
       await page.getByRole('button',{name:'检查与预览',exact:true}).click();
       await page.getByLabel('工作区处置预览',{exact:true}).waitFor();
       await page.getByRole('button',{name:'确认清理此工作区',exact:true}).click();

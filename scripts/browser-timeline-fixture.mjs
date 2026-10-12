@@ -73,6 +73,8 @@ try {
       updatedAt: new Date().toISOString(),
       result: result(kind),
       engine: "fixture",
+      sessionId: `session-${id}`,
+      worktree: `/fixture/worktrees/${id}`,
       prContext: {
         headSha: item.headSha,
         baseSha: repo.headSha,
@@ -436,12 +438,12 @@ try {
         flow.getByRole("button", { name: "根据补充信息继续", exact: true }),
       ).toHaveCount(0);
       await expect(
-        panel.getByRole("button", { name: "保存补充输入", exact: true }),
+        panel.getByRole("button", { name: "保存资料与未解决项", exact: true }),
       ).toBeDisabled();
       await page.evaluate(() => document.activeElement?.blur());
       await expect(
         panel.getByRole("region", { name: "处理进度", exact: true }),
-      ).toContainText("需要你补充信息");
+      ).toContainText("需要补充资料");
       await page.screenshot({
         path: join(root, `timeline-input-${width}.png`),
         fullPage: true,
@@ -450,7 +452,7 @@ try {
         .getByLabel("是否将联动验证纳入范围？", { exact: true })
         .fill("先核对证据，不修改生产代码");
       await page
-        .getByRole("button", { name: "保存补充输入", exact: true })
+        .getByRole("button", { name: "保存资料与未解决项", exact: true })
         .click();
       await expect(
         flow.getByRole("button", { name: "根据补充信息继续", exact: true }),
@@ -506,6 +508,16 @@ try {
         path: join(root, `timeline-attempt-history-${width}.png`),
         fullPage: true,
       });
+      const resources = flow.locator('.mw-item-resources');
+      await resources.locator(':scope > summary').click();
+      assert.ok(await resources.locator('.mw-resource-row').count() >= 3);
+      await resources.locator('.mw-stage-resources').first().locator(':scope > summary').click();
+      await resources.getByText('隔离工作区路径', {exact:true}).first().click();
+      await expect(resources).toContainText('/fixture/worktrees/timeline-preflight');
+      await resources.getByRole('button', {name:'查看执行记录',exact:true}).first().click();
+      await expect(panel).toContainText('正在查看历史');
+      assert.equal(await panel.getByRole('button',{name:'接受此报告',exact:true}).count(),0);
+      await page.screenshot({path:join(root,`item-resources-${width}.png`),fullPage:true});
       // New source cycle: archived attempts remain readable, with all write controls hidden.
       store.put("issues", { ...store.get("issues", item.id), state: "closed" });
       store.put("issues", {

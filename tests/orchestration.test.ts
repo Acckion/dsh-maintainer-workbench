@@ -870,3 +870,61 @@ test("confirmation rejects a stale case version before granting authorization", 
     await wb.close();
   }
 });
+
+test("explicit continuation of an expired recovered docs report renews budget and queues validation without reimplementation", async () => {
+  const {store,wb,issue}=setup();
+  try {
+    wb.orchestration.start(issue.id,issue.orchestration!.draft!.inputKey,accept);
+    const job=store.jobs()[0];
+    const artifact=artifactSchemas.docs.parse({...common,stage:'docs',changes:['README added'],acceptanceCriteria:['docs'],limitations:[],tests:[]});
+    store.put('jobs',{...job,status:'awaiting_review',formatOnly:true,artifact,result:asAnalysis(artifact)});
+    const current=store.issues()[0],run=current.orchestration!.run!;
+    store.put('issues',{...current,orchestration:{...current.orchestration,run:{...run,deadlineAt:new Date(0).toISOString(),maxSteps:1}}});
+    wb.orchestration.completed(store.jobs()[0]);
+    assert.equal(store.jobs().length,1);
+    assert.equal(store.issues()[0].orchestration!.run!.status,'blocked');
+    wb.orchestration.reconcile();
+    assert.equal(store.jobs().length,1);
+    assert.equal(store.audits().filter(a=>a.action==='workflow.budget_renewed').length,0);
+    const result=wb.orchestration.resume(issue.id);
+    const validation=store.get<Job>('jobs',result.created[0])!;
+    assert.equal(validation.kind,'validate');assert.equal(validation.sourceJobId,job.id);
+    assert.equal(store.jobs().filter(j=>j.kind==='docs').length,1);
+    const renewed=store.issues()[0].orchestration!.run!;
+    assert.equal(renewed.id,run.id);assert.deepEqual(renewed.plan,run.plan);
+    assert.ok(Date.parse(renewed.deadlineAt)>Date.now());assert.ok(renewed.maxSteps>1);
+    assert.equal(renewed.startedAt,run.startedAt);
+    assert.equal(store.audits().filter(a=>a.action==='workflow.budget_renewed').length,1);
+    assert.throws(()=>wb.orchestration.resume(issue.id));
+  }finally{await wb.close();}
+});
+
+for(const entry of ['job','workflow'] as const) test(`expired failed task can explicitly retry through ${entry} with a renewed bounded budget`,async()=>{
+ const {store,wb,issue}=setup();
+ try{
+  wb.orchestration.start(issue.id,issue.orchestration!.draft!.inputKey,accept);
+  const first=store.jobs()[0];store.put('jobs',{...first,status:'failed',error:'format failed'});wb.orchestration.completed(store.jobs()[0]);
+  const current=store.issues()[0],run=current.orchestration!.run!;
+  store.put('issues',{...current,orchestration:{...current.orchestration,run:{...run,deadlineAt:new Date(0).toISOString(),maxSteps:1}}});
+  const result=entry==='job'?wb.retry(first.id):wb.orchestration.retry(issue.id);
+  assert.equal(result.created.length,1);
+  const renewed=store.issues()[0].orchestration!.run!;
+  assert.equal(renewed.currentJobId,result.created[0]);assert.ok(Date.parse(renewed.deadlineAt)>Date.now());assert.ok(renewed.maxSteps>1);
+  assert.equal(store.get<Job>('jobs',first.id)!.status,'failed');
+  assert.throws(()=>wb.retry(first.id),/当前计划/);
+ }finally{await wb.close();}
+});
+
+for(const change of ['version','plan','cycle'] as const) test(`budget renewal rejects ${change} drift before enqueuing a retry`,async()=>{
+ const {store,wb,issue}=setup();
+ try{
+  wb.orchestration.start(issue.id,issue.orchestration!.draft!.inputKey,accept);
+  const first=store.jobs()[0];store.put('jobs',{...first,status:'failed'});wb.orchestration.completed(store.jobs()[0]);
+  const current=store.issues()[0];
+  if(change==='version')store.put('issues',{...current,body:current.body+' changed'});
+  if(change==='plan')store.put('issues',{...current,plan:{...current.plan!,goal:'changed'}});
+  if(change==='cycle'){store.put('issues',{...current,state:'closed'});store.put('issues',{...store.issues()[0],state:'open'});}
+  assert.throws(()=>wb.retry(first.id));assert.equal(store.jobs().length,1);
+  assert.equal(store.audits().filter(a=>a.action==='workflow.budget_renewed').length,0);
+ }finally{await wb.close();}
+});

@@ -124,12 +124,14 @@ export function SettingsView({
   panel = "all",
   changed,
   hostWorkspaces,
+  openSession,
   retryVersion = 0,
 }: {
   scope: "global" | "repository";
   state: Pick<Snapshot, "settings" | "capabilities"> & { repos?: Snapshot["repos"] };
   panel?: "all" | "models" | "automation" | "execution" | "connections" | "workspaces";
   hostWorkspaces?: HostWorkspaces;
+  openSession?: (id:string)=>void;
   retryVersion?: number;
   changed?: (dirty: boolean) => void;
   repoId: string;
@@ -317,7 +319,7 @@ export function SettingsView({
 
         </form>
       )}
-      {scope === "global" && (panel === "all" || panel === "workspaces") && <WorkspacesPanel host={hostWorkspaces} />}
+      {scope === "global" && (panel === "all" || panel === "workspaces") && <WorkspacesPanel host={hostWorkspaces} openSession={openSession} />}
     </div>
   );
 }
