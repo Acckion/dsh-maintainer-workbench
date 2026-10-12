@@ -1,3 +1,10 @@
+import {
+  manualSource,
+  scopeResolved,
+  stepResolved,
+  stepDisposition,
+} from "./manual.ts";
+import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
@@ -53,6 +60,19 @@ export function stageBlocker(
     issue.type !== "pr"
   )
     return "PR 审查只能选择 Pull Request";
+  if (
+    ["fix", "docs"].includes(kind) &&
+    !scopeResolved(issue) &&
+    issue.plan?.decision === "accepted" &&
+    issue.processing?.planSourceFingerprint &&
+    issue.processing.planSourceFingerprint !==
+      issue.processing.sourceFingerprint
+  )
+    return "输入已变化，请重新确认目标、范围与验收条件";
+  if (stepDisposition(issue.processing, kind)?.mode === "takeover")
+    return "此步骤由用户手动完成；重新打开后可交给 Agent";
+  if (stepResolved(issue.processing, kind)) return "用户已跳过或手动完成此步骤";
+  return undefined;
 }
 
 /** The server attaches this projection; UI renders it without inventing transitions. */
@@ -71,11 +91,13 @@ export function availableActions(
         ? "preflight"
         : "triage";
   else if (job.artifactState === "stale")
-    primary = issue.origin
-      ? "investigate"
-      : issue.type === "pr"
-        ? "preflight"
-        : "triage";
+    primary = scopeResolved(issue)
+      ? job.kind
+      : issue.origin
+        ? "investigate"
+        : issue.type === "pr"
+          ? "preflight"
+          : "triage";
   else if (artifact?.stage === "triage") {
     primary =
       artifact.route === "implement"
@@ -154,6 +176,22 @@ export function availableActions(
   )
     primary = undefined;
   const inputs = [...history.filter(j => j.id !== job?.id), ...(job ? [job] : [])];
+  const cursor = issue.processing?.manualCursor;
+  if (cursor)
+    primary =
+      stepDisposition(issue.processing, cursor)?.mode === "takeover"
+        ? undefined
+        : ["decision", "track"].includes(cursor)
+          ? undefined
+          : (cursor as JobKind);
+  const revoked = !!job && !!issue.processing?.revokedRunIds?.includes(job.id);
+  const validSource =
+    !revoked &&
+    job?.result &&
+    job.artifactState !== "stale" &&
+    ["completed", "awaiting_review", "approved"].includes(job.status)
+      ? job
+      : undefined;
   const kinds: JobKind[] =
     issue.type === "pr"
       ? ["preflight", "review", "ci", "investigate", "fix", "docs", "validate"]
@@ -174,7 +212,7 @@ export function availableActions(
     validate: "验证改动",
   };
   const stages = kinds.map((kind) => {
-    const source = stageSource(issue, kind, inputs);
+    const source = cursor ? manualSource(issue, history, kind) : stageSource(issue, kind, inputs);
     const blockers = [
       stageBlocker(issue, kind, source),
       history.some((j) => j.kind === kind && ["running", "queued"].includes(j.status))
@@ -200,7 +238,11 @@ export function availableActions(
       enabled: true,
       blockedReasons: [],
     });
-  else if (job && ["failed", "cancelled", "rejected"].includes(job.status))
+  else if (
+    !cursor &&
+    job &&
+    ["failed", "cancelled", "rejected"].includes(job.status)
+  )
     controls.push({
       kind: "retry",
       runId: job.id,

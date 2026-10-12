@@ -1,3 +1,4 @@
+import { withManualContext, stepResolved } from "../workflow/manual.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {defaultTriageMaxTokens} from '../core/output-budget.ts';
@@ -170,6 +171,7 @@ export class TaskService extends ServiceBase {
           .find(
             (j) =>
               (!j.caseId || j.caseId === issue.processing?.id) &&
+              !issue.processing?.revokedRunIds?.includes(j.id) &&
               j.workflowRunId === options.workflowRunId &&
               j.sourceJobId === options.sourceJobId &&
               (j.instructions ?? "") === (options.instructions ?? "") &&
@@ -248,7 +250,7 @@ export class TaskService extends ServiceBase {
           goalId: options.goal ? (options.goalId ?? id) : undefined,
           handoff,
           sourceJobId: options.sourceJobId,
-          instructions: options.instructions?.slice(0, 8000),
+          instructions: withManualContext(options.instructions?.slice(0, 8000), issue),
           supplementalInfo: options.supplementalInfo?.slice(0, 8000),
           id,
           caseId: this.store.processing.current(issue.id)?.id,
@@ -458,9 +460,10 @@ export class TaskService extends ServiceBase {
         )
           throw new Error(checked.blockers.join("；"));
       }
-      await assertReviewEvidence(job);
+      const item = this.store.get<Issue>("issues", job.issueId)!;
+      if (!stepResolved(item.processing, "review")) await assertReviewEvidence(job);
       const validation = validationAcceptance(
-        job,
+        { ...job, issueSnapshot: { ...job.issueSnapshot, processing: item.processing } },
         this.store.jobs(),
         (candidate) => {
           const issue = this.store.get<Issue>("issues", candidate.issueId);

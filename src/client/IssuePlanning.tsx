@@ -19,11 +19,13 @@ export function IssuePlanning({
   busy,
   act: perform,
   start,
+  informationOnly = false,
 }: {
   issue: Issue;
   job?: Job;
   busy: boolean;
   act: WorkflowAction;
+  informationOnly?: boolean;
   start?: (kind: "fix" | "docs" | "investigate", version?: number, confirmedPlan?: IssuePlan) => Promise<unknown>;
 }) {
   const act: WorkflowAction = (path, data, message) =>
@@ -44,12 +46,6 @@ export function IssuePlanning({
     }
   }, [ready]);
   const [plan, setPlan] = useState(defaultPlan(issue));
-  const [planOpen, setPlanOpen] = useState(
-    !!issue.plan || issue.analysis?.category === "feature",
-  );
-  useEffect(() => {
-    setPlanOpen(!!issue.plan || issue.analysis?.category === "feature");
-  }, [issue.id]);
   const [questions, setQuestions] = useState("");
   const [waitingFor, setWaitingFor] = useState(issue.author);
   const [askedAt, setAskedAt] = useState("");
@@ -81,7 +77,7 @@ export function IssuePlanning({
     setAnswer("");
     setAskedAt("");
   }, [issue.id]);
-  const suggestedKind = readOnlyScope(plan.scope) || (plan.category==='bug' && unknownFact(plan.reproduction)) ? 'investigate' : plan.category==='docs'?'docs':'fix';
+  const suggestedKind = readOnlyScope(plan.scope) || (plan.category==='bug' && plan.reproductionMode === 'required' && unknownFact(plan.reproduction)) ? 'investigate' : plan.category==='docs'?'docs':'fix';
   const active =
     issue.informationRequests?.filter((request) =>
       ["asked", "reply_received"].includes(request.state),
@@ -107,177 +103,200 @@ export function IssuePlanning({
   );
   return (
     <section aria-label="事项类型与补充信息" className="mw-issue-planning">
-      <p className="mw-muted">此处编辑的是本机草稿；确认后才更新正式计划。</p>
+      {!informationOnly && (
+        <p className="mw-muted">此处编辑的是本机草稿；确认后才更新正式计划。</p>
+      )}
       {error && <p role="alert">{error}</p>}
-      <details
-        open={true}
-        onToggle={(event) => setPlanOpen(event.currentTarget.open)}
-      >
-        <summary>事项类型、目标与验收</summary>
-        <label>
-          处理类型
-          <select
-            aria-label="处理类型"
-            value={plan.category}
-            disabled={busy}
-            onChange={(event) =>
-              edit("category", event.target.value as IssuePlan["category"])
-            }
-          >
-            {Object.entries(categoryNames).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          {plan.category === "question" ? "需要回答的问题" : "维护目标"}
-          <textarea
-            aria-label={
-              plan.category === "question" ? "需要回答的问题" : "维护目标"
-            }
-            value={plan.goal}
-            rows={2}
-            onChange={(event) => edit("goal", event.target.value)}
-          />
-        </label>
-        {plan.category === "bug" && (
-          <><p className="mw-muted">已有复现资料：{plan.reproduction || '报告者尚未提供'}。未知资料可以先调查，不要求维护者编写复现过程。</p>
-          <details><summary>修订复现资料、预期与实际行为</summary>
-            <label>
-              复现条件与步骤
-              <textarea
-                aria-label="复现条件与步骤"
-                rows={3}
-                value={plan.reproduction}
-                onChange={(event) => edit("reproduction", event.target.value)}
-              />
-            </label>
-            <label>
-              预期行为
-              <textarea
-                aria-label="预期行为"
-                rows={2}
-                value={plan.expected}
-                onChange={(event) => edit("expected", event.target.value)}
-              />
-            </label>
-            <label>
-              实际行为
-              <textarea
-                aria-label="实际行为"
-                rows={2}
-                value={plan.actual}
-                onChange={(event) => edit("actual", event.target.value)}
-              />
-            </label>
-          </details></>
-        )}
-        <label>
-          {plan.category === "docs" ? "文档位置与修改范围" : "实施范围与排除项"}
-          <textarea
-            aria-label={
-              plan.category === "docs"
-                ? "文档位置与修改范围"
-                : "实施范围与排除项"
-            }
-            rows={2}
-            value={plan.scope}
-            onChange={(event) => edit("scope", event.target.value)}
-          />
-        </label>
-        <label>
-          验收条件（每行一项）
-          <textarea
-            aria-label="验收条件（每行一项）"
-            rows={3}
-            value={plan.acceptanceCriteria.join("\n")}
-            onChange={(event) =>
-              edit("acceptanceCriteria", event.target.value.split("\n"))
-            }
-          />
-        </label>
-        <label>
-          维护者取舍
-          <select
-            aria-label="维护者取舍"
-            value={plan.decision}
-            onChange={(event) =>
-              edit("decision", event.target.value as IssuePlan["decision"])
-            }
-          >
-            <option value="proposed">待决定</option>
-            <option value="accepted">接受目标与范围</option>
-            <option value="deferred">暂缓</option>
-          </select>
-        </label>
-        {plan.category !== "question" && blocker && (
-          <p className="mw-callout amber">{blocker}</p>
-        )}
-        <p className="mw-muted">
-          保存新的目标或验收条件会使旧版本产物失效。文档事项可直接进入文档维护。
-        </p>
-        <button
-          className="mw-button primary"
-          disabled={busy || !ready}
-          onClick={() =>
-            void act(
-              "/issue-plan",
-              {
-                issueId: issue.id,
-                plan: {
-                  ...plan,
-                  acceptanceCriteria: lines(plan.acceptanceCriteria.join("\n")),
-                },
-              },
-              "已保存事项类型与验收计划",
-            )
-          }
-        >
-          确认类型与验收计划
-        </button>
-        {start &&
-          !["question"].includes(plan.category) &&
-          plan.decision !== "deferred" && (
-            <button
-              className="mw-button primary"
-              disabled={
-                busy ||
-                !ready ||
-                !!planBlocker(
-                  { ...issue, plan: { ...plan, decision: "accepted" } },
-                  suggestedKind,
-                )
+      {!informationOnly && (
+        <details open={true}>
+          <summary>事项类型、目标与验收</summary>
+          <label>
+            处理类型
+            <select
+              aria-label="处理类型"
+              value={plan.category}
+              disabled={busy}
+              onChange={(event) =>
+                edit("category", event.target.value as IssuePlan["category"])
               }
-              onClick={async () => {
-                const confirmed = {
-                  ...plan,
-                  decision: "accepted" as const,
-                  acceptanceCriteria: lines(plan.acceptanceCriteria.join("\n")),
-                };
-                const saved = await act(
-                  "/issue-plan",
-                  { issueId: issue.id, plan: confirmed },
-                  "已确认计划",
-                );
-                if (saved) {
-                  setPlan(confirmed);
-                  update({ plan: confirmed });
-                  await start(
-                    suggestedKind,
-                    (saved as { version?: number }).version,
-                    confirmed,
-                  );
-                }
-              }}
             >
-              {suggestedKind === "investigate" ? "确认并开始只读调查" : plan.category === "docs"
-                ? "确认并更新文档"
-                : "确认计划并开始实施"}
-            </button>
+              {Object.entries(categoryNames).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {plan.category === "question" ? "需要回答的问题" : "维护目标"}
+            <textarea
+              aria-label={
+                plan.category === "question" ? "需要回答的问题" : "维护目标"
+              }
+              value={plan.goal}
+              rows={2}
+              onChange={(event) => edit("goal", event.target.value)}
+            />
+          </label>
+          {plan.category === "bug" && (
+            <>
+              <label>
+                复现策略
+                <select
+                  aria-label="复现策略"
+                  value={plan.reproductionMode ?? "omit"}
+                  onChange={(e) =>
+                    edit(
+                      "reproductionMode",
+                      e.target.value as IssuePlan["reproductionMode"],
+                    )
+                  }
+                >
+                  <option value="omit">不主动复现（默认）</option>
+                  <option value="best_effort">让 Agent 尝试复现</option>
+                  <option value="required">必须复现后继续</option>
+                </select>
+              </label>
+              <label>
+                复现条件与步骤（可选）
+                <textarea
+                  aria-label="复现条件与步骤"
+                  rows={3}
+                  value={plan.reproduction}
+                  onChange={(event) => edit("reproduction", event.target.value)}
+                />
+              </label>
+              <label>
+                预期行为
+                <textarea
+                  aria-label="预期行为"
+                  rows={2}
+                  value={plan.expected}
+                  onChange={(event) => edit("expected", event.target.value)}
+                />
+              </label>
+              <label>
+                实际行为
+                <textarea
+                  aria-label="实际行为"
+                  rows={2}
+                  value={plan.actual}
+                  onChange={(event) => edit("actual", event.target.value)}
+                />
+              </label>
+            </>
           )}
-      </details>
+          <label>
+            {plan.category === "docs"
+              ? "文档位置与修改范围"
+              : "实施范围与排除项"}
+            <textarea
+              aria-label={
+                plan.category === "docs"
+                  ? "文档位置与修改范围"
+                  : "实施范围与排除项"
+              }
+              rows={2}
+              value={plan.scope}
+              onChange={(event) => edit("scope", event.target.value)}
+            />
+          </label>
+          <label>
+            验收条件（每行一项）
+            <textarea
+              aria-label="验收条件（每行一项）"
+              rows={3}
+              value={plan.acceptanceCriteria.join("\n")}
+              onChange={(event) =>
+                edit("acceptanceCriteria", event.target.value.split("\n"))
+              }
+            />
+          </label>
+          <label>
+            维护者取舍
+            <select
+              aria-label="维护者取舍"
+              value={plan.decision}
+              onChange={(event) =>
+                edit("decision", event.target.value as IssuePlan["decision"])
+              }
+            >
+              <option value="proposed">待决定</option>
+              <option value="accepted">接受目标与范围</option>
+              <option value="deferred">暂缓</option>
+            </select>
+          </label>
+          {plan.category !== "question" && blocker && (
+            <p className="mw-callout amber">{blocker}</p>
+          )}
+          <p className="mw-muted">
+            保存新的目标或验收条件会使旧版本产物失效。文档事项可直接进入文档维护。
+          </p>
+          <button
+            className="mw-button primary"
+            disabled={busy || !ready}
+            onClick={() =>
+              void act(
+                "/issue-plan",
+                {
+                  issueId: issue.id,
+                  plan: {
+                    ...plan,
+                    acceptanceCriteria: lines(
+                      plan.acceptanceCriteria.join("\n"),
+                    ),
+                  },
+                },
+                "已保存事项类型与验收计划",
+              )
+            }
+          >
+            确认类型与验收计划
+          </button>
+          {start &&
+            !["question"].includes(plan.category) &&
+            plan.decision !== "deferred" && (
+              <button
+                className="mw-button primary"
+                disabled={
+                  busy ||
+                  !ready ||
+                  !!planBlocker(
+                    { ...issue, plan: { ...plan, decision: "accepted" } },
+                    plan.category === "docs" ? "docs" : "fix",
+                  )
+                }
+                onClick={async () => {
+                  const confirmed = {
+                    ...plan,
+                    decision: "accepted" as const,
+                    acceptanceCriteria: lines(
+                      plan.acceptanceCriteria.join("\n"),
+                    ),
+                  };
+                  const saved = await act(
+                    "/issue-plan",
+                    { issueId: issue.id, plan: confirmed },
+                    "已确认计划",
+                  );
+                  if (saved) {
+                    setPlan(confirmed);
+                    update({ plan: confirmed });
+                    await start(
+                      suggestedKind,
+                      (saved as { version?: number }).version,
+                      confirmed,
+                    );
+                  }
+                }}
+              >
+                {suggestedKind === "investigate" ? "确认并开始只读调查" : plan.category === "docs"
+                  ? "确认并更新文档"
+                  : "确认计划并开始实施"}
+              </button>
+            )}
+        </details>
+      )}
       <details
         open={informationOpen}
         onToggle={(event) => setInformationOpen(event.currentTarget.open)}

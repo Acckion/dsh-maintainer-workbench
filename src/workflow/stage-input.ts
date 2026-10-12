@@ -1,3 +1,4 @@
+import { scopeResolved, stepResolved } from "./manual.ts";
 import { planBlocker } from "../core/issue-flow.ts";
 import { kindNames, type Issue, type Job, type JobKind } from "../core/types.ts";
 
@@ -34,6 +35,7 @@ export function stageInput(
   history: Job[] = [],
 ): StageInput {
   const missing = stageDependencies(issue, kind).filter(group =>
+    !group.some(stage => stepResolved(issue.processing, stage)) &&
     !history.some(job => group.includes(job.kind) && usableStageResult(issue, job)),
   );
   const warnings = missing.map(group =>
@@ -42,7 +44,7 @@ export function stageInput(
   const reasons = [...warnings];
   const planGap = planBlocker(issue, kind);
   if (planGap) reasons.push(planGap);
-  if (["fix", "docs"].includes(kind) && issue.plan?.decision === "accepted" &&
+  if (!scopeResolved(issue) && ["fix", "docs"].includes(kind) && issue.plan?.decision === "accepted" &&
     issue.processing?.planSourceFingerprint &&
     issue.processing.planSourceFingerprint !== issue.processing.sourceFingerprint)
     reasons.push("输入已变化，请重新确认目标、范围与验收条件，并补充本次执行依据。");

@@ -1,3 +1,4 @@
+import { ManualStepService } from "../application/manual-steps.ts";
 import packageInfo from "../../package.json" with { type: "json" };
 import { IssueService } from "../application/issues.ts";
 import { ProcessingService } from "../application/processing.ts";
@@ -35,6 +36,7 @@ export class Workbench {
   private worker: StageWorker;
   private scheduler: Scheduler;
   readonly processing: ProcessingService;
+  readonly manualSteps: ManualStepService;
   readonly workspaces: WorkspaceService;
   readonly orchestration: Orchestration;
   constructor(
@@ -47,6 +49,7 @@ export class Workbench {
     private hostModels?: () => Promise<HostModelCatalog>,
   ) {
     this.processing = new ProcessingService(store);
+    this.manualSteps = new ManualStepService(this);
     this.orchestration = new Orchestration(this);
     const deps: ServiceDependencies = {
       store,
@@ -341,6 +344,7 @@ export class Workbench {
           repo = repos.get(job.repoId);
         return {
           ...job,
+          issueSnapshot: { ...job.issueSnapshot, processing: issue?.processing },
           artifactState:
             issue &&
             repo &&
@@ -361,16 +365,19 @@ export class Workbench {
           issues.some((issue) => issue.repoId === repo.id) ||
           jobs.some((job) => job.repoId === repo.id),
       ),
-      issues: issues.map((issue) => ({
+      issues: issues.map((issue) => {
+        const progress = this.orchestration.view(issue, [...(histories.get(issue.id) ?? [])].reverse());
+        return {
         ...issue,
-        orchestrationView: this.orchestration.view(issue),
-        processingSuggestion: this.orchestration.view(issue),
+        orchestrationView: progress,
+        processingSuggestion: progress,
         actionsAvailable: availableActions(
           issue,
           histories.get(issue.id)?.[0],
           histories.get(issue.id),
         ),
-      })),
+      };
+      }),
       jobs: jobs.map((job) => ({
         ...job,
         actionsAvailable: items.has(job.issueId)

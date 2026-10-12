@@ -46,7 +46,7 @@ try{for(const width of [1440,390]){
  await planPage.goto(`http://127.0.0.1:${server.address().port}/app`);
  await planPage.locator('[aria-label="选择仓库"]:visible, .mw-mobile-repo select:visible').first().selectOption(original.repoId);
  await planPage.locator('[id="mw-item-'+original.id+'"]').click();
- await planPage.getByRole('button',{name:'调整分类与计划',exact:true}).click();
+ await planPage.getByRole('tab',{name:'处理计划',exact:true}).click();
  await expect(planPage.getByRole('button',{name:'保存资料与未解决项',exact:true})).toBeVisible();
  await expect(planPage.getByRole('button',{name:'保存资料与未解决项',exact:true})).toHaveCount(1);
  await planPage.screenshot({path:join(dir,`plan-input-${width}.png`),fullPage:true});

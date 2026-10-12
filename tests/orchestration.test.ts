@@ -928,3 +928,19 @@ for(const change of ['version','plan','cycle'] as const) test(`budget renewal re
   assert.equal(store.audits().filter(a=>a.action==='workflow.budget_renewed').length,0);
  }finally{await wb.close();}
 });
+
+test("snapshot reads task history once for all items and preserves progress", () => {
+  const store = new Store(":memory:");
+  seedFixture(store);
+  const wb = new Workbench(store, "/private/tmp/maintainer-snapshot-test", undefined, undefined, false);
+  const original = store.jobs.bind(store);
+  let reads = 0;
+  store.jobs = () => { reads++; return original(); };
+  const snapshot = wb.snapshot();
+  assert.equal(reads, 1);
+  for (const issue of snapshot.issues) {
+    assert.deepEqual(issue.orchestrationView, wb.orchestration.view(store.get<Issue>("issues", issue.id)!));
+    assert.deepEqual(issue.processingSuggestion, issue.orchestrationView);
+  }
+  wb.close();
+});

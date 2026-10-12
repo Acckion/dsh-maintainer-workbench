@@ -38,7 +38,7 @@ export function AssistantActions({
   const additionalReasons = stage?.input?.reasons.filter(reason => !stage.input?.warnings.includes(reason)) ?? [];
   const controlButton = control && (
       <button
-        className="mw-button primary"
+        className={`mw-button ${control.kind === "cancel" ? "" : "primary"}`}
         disabled={busy || !control.enabled}
         title={control.blockedReasons.join("；")}
         onClick={() =>
@@ -80,7 +80,7 @@ export function AssistantActions({
     );
   return (
     <>
-      {control?.kind !== "cancel" && controlButton}
+      {controlButton}
       {stage && (
         <div className="mw-stage-launcher">
           <label>
@@ -108,10 +108,9 @@ export function AssistantActions({
           {!!stage.blockedReasons.length && <p className="mw-callout amber">{stage.blockedReasons.join("；")}</p>}
         </div>
       )}
-      {((!projected && job) || control?.kind === "cancel") && <details className="mw-assistant-more">
+      {(!projected && job) && <details className="mw-assistant-more">
         <summary>更多</summary>
         <div>
-          {control?.kind === "cancel" && controlButton}
           {!projected && job &&
           <button className="mw-button" onClick={() => openEvidence(job.id)}>
             查看执行记录

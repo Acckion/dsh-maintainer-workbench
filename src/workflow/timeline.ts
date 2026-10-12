@@ -1,3 +1,4 @@
+import { canonicalStage, mergedDiagnosis, stepDisposition } from "./manual.ts";
 import type { Issue, Job } from "../core/types.ts";
 import type { ProcessingCase, ProcessingEvent } from "../domain/processing.ts";
 import type {
@@ -34,7 +35,7 @@ export function projectTimeline(
   const latest = [...ordered].reverse();
   const currentJob =
     history.find((j) => j.id === state.currentRunId) ??
-    (state.currentRunId ? undefined : latest[0]);
+    (state.currentRunId || state.manualCursor ? undefined : latest[0]);
   // Recommend an existing legal re-review action for evidence-only investigations.
   const sourceReview = history.find(
     (j) => j.id === currentJob?.sourceJobId && j.kind === "review",
@@ -50,7 +51,8 @@ export function projectTimeline(
   }
   const profile = taskProfile(issue, latest);
   const nodes: TimelineNode[] = [];
-  const add = (stage: TimelineStage): TimelineNode => {
+  const add = (inputStage: TimelineStage): TimelineNode => {
+    const stage = canonicalStage(issue, inputStage);
     const existing = nodes.find((n) => n.stage === stage);
     if (existing) return existing;
     const attempts = ordered.filter((j) => j.kind === stage);
@@ -65,6 +67,15 @@ export function projectTimeline(
       attemptIds: attempts.map((j) => j.id),
       waits: [],
       conditions: [],
+      supplements: state.manualSteps?.filter(
+        (r) => r.stage === stage && r.mode === "supplement",
+      ),
+      scopeConfirmation:
+        mergedDiagnosis(issue) &&
+        stage === "investigate" &&
+        ["decision", "accepted", "needs_info", "deferred"].includes(
+          state.phase,
+        ),
       occurredAt: attempts[0]?.createdAt,
     };
     nodes.push(node);
@@ -77,6 +88,9 @@ export function projectTimeline(
   for (const e of events)
     if (e.payload.type === "decision.recorded")
       appearances.push({ stage: "decision", at: e.receivedAt });
+  for (const e of events)
+    if (e.payload.type === "step.manual")
+      appearances.push({ stage: e.payload.record.stage, at: e.receivedAt });
   for (const e of events)
     if (e.payload.type === "publication.confirmed")
       appearances.push({ stage: "track", at: e.receivedAt });
@@ -124,7 +138,13 @@ export function projectTimeline(
   }
   const terminal = ["completed", "cancelled"].includes(state.lifecycle);
   const planDecision =
-    ["decision", "accepted", "needs_info", "deferred"].includes(state.phase) &&
+    (["decision", "accepted", "needs_info", "deferred"].includes(state.phase) ||
+      (mergedDiagnosis(issue) &&
+        currentJob?.kind === "investigate" &&
+        !!currentJob.result &&
+        ["completed", "awaiting_review", "approved"].includes(
+          currentJob.status,
+        ))) &&
     issue.type === "issue" &&
     profile.category !== "question";
   const reviewDecision =
@@ -139,15 +159,21 @@ export function projectTimeline(
         !!currentJob.result)) &&
     !!currentJob &&
     ["completed", "awaiting_review"].includes(currentJob.status);
-  const currentStage: TimelineStage =
-    terminal ||
-    state.phase === "track" ||
-    state.phase === "closed" ||
-    state.phase === "answered"
-      ? "track"
-      : planDecision || reviewDecision || currentJob?.artifactState === "stale"
-        ? "decision"
-        : (currentJob?.kind ?? (issue.type === "pr" ? "preflight" : "triage"));
+  const currentStage: TimelineStage = canonicalStage(
+    issue,
+    state.manualCursor ??
+      (terminal ||
+      state.phase === "track" ||
+      state.phase === "closed" ||
+      state.phase === "answered"
+        ? "track"
+        : planDecision ||
+            reviewDecision ||
+            currentJob?.artifactState === "stale"
+          ? "decision"
+          : (currentJob?.kind ??
+            (issue.type === "pr" ? "preflight" : "triage"))),
+  );
   const current = add(currentStage);
   if (currentJob?.artifactState === "stale" && !terminal)
     Object.assign(current, {
@@ -158,11 +184,12 @@ export function projectTimeline(
   if (!currentJob && current.status === "future") current.result = "待开始";
   if (planDecision && currentJob?.artifactState !== "stale")
     Object.assign(current, {
+      scopeConfirmation: mergedDiagnosis(issue),
       status: issue.plan?.decision === "accepted" ? "saved" : "waiting",
       result:
         issue.plan?.decision === "accepted" ? "范围已确认" : "等待范围确认",
     });
-  if (currentJob && current.stage === currentJob.kind)
+  if (!planDecision && currentJob && current.stage === currentJob.kind)
     Object.assign(current, jobNodeState(currentJob));
   if (reviewDecision)
     Object.assign(current, {
@@ -282,6 +309,20 @@ export function projectTimeline(
         "当前 PR 是 Draft，需核对作者的暂缓条件；审查完成不代表可以合并",
       );
   }
+  for (const node of nodes) {
+    const disposition = stepDisposition(state, node.stage);
+    if (!disposition) continue;
+    node.manual = disposition;
+    if (disposition.mode === "reopen")
+      Object.assign(node, { status: "future", result: "待重新执行" });
+    else if (disposition.mode === "takeover")
+      Object.assign(node, { status: "waiting", result: "等待手动结果" });
+    else
+      Object.assign(node, {
+        status: disposition.mode === "skip" ? "skipped" : "manual",
+        result: disposition.mode === "skip" ? "已跳过" : "手动完成",
+      });
+  }
   const control = actions?.controls?.[0];
   const next = historical
     ? "历史周期仅供查看"
@@ -298,6 +339,17 @@ export function projectTimeline(
               : current.status === "future" && profile.category === "unknown"
                 ? "完成分类后确定后续路径"
                 : "检查阶段结论、覆盖范围与限制，再记录维护者决定";
+  const deliveryJob =
+    state.manualCursor === "track"
+      ? latest.find(
+          (j) =>
+            j.result &&
+            j.artifactState !== "stale" &&
+            ["fix", "docs", "review"].includes(j.kind) &&
+            ["completed", "awaiting_review", "approved"].includes(j.status),
+        )
+      : undefined;
+  if (deliveryJob) current.attemptIds = [deliveryJob.id];
   return {
     issueId: issue.id,
     caseId: state.id,
@@ -305,7 +357,7 @@ export function projectTimeline(
     cycle: state.cycle,
     historical,
     currentNodeId: current.id,
-    currentRunId: currentJob?.id,
+    currentRunId: currentJob?.id ?? deliveryJob?.id,
     profile,
     nodes,
     events: events.slice(-100),

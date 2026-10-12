@@ -1,4 +1,5 @@
 import {blockingGaps, planGaps} from '../domain/gaps.ts';
+import { scopeResolved, stepResolved } from "../workflow/manual.ts";
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { randomUUID } from "node:crypto";
 import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
@@ -175,7 +176,7 @@ export class Orchestration {
     const kind: JobKind = suggested;
     if (!["docs", "fix", "investigate", "review", "triage"].includes(kind))
       throw new Error("当前建议只需准备答复或跟踪，请在事项中处理");
-    if (!plan.goal || !plan.scope || !plan.acceptanceCriteria.length)
+    if (!scopeResolved(issue) && (!plan.goal || !plan.scope || !plan.acceptanceCriteria.length))
       throw new Error("请明确目标、范围及具体验收条件");
     const blocker =
       issue.type === "pr" ? undefined : planBlocker({ ...issue, plan }, kind);
@@ -294,6 +295,7 @@ export class Orchestration {
   completed(job: Job, allowAutoReview = true): void {
     const issue = this.wb.store.get<Issue>("issues", job.issueId);
     if (!issue || ["queued", "running"].includes(job.status)) return;
+    if (issue.processing?.revokedRunIds?.includes(job.id)) return;
     if (job.caseId && job.caseId !== issue.processing?.id) return;
     if (["waiting_input", "waiting_environment"].includes(job.status)) {
       if(['triage','preflight','investigate'].includes(job.kind) && job.result && job.artifact &&
@@ -413,6 +415,7 @@ export class Orchestration {
       return;
     }
     if (job.kind === "docs" || job.kind === "fix") {
+      if (stepResolved(updated.processing, "validate")) { this.schedule(updated, "review", job.id); return; }
       if (!job.patch) {
         this.stop(updated, "blocked", "没有可验证补丁，请检查执行结果");
         return;
@@ -483,6 +486,12 @@ export class Orchestration {
     const maxSteps = Math.max(run.maxSteps, this.wb.store.jobs().filter(j => j.workflowRunId === run.id).length + 6);
     this.wb.store.audit("workflow.budget_renewed", `${issue.id}: 维护者明确恢复当前计划；截止 ${run.deadlineAt} → ${deadlineAt}，步骤上限 ${run.maxSteps} → ${maxSteps}`);
     return { ...run, deadlineAt, maxSteps };
+  }
+  continueManual(id: string, kind: JobKind, sourceJobId?: string) {
+    const issue = this.issue(id), run = issue.orchestration?.run;
+    if (!run || run.status !== "paused") return;
+    this.put(issue, { ...issue.orchestration, run: { ...run, status: "running", reason: "遵守用户阶段决定，继续已授权目标" } });
+    return this.schedule(this.issue(id), kind, sourceJobId);
   }
   replacement(jobId: string, result: { created: string[]; reused: string[] }) {
     const job = this.wb.store.get<Job>("jobs", jobId);
@@ -742,7 +751,7 @@ export class Orchestration {
       }
     }
   }
-  view(issue: Issue): WorkflowProgress {
+  view(issue: Issue, history?: Job[]): WorkflowProgress {
     const repo = this.wb.store.get<import("../core/types.ts").Repo>(
       "repos",
       issue.repoId,
@@ -790,19 +799,10 @@ export class Orchestration {
               : "blocked",
         reason: run.reason,
       };
-    if (
-      this.wb.store
-        .jobs()
-        .some(
-          (j) =>
-            j.issueId === issue.id && ["running", "queued"].includes(j.status),
-        )
-    )
+    const jobs = history ?? this.wb.store.jobs().filter((j) => j.issueId === issue.id);
+    if (jobs.some((j) => ["running", "queued"].includes(j.status)))
       return { status: "running", reason: "系统正在整理材料或执行任务" };
-    const latest = this.wb.store
-      .jobs()
-      .filter((j) => j.issueId === issue.id)
-      .at(-1);
+    const latest = jobs.at(-1);
     if (
       latest?.status === "failed" ||
       (latest?.kind === "validate" &&

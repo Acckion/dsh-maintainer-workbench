@@ -1,6 +1,7 @@
 import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
 import {effectiveOutputTokens} from '../core/output-budget.ts';
+import { withManualContext } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -63,8 +64,11 @@ export class StageWorker extends ServiceBase {
   private understand = (repo: Repo, signal: AbortSignal) =>
     this.hooks.understand(repo, signal);
   async execute(initial: Job, controller: AbortController): Promise<void> {
+    const issue = this.store.get<Issue>("issues", initial.issueId);
     let job = {
       ...initial,
+      issueSnapshot: { ...initial.issueSnapshot, processing: issue?.processing },
+      instructions: issue ? withManualContext(initial.instructions, issue) : initial.instructions,
       status: "running" as const,
       startedAt: new Date().toISOString(),
     } as Job;

@@ -67,7 +67,8 @@
     "test:browser:timeline": "node --import tsx scripts/browser-timeline-fixture.mjs",
     "test:browser:gaps": "node --import tsx scripts/browser-gaps-fixture.mjs",
     "test:browser:repository": "node --import tsx scripts/browser-repository-fixture.mjs",
-    "test:browser:settings": "node --import tsx scripts/browser-settings-fixture.mjs"
+    "test:browser:settings": "node --import tsx scripts/browser-settings-fixture.mjs",
+    "test:browser:manual": "node --import tsx scripts/browser-manual-steps-fixture.mjs"
   },
   "engines": {
     "node": ">=24"

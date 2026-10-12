@@ -161,7 +161,7 @@ test("execution details retain raw session progress and hide empty evidence grou
   assert.match(markup, /来源与执行环境/);
   assert.doesNotMatch(markup, /分析依据 · 0/);
 });
-test("cancel is a secondary menu action preserving the projected control", () => {
+test("cancel is a visible secondary action preserving the projected control", () => {
   const markup = renderToStaticMarkup(
     React.createElement(AssistantActions, {
       issue,
@@ -185,8 +185,8 @@ test("cancel is a secondary menu action preserving the projected control", () =>
       },
     }),
   );
-  assert.match(markup, /<summary>更多<\/summary>/);
-  assert.match(markup, /<div><button[^>]*>停止任务<\/button><\/div>/);
+  assert.match(markup, /<button[^>]*>停止任务<\/button>/);
+  assert.doesNotMatch(markup, /primary|<details|<summary>/);
 });
 
 test("execution detail retains its view when results arrive and surfaces live permission waits without enabling historical prompts", async () => {

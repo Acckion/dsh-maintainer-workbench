@@ -4,6 +4,8 @@ import type { WorkflowActions } from "../workflow/actions.ts";
 
 export type TimelineStage = JobKind | "decision" | "track";
 export type TimelineStatus =
+  | "skipped"
+  | "manual"
   | "saved"
   | "queued"
   | "running"
@@ -28,6 +30,9 @@ export interface TimelineNode {
   result: string;
   attemptIds: string[];
   occurredAt?: string;
+  scopeConfirmation?: boolean;
+  manual?: import("./processing.ts").ManualStepRecord;
+  supplements?: import("./processing.ts").ManualStepRecord[];
   waits: ProcessingWait[];
   conditions: string[];
 }

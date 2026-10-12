@@ -23,7 +23,7 @@ test('read-only/unknown reproduction cannot authorize fixes; all-stage confirmat
  const s=new Store(':memory:');seedFixture(s);const i=s.issues()[0];
  assert.match(planBlocker({...i,plan},'fix')!,/只读/);
  assert.equal(planBlocker({...i,plan},'investigate'),undefined);
- assert.match(planBlocker({...i,plan:{...plan,scope:'只修改启动模块'}},'fix')!,/不能复现/);
+ assert.match(planBlocker({...i,plan:{...plan,scope:'只修改启动模块',reproductionMode:'required'}},'fix')!,/必须复现/);
  const a=artifactSchemas.fix.parse({...common,stage:'fix',gaps:[gap],changes:[],acceptanceCriteria:[],limitations:[],tests:[]});
  const req:InputRequest={reason:'问题',fields:[{id:'confirm',question:'确认实施？',purpose:'plan_confirmation'},{id:'check',gapId:gap.id,question:'文件是什么？',purpose:'information'},{id:'log',question:'失败日志？',purpose:'information',actor:'reporter'}]};
  assert.deepEqual(planningInputRequest(a,req)?.fields.map(f=>f.id),['log']);s.close();

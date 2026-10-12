@@ -18,9 +18,10 @@ test('legacy tasks never start extra agent calls and failed validation never pro
  assert.ok(nextGoalStep({...job,kind:'validate',artifact:validationArtifact('failed')} as Job,issue).pause);
  assert.ok(nextGoalStep({...job,artifactState:'stale'},issue).pause);
 });
-test('investigation stops for human scope acceptance and incomplete bug evidence', () => {
+test('investigation stops for human scope acceptance but reproduction is optional', () => {
  const investigation={...job,kind:'investigate'} as Job;
  assert.equal(nextGoalStep(investigation,issue).next,'fix');
  assert.ok(nextGoalStep(investigation,{...issue,plan:undefined}).pause);
- assert.ok(nextGoalStep(investigation,{...issue,plan:{...issue.plan!,reproduction:''}}).pause);
+ assert.equal(nextGoalStep(investigation,{...issue,plan:{...issue.plan!,reproduction:''}}).next,'fix');
+ assert.ok(nextGoalStep(investigation,{...issue,plan:{...issue.plan!,reproduction:'',reproductionMode:'required'}}).pause);
 });

@@ -1,3 +1,4 @@
+import { stepResolved } from "../workflow/manual.ts";
 import { documentAcceptance } from './document-acceptance.ts';
 import { assertReviewEvidence } from './review-evidence.ts';
 import { createHash } from 'node:crypto';
@@ -9,7 +10,7 @@ import { validationState } from './workflow-state.ts';
 import type { Store } from './store.ts';
 import type { Issue, Job, Repo } from './types.ts';
 
-export interface DeliveryTarget { reviewJobId: string; validationJobId: string; implementationJobId: string; patchSha256: string; baseSha: string; bindingStamp: string }
+export interface DeliveryTarget { reviewJobId: string; validationJobId?: string; implementationJobId: string; patchSha256: string; baseSha: string; bindingStamp: string }
 
 function bindingStamp(store: Store, reviewId: string): string {
   const rows: Job[] = [], seen = new Set<string>();
@@ -26,7 +27,7 @@ function bindingStamp(store: Store, reviewId: string): string {
   }
   const review = rows[0], repo = store.get<Repo>('repos', review.repoId), issue = store.get<Issue>('issues', review.issueId);
   if (!repo || !issue) throw new Error('交接输入已变化');
-  return createHash('sha256').update(JSON.stringify({ rows, repo: [repo.id, repo.fullName, repo.defaultBranch, repo.headSha], issueRevision: revision(issue, repo, review.kind), state: issue.state })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({ rows, repo: [repo.id, repo.fullName, repo.defaultBranch, repo.headSha], issueRevision: revision(issue, repo, review.kind), state: issue.state, manualSteps: issue.processing?.manualSteps })).digest('hex');
 }
 
 /** Synchronous last-moment check: do not let an intervening await publish a revoked approval. */
@@ -38,9 +39,12 @@ export function assertDeliveryCurrent(store: Store, delivery: DeliveryTarget): v
 export async function resolveDelivery(store: Store, repo: Repo, reviewId: string, github = new GitHub(), options: { allowPublishedHead?: boolean } = {}): Promise<DeliveryTarget> {
   const read = (id: string) => { const job = store.get<Job>('jobs', id); if (!job) throw new Error('交接来源不存在'); return job; };
   const review = read(reviewId);
-  if (review.kind !== 'review' || review.status !== 'approved' || review.artifact?.stage !== 'review') throw new Error('独立审查尚未批准，不能交接发布');
-  if (review.artifact.verdict === 'incomplete' || review.artifact.blockers.length || review.artifact.findings.some(f => !['dismissed', 'resolved'].includes(review.findingDecisions?.[f.id] ?? ''))) throw new Error('审查仍有未处理的发现或阻塞');
-  await assertReviewEvidence(review);
+  const processing = store.get<Issue>("issues", review.issueId)?.processing;
+  const manual = !review.caseId || review.caseId === processing?.id ? processing : undefined;
+  const manualReview = stepResolved(manual, "review"), manualValidation = stepResolved(manual, "validate");
+  if (review.kind !== 'review' || (review.status !== 'approved' && !manualReview) || review.artifact?.stage !== 'review') throw new Error('独立审查尚未批准，不能交接发布');
+  if (!manualReview && (review.artifact.verdict === 'incomplete' || review.artifact.blockers.length || review.artifact.findings.some(f => !['dismissed', 'resolved'].includes(review.findingDecisions?.[f.id] ?? '')))) throw new Error('审查仍有未处理的发现或阻塞');
+  if (!manualReview) await assertReviewEvidence(review);
   const chain: Job[] = [review], seen = new Set([review.id]);
   let cursor = review, validation: Job | undefined;
   while (!['fix', 'docs'].includes(cursor.kind)) {
@@ -50,7 +54,7 @@ export async function resolveDelivery(store: Store, repo: Repo, reviewId: string
     if (!['review', 'validate', 'fix', 'docs'].includes(cursor.kind)) throw new Error('审查未直接关联已验证的实施产物');
   }
   const implementation = cursor;
-  if (!validation || !['completed', 'approved'].includes(validation.status) || validationState(validation.artifact ? documentAcceptance(validation.artifact, validation) : undefined)?.state !== 'passed') throw new Error('完整验证尚未通过，请先修订或补齐验证');
+  if (!manualValidation && (!validation || !['completed', 'approved'].includes(validation.status) || validationState(validation.artifact ? documentAcceptance(validation.artifact, validation) : undefined)?.state !== 'passed')) throw new Error('完整验证尚未通过，请先修订或补齐验证');
   if (!['awaiting_review', 'approved'].includes(implementation.status) || !implementation.patch) throw new Error('实施产物尚不可交接发布');
   const issue = store.get<Issue>('issues', review.issueId);
   if (!issue || issue.state !== 'open' || repo.id !== review.repoId) throw new Error('事项状态或仓库已变化');
@@ -79,5 +83,6 @@ export async function resolveDelivery(store: Store, repo: Repo, reviewId: string
   const currentIssue = store.get<Issue>('issues', review.issueId);
   const currentRepo = store.get<Repo>('repos', review.repoId);
   if (!currentIssue || !currentRepo || currentRepo.defaultBranch !== repo.defaultBranch || currentRepo.fullName !== repo.fullName || currentIssue.state !== 'open' || review.revision !== revision(currentIssue, currentRepo, review.kind)) throw new Error('核验期间输入版本已变化');
-  return { reviewJobId: review.id, validationJobId: validation.id, implementationJobId: implementation.id, patchSha256: createHash('sha256').update(implementation.patch).digest('hex'), baseSha: implementation.baseSha, bindingStamp: bindingStamp(store, review.id) };
+  if (JSON.stringify(currentIssue.processing?.manualSteps) !== JSON.stringify(processing?.manualSteps)) throw new Error("用户阶段决定在核验期间变化，请重试");
+  return { reviewJobId: review.id, validationJobId: validation?.id, implementationJobId: implementation.id, patchSha256: createHash('sha256').update(implementation.patch).digest('hex'), baseSha: implementation.baseSha, bindingStamp: bindingStamp(store, review.id) };
 }
