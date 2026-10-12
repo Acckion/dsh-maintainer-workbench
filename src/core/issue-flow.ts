@@ -143,3 +143,10 @@ export function issueTaskGuidance(issue: Issue): string {
   const category = issue.plan?.category ?? issue.analysis?.category;
   return `Issue plan and informationRequests are explicit maintainer context. Respect accepted scope and acceptance criteria. Do not repeat questions already asked; new replies are evidence to reassess, not proof that all missing information is supplied. ${category === "bug" ? "For a bug, locate the cause and define change scope using source, existing logs, tests and maintainer input. Active reproduction is optional and omitted by default; never block solely because reproduction is absent. Follow reproductionMode: best_effort allows one bounded attempt within the investigation budget; record failure and continue source diagnosis. required is an explicit user condition until the user changes or skips it. Never fabricate executed tests." : category === "feature" ? "For a feature, follow the maintainer decision, scope exclusions and acceptance criteria; do not invent requirements or require a pre-existing failing test." : category === "docs" ? "Use the short documentation path: inspect the specified pages/examples, modify only the accepted scope, and run relevant documentation checks." : category === "question" ? "Prepare a source-backed answer draft; do not implement code, close the Issue or publish automatically." : "Use evidence to establish the appropriate issue-specific path."}` + manualContext(issue);
 }
+
+/** Quick routing already has a bounded body; do not embed the whole Issue/old analysis again. */
+export function maintainerPromptContext(issue: Issue): unknown {
+  const context = issuePromptContext(issue) as Record<string, unknown>;
+  return { plan: context.plan, processing: context.processing, providedInputs: context.providedInputs,
+    informationRequests: context.informationRequests, informationCoverage: context.informationCoverage };
+}

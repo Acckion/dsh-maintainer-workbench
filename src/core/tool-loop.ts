@@ -23,7 +23,7 @@ export function toolLoopPolicy(documentTask = false, investigation = false) {
     get reason() { return reason; },
     guard(name: string, args: unknown): string | undefined {
       if (reason) return reason;
-      if (!['read', 'grep', 'glob', 'bash', 'job_output', 'job_list'].includes(name)) return;
+      if (!['read', 'grep', 'glob', 'bash', 'job_output', 'job_list', 'submit_stage_report'].includes(name)) return;
       const key = fingerprint(name, args);
       const count = (seen.get(key) ?? 0) + 1;
       seen.set(key, count);

@@ -1,3 +1,4 @@
+import { modelData } from "../core/model-input.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import type { ManualStepRecord, ProcessingCase } from "../domain/processing.ts";
 import type { TimelineStage } from "../domain/timeline.ts";
@@ -86,7 +87,7 @@ export function manualContext(issue: Issue): string {
   const records = issue.processing?.manualSteps ?? [];
   return records.length
     ? "\nExplicit maintainer decisions (authoritative; newer explicit maintainer instructions override older plans and Agent conclusions; preserve original text, obey instructions, do not repeat skipped/completed work or demand missing fields/evidence; user_reported is not tool_executed; the latest non-supplement decision for each stage supersedes earlier dispositions, and explicit reopen allows executing that stage again):\n" +
-        JSON.stringify(records)
+        modelData(records)
     : "";
 }
 

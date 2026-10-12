@@ -13,6 +13,7 @@ import { Workbench } from '../src/core/workbench.ts';
 import { seedFixture } from './support/fixtures.ts';
 import { asAnalysis } from '../src/core/artifacts.ts';
 import { reviewRequiredSources } from '../src/core/review-context.ts';
+import { assembleReport } from '../src/core/report-assembly.ts';
 
 const diagnostics: ToolDiagnostics = { sessionId: 'session', provider: 'fixture', model: 'fixture', preset: 'coding', permission: 'read-only', mountedTools: ['read_file'], requests: [{ tools: ['read_file'] }], calls: 1, results: 1, canonicalResults: 1, errors: 0, finished: true };
 test('diagnostics separate missing mount, request exposure, invocation and missing result', () => {
@@ -51,6 +52,16 @@ test('native review evidence fails closed for inaccurate, missing and stale sour
   const testRead = { ...job.executionRecords![0], id: 'session:5', callId: 'call-test-read', sourcePath: 'chunk.test.ts', output: testQuote };
   const withTest = { ...artifact, inspectedSources: [...artifact.inspectedSources!, { executionId: testRead.callId, path: 'chunk.test.ts', line: 1, quote: testQuote }] };
   assert.equal((await reviewEvidenceGate({ ...requiredJob, executionRecords: [...job.executionRecords!, testRead] }, withTest)).allowed, true);
+  const numberedJob = { ...requiredJob, executionRecords: [{ ...job.executionRecords![0], output: `2 | ${quote}` }, { ...testRead, output: `1 | ${testQuote}` }] };
+  const { schemaVersion, stage, evidence, nextSteps, responseDraft, ...business } = withTest;
+  const compact = { ...business, reportFormat: 'compact-v1',
+    inspectedSources: withTest.inspectedSources!.map(ref => ({ ...ref, quote: undefined })),
+    findings: withTest.findings.map(finding => ({ ...finding, sourceEvidence: { ...finding.sourceEvidence!, quote: undefined } })) };
+  const assembled = assembleReport('review', compact, numberedJob);
+  assert.equal((await reviewEvidenceGate(numberedJob, assembled)).allowed, true);
+  const forged = { ...numberedJob, executionRecords: numberedJob.executionRecords.map(record => ({ ...record, output: '2 | forged source' })) };
+  const wrongSource = assembleReport('review', { ...compact, inspectedSources: compact.inspectedSources.slice(0, 1) }, forged);
+  assert.equal((await reviewEvidenceGate(forged, wrongSource)).allowed, false);
   const absolute = structuredClone(artifact); absolute.inspectedSources![0].path = join(root, 'chunk.ts'); absolute.findings[0].sourceEvidence!.path = join(root, 'chunk.ts');
   assert.equal((await reviewEvidenceGate(job, absolute)).allowed, true);
   assert.equal((await reviewEvidenceGate(job, { ...absolute, inspectedSources: [{ ...ref, path: '/tmp/outside.ts' }] })).allowed, false);

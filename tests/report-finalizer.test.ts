@@ -81,27 +81,30 @@ test('invalid verdicts and conflicting envelope fields remain invalid after loca
   }
 });
 
-for (const scenario of ['local', 'schema', 'truncated', 'invalid', 'http'] as const) test(`remote model report recovery is bounded and preserves original output: ${scenario}`, async t => {
+for (const scenario of ['local', 'compact', 'schema', 'truncated', 'invalid', 'http'] as const) test(`remote model report recovery is bounded and preserves original output: ${scenario}`, async t => {
   const store = new Store(':memory:'); seedFixture(store); t.after(() => store.close());
   const oldKey = process.env.MAINTAINER_API_KEY, oldFetch = globalThis.fetch;
   process.env.MAINTAINER_API_KEY = 'test-only';
   t.after(() => { globalThis.fetch = oldFetch; if (oldKey === undefined) delete process.env.MAINTAINER_API_KEY; else process.env.MAINTAINER_API_KEY = oldKey; });
-  const raw = scenario === 'local' ? JSON.stringify(triage).replace(',"category":', '],"category":') : scenario === 'truncated' ? JSON.stringify(triage) : '{}';
+  const { schemaVersion, stage, evidence, nextSteps, responseDraft, ...business } = triage;
+  const raw = scenario === 'compact' ? JSON.stringify({ reportFormat: 'compact-v1', ...business }) : scenario === 'local' ? JSON.stringify(triage).replace(',"category":', '],"category":') : scenario === 'truncated' ? JSON.stringify(triage) : '{}';
   const requests: any[] = [];
   globalThis.fetch = async (_, init) => {
     requests.push(JSON.parse(init!.body as string));
     if (scenario === 'http') return new Response('', { status: 503 });
     return Response.json({ choices: [{ message: { content: requests.length === 1 ? raw : scenario === 'invalid' ? '{}' : JSON.stringify(triage) }, finish_reason: requests.length === 1 && scenario === 'truncated' ? 'length' : 'stop' }], usage: { total_tokens: 9 } });
   };
-  const issue = { ...store.issues()[0], comments: 0 };
+  const issue = { ...store.issues()[0], comments: 0, body: 'const path = "C:\\tmp";\nconst literal = "\\n";' };
   const now = new Date().toISOString();
   const job: Job = { id: 'remote', repoId: issue.repoId, issueId: issue.id, kind: 'triage', status: 'running', revision: 'r', baseSha: '', issueSnapshot: issue, attempt: 1, createdAt: now, updatedAt: now };
   const outputs: string[] = [];
   const input: Parameters<Runner>[0] = { repo: store.repos()[0], issue, related: [], job, settings: store.settings(), signal, progress: () => {}, recordOutput: text => outputs.push(text) };
   if (scenario === 'invalid') await assert.rejects(modelRunner(input), error => error instanceof ArtifactFormatError && error.failure.repairAttempts === 1);
   else if (scenario === 'http') await assert.rejects(modelRunner(input), /HTTP 503/);
-  else { const result = await modelRunner(input); assert.equal(result.artifact?.stage, 'triage'); assert.equal(result.tokens, scenario === 'local' ? 9 : 18); }
-  assert.equal(requests.length, scenario === 'local' || scenario === 'http' ? 1 : 2);
+  else { const result = await modelRunner(input); assert.equal(result.artifact?.stage, 'triage'); assert.equal(result.tokens, scenario === 'local' || scenario === 'compact' ? 9 : 18); }
+  assert.ok(requests[0].messages[1].content.includes(issue.body));
+  assert.doesNotMatch(requests[0].messages[1].content, /UNTRUSTED_INPUT_JSON/);
+  assert.equal(requests.length, scenario === 'local' || scenario === 'compact' || scenario === 'http' ? 1 : 2);
   assert.deepEqual(outputs, scenario === 'http' ? [] : [raw]);
   if (requests[1]) { assert.equal(requests[1].tools, undefined); assert.match(requests[1].messages[0].content, /FORMAT RECOVERY ONLY/); assert.ok(requests[1].messages[0].content.includes(raw)); }
 });
