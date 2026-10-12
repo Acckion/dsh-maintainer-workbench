@@ -56,3 +56,16 @@ test('PR automation is independently controlled, persistent and refreshes change
  store.put('issues',{...pr,headSha:'c'.repeat(40)});await wb.poll();assert.equal(store.jobs().length,2);wb.pump();await wb.drain();assert.equal(calls,2);
  wb.updatePolicy(repo.id,{autoTriage:false,autoPreflight:false,syncIntervalMinutes:0,timeoutMs:600000,maxTokens:6000});store.put('issues',{...pr,headSha:'d'.repeat(40)});await wb.poll();assert.equal(store.jobs().length,2);await wb.close();
 });
+
+test('automatic review schedules its prerequisite preflight and honors repository overrides',async()=>{
+ const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0];
+ const pr={...store.issues()[0],type:'pr' as const,headSha:'a'.repeat(40),prBaseSha:'b'.repeat(40)};store.put('issues',pr);
+ const wb=new Workbench(store,await mkdtemp(join(tmpdir(),'review-auto-')),fixtureRunner,new GitHub(),false);
+ try {
+  wb.updateSettings({...store.settings(),autoReview:true,autoPreflight:false,autoTriage:false});
+  await wb.poll();assert.equal(store.jobs().length,1);assert.equal(store.jobs()[0].kind,'preflight');
+  await wb.poll();assert.equal(store.jobs().length,1,'unchanged PR is reused');
+  wb.updatePolicy(repo.id,{autoTriage:false,autoReview:false,autoPreflight:false,syncIntervalMinutes:0,timeoutMs:600000,maxTokens:6000});
+  store.put('issues',{...pr,headSha:'c'.repeat(40)});await wb.poll();assert.equal(store.jobs().length,1,'repository override disables automatic review and its preflight');
+ } finally {await wb.close();}
+});

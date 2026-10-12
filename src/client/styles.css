@@ -961,3 +961,37 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-processing-input label{display:flex;flex-direction:column;gap:6px;margin:12px 0}
 .mw-processing-input textarea,.mw-processing-input select{width:100%;padding:10px;font:inherit}
 .mw-gap-summary p{overflow-wrap:anywhere}
+/* Search and primary bulk actions share one uninterrupted sidebar toolbar. */
+.mw.mw-layout-tabs #mw-list-inbox>.mw-toolbar{border-bottom:0}
+
+/* Repository uses the same split workspace, list rows and detail tabs as Issues/PRs. */
+.mw.mw-layout-tabs .mw-repository-browser{display:grid;grid-template-columns:280px minmax(0,1fr);gap:0;align-items:stretch;flex:1;min-height:0;height:100%;overflow:hidden}
+.mw .mw-repository-browser .mw-organize-sidebar{padding:0;border:0;border-right:1px solid var(--mw-border);border-radius:0;background:var(--mw-canvas);max-height:none;min-height:0;overflow:auto}
+.mw .mw-repository-browser .mw-organize-sidebar>.mw-toolbar{padding:12px;display:flex}
+.mw .mw-repository-browser .mw-organize-sidebar .mw-task-row{width:100%;grid-template-columns:16px minmax(0,1fr)}
+.mw .mw-repository-browser .mw-organize-main{padding:0;background:var(--mw-canvas);min-height:0;display:flex;flex-direction:column;overflow:hidden}
+.mw .mw-repository-content{padding:20px 24px;overflow:auto;min-height:0;flex:1}
+.mw .mw-repository-content h3{font-size:14px;font-weight:500;margin:0 0 12px}
+.mw .mw-repository-section{border-bottom:1px solid var(--mw-border);padding-bottom:18px;margin-bottom:18px}
+.mw .mw-repository-section p{margin-top:10px}
+.mw .mw-repository-section-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;font-size:12px;color:var(--muted)}
+.mw .mw-repository-section-heading h3{margin:0}
+.mw .mw-repository-context{display:grid;grid-template-columns:80px minmax(0,1fr);gap:10px;margin:0;font-size:12px}
+.mw .mw-repository-context dt{color:var(--muted)}
+.mw .mw-repository-context dd{margin:0;overflow-wrap:anywhere}
+.mw .mw-repository-context code{white-space:pre-wrap}
+.mw .mw-repository-field{display:block;margin-bottom:20px;font-size:13px;color:var(--ink)}
+.mw .mw-repository-field :is(textarea,select){display:block;width:100%;margin:8px 0 0;border:0;border-radius:var(--mw-control-radius);background:var(--mw-control-bg);color:var(--ink);padding:10px;font:inherit;box-sizing:border-box}
+.mw .mw-repository-field textarea{resize:vertical;min-height:100px}
+.mw .mw-repository-actions{display:flex;gap:8px;flex-wrap:wrap}
+.mw .mw-repository-list-footer{padding:12px;color:var(--muted);font-size:11px}
+.mw .mw-repository-error{color:var(--mw-danger-text,#ac3434);overflow-wrap:anywhere}
+.mw .mw-repository-evidence{margin:12px 0;padding:10px;background:var(--mw-control-bg);border-radius:var(--mw-control-radius);overflow-wrap:anywhere}
+.mw .mw-repository-evidence pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.mw .mw-repository-history .mw-task-row{grid-template-columns:minmax(0,1fr);width:100%}
+.mw .mw-repository-content :is(ul,li){overflow-wrap:anywhere}
+.mw .mw-repository-content details{margin:16px 0;font-size:12px}
+.mw .mw-repository-back{display:none}
+@media(max-width:760px){.mw.mw-layout-tabs .mw-repository-browser{display:flex}.mw .mw-repository-browser .mw-organize-sidebar{width:100%}.mw .mw-repository-browser .mw-organize-main{display:none;width:100%}.mw .mw-repository-browser.detail-open .mw-organize-main{display:flex}.mw .mw-repository-browser.detail-open .mw-organize-sidebar{display:none}.mw .mw-repository-back{display:inline-flex;margin-right:8px}.mw .mw-repository-content{padding:16px}.mw .mw-repository-browser .mw-reader-tabbar>.mw-reader-tabs{display:flex;width:100%;overflow:auto}.mw .mw-repository-context{grid-template-columns:64px minmax(0,1fr)}}
+.mw .mw-repository-browser .mw-reader-header h2>.mw-repository-back{display:none}
+@media(max-width:760px){.mw .mw-repository-browser .mw-reader-header h2>.mw-repository-back{display:inline-flex}}

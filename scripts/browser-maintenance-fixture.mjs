@@ -66,7 +66,7 @@ try {
     const cleanupPath=join(dir,'cleanup-repo');await mkdir(cleanupPath);await git(cleanupPath,['init','-b','main']);await writeFile(join(cleanupPath,'README.md'),'Cleanup fixture\n');await git(cleanupPath,['add','.']);await git(cleanupPath,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
     const cleanupSha=await git(cleanupPath,['rev-parse','HEAD']),cleanupRepo={...repo,id:'fixture/cleanup',fullName:'fixture/cleanup',mode:'local',localKind:'git',localPath:cleanupPath,headSha:cleanupSha,profile:{...repo.profile,revision:cleanupSha}};
     store.put('repos',cleanupRepo);const cleanupIssue={...store.issues()[0],id:'fixture/cleanup:maintenance',repoId:cleanupRepo.id,origin:'repository',number:0,title:'Cleanup fixture',url:''};store.put('issues',cleanupIssue);
-    const cleanupId=w.enqueue([cleanupIssue.id],'investigate').created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
+    const cleanupId=w.enqueue([cleanupIssue.id],'investigate',{supplementalInfo:'仅调查临时清理测试仓库，收集工作区证据；不修改或发布文件'}).created[0];w.pump();await w.drain();assert.equal(store.get('jobs',cleanupId).status,'completed');
     const api = handler(w, localRejection), files = { '/': ['preview.html', 'text/html'], '/app.js': ['app.js', 'application/javascript'], '/app.css': ['app.css', 'text/css'] };
     const server = createServer(async (req, res) => {
       if (req.url?.startsWith('/maintainer/api')) return api(req, res);
@@ -142,6 +142,7 @@ try {
       await page.getByRole('button',{name:'确认计划并开始实施',exact:true}).click();
       await page.getByText('已按确认计划开始实施',{exact:true}).waitFor();
       assert.equal(store.jobs().find(item => item.kind === 'fix')?.issueSnapshot.plan?.goal, 'Fixture offline sync');
+      assert.match(store.jobs().find(item => item.kind === 'fix').instructions,/Fixture offline sync[\s\S]*Sync only[\s\S]*Offline operation queues/);
 
       await openIssue('fixture/queue#140');
       await selectPanel('Plan');

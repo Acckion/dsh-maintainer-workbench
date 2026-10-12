@@ -180,8 +180,9 @@ export class Workbench {
     mode: OrganizeMode,
     issueId?: string,
     instructions = "",
+    auditJobId?: string,
   ) {
-    return this.issuesService.organize(repoId, mode, issueId, instructions);
+    return this.issuesService.organize(repoId, mode, issueId, instructions, auditJobId);
   }
   decide(issueId: string, stage: string, reason: string) {
     return this.issuesService.decide(issueId, stage, reason);

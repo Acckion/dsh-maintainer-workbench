@@ -24,7 +24,7 @@ export function IssuePlanning({
   job?: Job;
   busy: boolean;
   act: WorkflowAction;
-  start?: (kind: "fix" | "docs" | "investigate", version?: number) => Promise<unknown>;
+  start?: (kind: "fix" | "docs" | "investigate", version?: number, confirmedPlan?: IssuePlan) => Promise<unknown>;
 }) {
   const act: WorkflowAction = (path, data, message) =>
     perform(
@@ -267,6 +267,7 @@ export function IssuePlanning({
                   await start(
                     suggestedKind,
                     (saved as { version?: number }).version,
+                    confirmed,
                   );
                 }
               }}

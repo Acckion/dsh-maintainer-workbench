@@ -143,7 +143,7 @@ export class RepositoryService extends ServiceBase {
         const kind = i.type === "pr" ? "preflight" : "triage";
         const enabled =
           i.type === "pr"
-            ? (repo.policy?.autoPreflight ?? settings.autoPreflight)
+            ? ((repo.policy?.autoPreflight ?? settings.autoPreflight) || (repo.policy?.autoReview ?? settings.autoReview))
             : (repo.policy?.autoTriage ?? settings.autoTriage);
         return (
           i.repoId === repoId &&

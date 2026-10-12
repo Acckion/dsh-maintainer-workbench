@@ -107,7 +107,7 @@ export function RepositoryPolicy({
     <h3>仓库设置</h3>
     <Toggle label="自动分诊新增或更新的 Issue" description="" value={value.autoTriage} change={autoTriage=>setValue({...value,autoTriage})}/>
     <Toggle label="自动快速预检新增或更新的 PR" description="" value={value.autoPreflight} change={autoPreflight=>setValue({...value,autoPreflight})}/>
-    <Toggle label="自动审查预检已就绪的 PR" description="只读，不自动修订或发布" value={value.autoReview} change={autoReview=>setValue({...value,autoReview})}/>
+    <Toggle label="自动审查 PR" description="同步后自动预检并审查就绪的 PR；只读，结果保存" value={value.autoReview} change={autoReview=>setValue({...value,autoReview})}/>
     {number("syncLimit","同步记录上限（0 表示无上限）",0,1000000)}
     {number("syncIntervalMinutes","同步间隔（分钟，0 关闭）",0,1440)}
     <details className="mw-preference-details"><summary>高级执行选项</summary>
