@@ -43,7 +43,7 @@ export class PullRequestClient extends GitHubResourceClient {
         return null;
       }
     };
-    const [checks, reviews, reviewComments, commitStatus] = await Promise.all([
+    const [checks, reviews, reviewComments, commitStatus, branchProtection, branchRules] = await Promise.all([
       optional(
         `/repos/${repo.githubName ?? repo.fullName}/commits/${pr.head.sha}/check-runs?per_page=100`,
       ),
@@ -58,6 +58,8 @@ export class PullRequestClient extends GitHubResourceClient {
       optional(
         `/repos/${repo.githubName ?? repo.fullName}/commits/${pr.head.sha}/status`,
       ),
+      optional(`/repos/${repo.githubName ?? repo.fullName}/branches/${encodeURIComponent(pr.base.ref)}/protection`),
+      optional(`/repos/${repo.githubName ?? repo.fullName}/rules/branches/${encodeURIComponent(pr.base.ref)}?per_page=100`),
     ]);
     return {
       headSha: pr.head.sha,
@@ -72,6 +74,8 @@ export class PullRequestClient extends GitHubResourceClient {
       reviews,
       reviewComments,
       commitStatus,
+      branchProtection,
+      branchRules,
       warnings: [
         ...warnings,
         "检查和审查最多各 100 条；分支保护规则和未解决讨论未完整覆盖，不构成合并许可。",

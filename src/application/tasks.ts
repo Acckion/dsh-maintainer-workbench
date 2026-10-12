@@ -362,7 +362,9 @@ export class TaskService extends ServiceBase {
         finishedAt: undefined,
         error: undefined,
         waitingReason: undefined,
-        sessionId: undefined,
+        formatSourceJobId: job.formatSourceJobId ?? job.id,
+        formatSessionId: undefined,
+        formatDiagnostics: undefined,
         publications: undefined,
       };
       this.store.put("jobs", recovered);
@@ -381,6 +383,7 @@ export class TaskService extends ServiceBase {
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
+      forceNew: true,
     });
   }
   resume(id: string): { created: string[]; reused: string[] } {

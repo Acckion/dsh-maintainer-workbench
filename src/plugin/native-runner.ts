@@ -795,7 +795,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
       try {
         artifact = parseArtifact(job.kind,
           parseObject(finalText, () =>
-            progress("已修复模型结果标点，仍按阶段结构校验"),
+            progress("已修复模型结果 JSON 格式，仍按阶段结构校验"),
           ),
           () => progress("已将验收文本映射恢复为列表；原始输出保留，验证证据仍须单独校验"),
         );
@@ -877,7 +877,9 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           signal.throwIfAborted();
           recordOutput?.(finalText);
           try {
-            artifact = artifactSchemas.review.parse(parseObject(finalText));
+            artifact = parseArtifact("review", parseObject(finalText, () =>
+              progress("已恢复报告 JSON 格式；原始输出保留，审查证据仍须校验"),
+            ));
           } catch (error) {
             throw new ArtifactFormatError(
               `证据补齐后的报告格式无效，已保留工具记录和原始输出：${error instanceof Error ? error.message.slice(0, 1200) : "格式错误"}`,

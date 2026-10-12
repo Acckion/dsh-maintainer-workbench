@@ -928,3 +928,31 @@ for(const change of ['version','plan','cycle'] as const) test(`budget renewal re
   assert.equal(store.audits().filter(a=>a.action==='workflow.budget_renewed').length,0);
  }finally{await wb.close();}
 });
+
+test('current PR preflight is ready while its plan remains unconfirmed; reconciliation never starts work', async () => {
+  const {store,wb,issue,repo}=setup();
+  try {
+    const pr={...issue,type:'pr' as const,headSha:'b'.repeat(40),prBaseSha:repo.headSha,orchestration:undefined};
+    store.put('issues',pr);
+    const id=wb.enqueue([pr.id],'preflight').created[0];
+    const job=store.get<Job>('jobs',id)!;
+    const gap={id:'ci_unknown',kind:'environment',summary:'CI 检查记录为空，覆盖未知',status:'unknown',blocks:['review','delivery'],resolution:'核对 CI',sources:[]};
+    const artifact=artifactSchemas.preflight.parse({...common,stage:'preflight',intent:'review feature',risks:[],readiness:'draft',blockers:[],gaps:[gap],planDraft:{...draft,route:'review',gaps:[gap]}});
+    store.put('jobs',{...job,status:'completed',artifact,result:asAnalysis(artifact),rawOutput:'original model report',prContext:{headSha:pr.headSha,baseSha:repo.headSha,headRef:'feature',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:true,checks:null,reviews:[],commitStatus:null,warnings:['CI unavailable']}});
+    wb.orchestration.completed(store.get<Job>('jobs',id)!,false);
+    wb.orchestration.reconcilePreflightPlans();
+    const current=store.issues()[0];
+    assert.equal((store.get<Job>('jobs',id)!.artifact as typeof artifact).readiness,'review');
+    assert.equal(store.get<Job>('jobs',id)!.rawOutput,'original model report');
+    assert.equal(current.orchestration?.run,undefined);
+    assert.equal(store.jobs().length,1);
+    const version=current.processing!.version;
+    wb.orchestration.reconcilePreflightPlans();
+    assert.equal(store.issues()[0].processing!.version,version);
+    const plan=current.orchestration!.draft!;
+    const started=wb.orchestration.start(current.id,plan.inputKey,{...plan,decision:'accepted'},'review');
+    assert.equal(started.created.length,1);
+    assert.equal(store.jobs().at(-1)?.kind,'review');
+    assert.equal(store.issues()[0].orchestration?.run?.status,'running');
+  } finally {await wb.close();}
+});

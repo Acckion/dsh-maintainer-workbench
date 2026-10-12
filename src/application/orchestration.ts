@@ -1,4 +1,6 @@
 import {blockingGaps, planGaps} from '../domain/gaps.ts';
+import {normalizePreflight} from '../core/preflight-policy.ts';
+import {asAnalysis} from '../core/artifacts.ts';
 import { ProcessingConflictError } from "../infrastructure/persistence/processing.ts";
 import { randomUUID } from "node:crypto";
 import type { Issue, Job, JobKind, IssuePlan } from "../core/types.ts";
@@ -26,6 +28,25 @@ export type {
 /** Coordinates existing jobs; never approves artifacts or writes to GitHub. */
 export class Orchestration {
   constructor(private wb: Workbench) {}
+  /** Reclassify only current, unconfirmed plans; preserve raw reports and all authorization. */
+  reconcilePreflightPlans(): void {
+    for (const issue of this.wb.store.issues()) {
+      const state=issue.orchestration, draft=state?.draft;
+      if (issue.state!=='open' || !draft?.sourceJobId || state?.run || issue.processing?.activeRunIds.length) continue;
+      const repo=this.wb.store.get<import('../core/types.ts').Repo>('repos',issue.repoId);
+      const job=this.wb.store.get<Job>('jobs',draft.sourceJobId);
+      if (!repo || !job || job.status!=='completed' || job.artifactState==='stale' ||
+          (job.caseId && job.caseId!==issue.processing?.id) || job.artifact?.stage!=='preflight' ||
+          job.revision!==importRevision(issue,repo,'preflight') || draft.inputKey!==planInputKey(issue,repo)) continue;
+      const artifact=normalizePreflight(job.artifact,job.prContext);
+      if (JSON.stringify(artifact)===JSON.stringify(job.artifact)) continue;
+      this.wb.store.transaction(()=>{
+        this.wb.store.put('jobs',{...job,artifact,result:asAnalysis(artifact)});
+        this.put(this.issue(issue.id),{...state,draft:{...draft,gaps:draftFromJob(issue,repo,{...job,artifact}).gaps}});
+        this.wb.store.audit('workflow.preflight_policy_reconciled','CI 覆盖与本地审查准备状态已重新归类；原始输出保留，计划仍需确认',job.id);
+      });
+    }
+  }
   private issue(id: string): Issue {
     const issue = this.wb.store.get<Issue>("issues", id);
     if (!issue || issue.state !== "open") throw new Error("只能处理开放事项");

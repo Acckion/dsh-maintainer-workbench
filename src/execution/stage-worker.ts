@@ -1,5 +1,6 @@
 import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
+import {normalizePreflight} from '../core/preflight-policy.ts';
 import {effectiveOutputTokens} from '../core/output-budget.ts';
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -16,7 +17,7 @@ import { documentAcceptance } from "../core/document-acceptance.ts";
 import { ArtifactFormatError } from "../core/execution-errors.ts";
 import { saveExecutionLog } from "../core/execution-evidence.ts";
 import { reconcileTestExecutions } from "../core/execution-links.ts";
-import { reviewFollowups } from "../core/finding-followup.ts";
+import { reconcileReviewFollowups } from "../core/finding-followup.ts";
 import {
   collectPatch,
   fetchPullRequestRevision,
@@ -94,8 +95,13 @@ export class StageWorker extends ServiceBase {
         this.saveJob({ ...this.job(job.id), waitingReason });
       }
       if (sessionId) {
-        job.sessionId = sessionId;
-        this.saveJob({ ...this.job(job.id), sessionId });
+        if (job.formatOnly) {
+          job.formatSessionId = sessionId;
+          this.saveJob({ ...this.job(job.id), formatSessionId: sessionId });
+        } else {
+          job.sessionId = sessionId;
+          this.saveJob({ ...this.job(job.id), sessionId });
+        }
       }
     };
     let inputPatchHash: string | undefined;
@@ -370,8 +376,9 @@ export class StageWorker extends ServiceBase {
         signal: controller.signal,
         progress,
         recordDiagnostics: (diagnostics) => {
-          job = { ...job, toolDiagnostics: diagnostics };
-          this.saveJob({ ...this.job(job.id), toolDiagnostics: diagnostics });
+          const field = job.formatOnly ? "formatDiagnostics" : "toolDiagnostics";
+          job = { ...job, [field]: diagnostics };
+          this.saveJob({ ...this.job(job.id), [field]: diagnostics });
         },
         recordExecution: (record, raw) => {
           saveExecutionLog(this.dataDir, job.id, record.id, raw);
@@ -409,6 +416,10 @@ export class StageWorker extends ServiceBase {
         throw new Error(
           "分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付",
         );
+      if (output.artifact?.stage === 'preflight') {
+        output.artifact = normalizePreflight(output.artifact, job.prContext);
+        output.result = asAnalysis(output.artifact);
+      }
       const requestedInput = output.inputRequest ?? output.artifact?.inputRequest;
       const caseState=this.store.processing.current(job.issueId);
       const inputRequest = unansweredInputRequest(planningInputRequest(output.artifact, requestedInput),
@@ -533,11 +544,17 @@ export class StageWorker extends ServiceBase {
           output.result = asAnalysis(output.artifact);
         }
       }
-      if (output.artifact?.stage === "review")
-        job.findingFollowups = reviewFollowups(
-          job,
-          output.artifact.followups ?? [],
-        );
+      if (output.artifact?.stage === "review") {
+        const reconciled = reconcileReviewFollowups(job, output.artifact);
+        job.findingFollowups = reconciled.followups;
+        output.artifact = { ...output.artifact, followups: reconciled.followups };
+        output.result = asAnalysis(output.artifact);
+        if (reconciled.ignored.length)
+          this.store.audit("review.new_finding_unlinked", JSON.stringify({
+            reason: "新发现不属于被引用的历史报告；仅移除错误关联，保留本次发现与原始输出，未认定任何历史问题已解决",
+            ignored: reconciled.ignored,
+          }), job.id);
+      }
       await this.deps.workspaces.freeze(job, patch);
       controller.signal.throwIfAborted();
       this.store.transaction(() => {

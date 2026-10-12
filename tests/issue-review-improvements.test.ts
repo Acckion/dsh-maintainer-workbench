@@ -12,7 +12,7 @@ import { seedFixture, fixtureRunner, fixtureAnalysis } from './support/fixtures.
 import type { FindingFollowup, Issue, IssuePlan, Job, ReviewThread, ThreadSnapshot } from '../src/core/types.ts';
 import { availableActions } from '../src/workflow/actions.ts';
 import { defaultPlan, planBlocker, receiveReplies } from '../src/core/issue-flow.ts';
-import { reviewFollowups } from '../src/core/finding-followup.ts';
+import { reviewFollowups, reconcileReviewFollowups } from '../src/core/finding-followup.ts';
 import { executionRecord, saveExecutionLog, readExecutionLog } from '../src/core/execution-evidence.ts';
 import { linkedExecution, reconcileTestExecutions } from '../src/core/execution-links.ts';
 import { IssuePlanning } from '../src/client/IssuePlanning.tsx';
@@ -105,6 +105,44 @@ test('new review follows exact historical IDs and leaves omitted findings unveri
     assert.deepEqual(reviewFollowups(next, [resolved]), [resolved]);
     assert.throws(() => reviewFollowups(next, [{ ...resolved, sourceJobId: 'other' }]), /引用/);
     assert.throws(() => reviewFollowups(next, [resolved, resolved]), /重复/);
+  } finally { store.close(); }
+});
+
+test('new discoveries stay current when mistakenly linked to empty historical reports', () => {
+  const { store, issue, repo } = setup();
+  try {
+    const job = reviewJob(issue, repo, 'new');
+    const empty = { ...common, findings: [] };
+    job.handoff = ['old-approved', 'old-rejected'].map(id => ({ id, kind: 'review', revision: job.revision, artifact: empty }));
+    const followups: FindingFollowup[] = job.handoff.map(source => ({ sourceJobId: source.id, findingId: 'new-defect', status: 'still_present', evidence: 'Current source reproduces the newly found defect' }));
+    const artifact = { ...common, verdict: 'changes_requested' as const, findings: [{ ...finding, id: 'new-defect' }], followups };
+    const before = JSON.stringify({ job, artifact });
+    const result = reconcileReviewFollowups(job, artifact);
+    assert.deepEqual(result.followups, []); assert.deepEqual(result.ignored, followups);
+    assert.equal(JSON.stringify({ job, artifact }), before);
+    assert.equal(artifact.findings[0].id, 'new-defect');
+    assert.throws(() => reconcileReviewFollowups(job, { ...artifact, findings: [] }), /引用/);
+    assert.throws(() => reconcileReviewFollowups(job, { ...artifact, followups: [{ ...followups[0], sourceJobId: 'foreign' }] }), /引用/);
+    assert.throws(() => reconcileReviewFollowups(job, { ...artifact, followups: [{ ...followups[0], status: 'resolved' }] }), /引用/);
+    assert.throws(() => reconcileReviewFollowups(job, { ...artifact, followups: [followups[0], followups[0]] }), /重复/);
+  } finally { store.close(); }
+});
+
+test('new discovery recovery preserves valid followups and leaves omitted historical findings unverified', () => {
+  const { store, issue, repo } = setup();
+  try {
+    const previous = reviewJob(issue, repo, 'previous');
+    const job = reviewJob(issue, repo, 'new');
+    job.handoff = [{ id: previous.id, kind: 'review', revision: previous.revision, artifact: previous.artifact }];
+    const wrong: FindingFollowup = { sourceJobId: previous.id, findingId: 'new-defect', status: 'still_present', evidence: 'New discovery' };
+    const valid: FindingFollowup = { sourceJobId: previous.id, findingId: 'f1', status: 'still_present', evidence: 'Rechecked old finding' };
+    const artifact = { ...common, findings: [{ ...finding, id: 'new-defect' }], followups: [wrong, valid] };
+    assert.deepEqual(reconcileReviewFollowups(job, artifact), { followups: [valid], ignored: [wrong] });
+    const missing = reconcileReviewFollowups(job, { ...artifact, followups: [wrong] });
+    assert.equal(missing.followups[0].findingId, 'f1'); assert.equal(missing.followups[0].status, 'unverified');
+    // A known historical ID attributed to another report is not a new discovery.
+    job.handoff.unshift({ id: 'empty', kind: 'review', revision: previous.revision, artifact: { ...common, findings: [] } });
+    assert.throws(() => reconcileReviewFollowups(job, { ...artifact, findings: [finding], followups: [{ ...valid, sourceJobId: 'empty' }] }), /引用/);
   } finally { store.close(); }
 });
 

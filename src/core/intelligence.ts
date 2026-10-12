@@ -7,6 +7,7 @@ import {
 } from "./triage-input.ts";
 import {
   artifactSchemas,
+  parseArtifact,
   artifactPrompt,
   asAnalysis,
   lightweight,
@@ -38,6 +39,37 @@ export function parseAnalysis(text: string, repaired?: () => void) {
   if (changed) repaired?.();
   return result.data;
 }
+/** Extract one complete object, never a nested fragment or one of several reports. */
+function reportEnvelope(text: string): unknown | undefined {
+  const start = text.search(/[\[{]/);
+  if (start < 0 || text[start] !== "{") return undefined;
+  const stack: string[] = [];
+  let quoted = false, escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (c === "\\") escaped = true;
+      else if (c === '"') quoted = false;
+      continue;
+    }
+    if (c === '"') quoted = true;
+    else if (c === "{" || c === "[") stack.push(c);
+    else if (c === "}" || c === "]") {
+      if (stack.pop() !== (c === "}" ? "{" : "[")) return undefined;
+      if (stack.length) continue;
+      const prefix = text.slice(0, start).replace(/```(?:json)?\s*$/i, "").trim();
+      const suffix = text.slice(i + 1).replace(/^\s*```/, "").trim();
+      if (!prefix && !suffix && start === 0 && i === text.length - 1) return undefined;
+      // Any extra object/array, partial report or extra fence makes the envelope ambiguous.
+      if (prefix.length > 1000 || suffix.length > 1000 || /[{}\[\]]|```/.test(prefix + suffix))
+        throw new Error("模型输出包含多个或不明确的结果格式，请重试任务；原始输出已保留。");
+      try { return JSON.parse(text.slice(start, i + 1)); }
+      catch { return undefined; }
+    }
+  }
+  return undefined;
+}
 export function parseObject(text: string, repaired?: () => void): unknown {
   const trimmed = text
     .trim()
@@ -50,6 +82,11 @@ export function parseObject(text: string, repaired?: () => void): unknown {
   try {
     value = JSON.parse(trimmed);
   } catch {
+    const extracted = reportEnvelope(trimmed);
+    if (extracted !== undefined) {
+      repaired?.();
+      return extracted;
+    }
     // Remove redundant punctuation outside strings; never invent missing content.
     let fixed = "",
       quoted = false,
@@ -180,7 +217,7 @@ export const modelRunner: Runner = async ({
   recordOutput?.(payload.choices[0].message.content);
   // This executor has no test tool, so model claims cannot be represented as execution evidence.
   const artifact = withoutExecutedTests(
-    artifactSchemas[job.kind].parse(
+    parseArtifact(job.kind,
       parseObject(payload.choices[0].message.content),
     ),
   );

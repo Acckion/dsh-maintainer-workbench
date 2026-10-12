@@ -103,3 +103,20 @@ test('waiting triage publishes its saved plan draft without satisfying human wai
  assert.equal(current.orchestration?.draft?.gaps?.[0].kind,'reporter_information');assert.equal(current.processing?.waits.find(w=>w.requestedByRunId===id)?.state,'open');
  assert.equal(current.plan,undefined);assert.equal(current.orchestration?.run,undefined);assert.equal(s.jobs().length,1);await wb.close();
 });
+
+test('artifact recovery conservatively keeps unknown system checks unresolved and preserves gates',()=>{
+ const raw={...common,stage:'review',inspectedSources:[],findings:[],followups:[],verdict:'incomplete',blockers:[],gaps:[{...gap,status:'unknown',blocks:['review'],summary:'执行记录标识尚未核实'}]};
+ let repairs=0;
+ const parsed=parseArtifact('review',raw,()=>repairs++);
+ assert.equal(parsed.gaps?.[0].status,'not_checked');
+ assert.deepEqual(parsed.gaps?.[0].blocks,['review']);
+ assert.equal(blockingGaps(parsed.gaps!,'review').length,1);
+ assert.equal(raw.gaps[0].status,'unknown');assert.equal(repairs,1);
+ const external={...gap,kind:'external_wait',status:'unknown',waitFor:'ci_completion'};
+ assert.equal(parseArtifact('review',{...raw,gaps:[external]}).gaps?.[0].status,'unknown');
+ assert.throws(()=>parseArtifact('review',{...raw,gaps:[{...gap,status:'resolved',sources:[]}]}));
+ const draft={category:'maintenance',goal:'检查',scope:'只读',reproduction:'',expected:'',actual:'',acceptanceCriteria:['检查完成'],sources:[],missingInfo:[],route:'review',gaps:raw.gaps};
+ const nested=parseArtifact('preflight',{...common,stage:'preflight',intent:'检查',risks:[],readiness:'review',blockers:[],planDraft:draft});
+ assert.equal(nested.stage,'preflight');
+ if(nested.stage==='preflight') assert.equal(nested.planDraft?.gaps?.[0].status,'not_checked');
+});
