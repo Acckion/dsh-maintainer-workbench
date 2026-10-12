@@ -587,6 +587,7 @@ export class StageWorker extends ServiceBase {
     } catch (error) {
       const current = this.job(job.id);
       let formatRecovery: Job["formatRecovery"];
+      let preservedPatch: string | undefined;
       if (
         error instanceof ArtifactFormatError &&
         current.status !== "cancelled" &&
@@ -619,7 +620,8 @@ export class StageWorker extends ServiceBase {
             throw new Error("工作区 HEAD 已变化，不能仅整理输出；请重新派发");
           if (["fix", "docs"].includes(current.kind) && !patch)
             throw new Error("Agent 未产生可审核的代码差异，请重新派发");
-          formatRecovery = { baseSha: current.baseSha, patchHash: digest };
+          preservedPatch = patch;
+          formatRecovery = { baseSha: current.baseSha, patchHash: digest, reason: error.failure.kind, repairAttempts: error.failure.repairAttempts };
         } catch (integrityError) {
           error = integrityError;
         }
@@ -635,6 +637,7 @@ export class StageWorker extends ServiceBase {
           formatRecovery: controller.signal.aborted
             ? undefined
             : formatRecovery,
+          ...(formatRecovery && !controller.signal.aborted ? { patch: preservedPatch, patchSha256: formatRecovery.patchHash } : {}),
           waitingReason: undefined,
           error: controller.signal.aborted
             ? String(controller.signal.reason?.message ?? "已中断")

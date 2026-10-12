@@ -8,6 +8,7 @@ import {join} from 'node:path';
 import assert from 'node:assert/strict';
 import {Store} from '../src/core/store.ts';
 import {Workbench} from '../src/core/workbench.ts';
+import {artifactSchemas,asAnalysis} from '../src/core/artifacts.ts';
 import {handler,localRejection} from '../src/server/http.ts';
 import {seedFixture} from '../tests/support/fixtures.ts';
 const dir=await mkdtemp(join(tmpdir(),'mw-gaps-browser-'));
@@ -63,5 +64,36 @@ try{for(const width of [1440,390]){
  await expect(page.getByRole('button',{name:'确认并开始只读调查',exact:true})).toBeVisible();
  await page.screenshot({path:join(dir,`gaps-input-${width}.png`),fullPage:true});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
  await page.getByLabel('失败日志是什么？资料状态',{exact:true}).selectOption('provided');await page.getByLabel('失败日志是什么？',{exact:true}).fill('exit=1; unable to open configuration');await page.getByRole('button',{name:'保存资料与未解决项',exact:true}).click();
- await expect.poll(()=>store.processing.current(original.id).waits.at(-1).state).toBe('satisfied');assert.deepEqual(store.issues().find(i=>i.id===original.id).plan,plan);assert.equal(store.jobs().length,initialJobs);assert.deepEqual(errors,[]);await expect(page.getByRole('button',{name:'重新分析，生成新草稿',exact:true})).toHaveCount(0);await page.screenshot({path:join(dir,`gaps-${width}.png`),fullPage:true});await page.close();console.log(`Gaps input fixture PASS ${width}px; screenshots ${dir}`);
+ await expect.poll(()=>store.processing.current(original.id).waits.at(-1).state).toBe('satisfied');assert.deepEqual(store.issues().find(i=>i.id===original.id).plan,plan);assert.equal(store.jobs().length,initialJobs);assert.deepEqual(errors,[]);await expect(page.getByRole('button',{name:'重新分析，生成新草稿',exact:true})).toHaveCount(0);await page.screenshot({path:join(dir,`gaps-${width}.png`),fullPage:true});await page.close();
+ // Replay completed Agent triage with a system-check gap ID in legacy missingInfo.
+ const number=width===1440?141:142;
+ const systemIssue={...original,processing:undefined,orchestration:undefined,plan:undefined,id:`${original.repoId}#${number}`,number,title:'shell: Unix socket advisory scan（回归测试）'};
+ store.put('issues',systemIssue);
+ const sourceId=wb.enqueue([systemIssue.id],'triage').created[0];
+ const source=store.get('jobs',sourceId);
+ const systemReport=artifactSchemas.triage.parse({schemaVersion:1,stage:'triage',summary:'评论称 dev 已修复，需 Agent 读取当前源码核实',coverage:'仅完成元数据分诊',evidence:[],nextSteps:[],responseDraft:'',category:'bug',priority:'P2',labels:[],module:'core/shell',impact:'Unix socket 命令无法执行',missingInfo:['g1'],duplicateOf:null,duplicateReason:'',route:'needs_info',routeReason:'尚未检查源码',
+   gaps:[{id:'g1',kind:'system_check',summary:'评论结论尚未经过源码核实',status:'not_checked',blocks:['investigate'],resolution:'Agent 读取 parse.ts 和 file-access.ts 并核对当前版本',sources:['issue:comment:3']}],
+   planDraft:{category:'bug',goal:'核实 Unix socket advisory scan 的当前行为',scope:'只读检查 shell 源码，不修改代码',reproduction:'',expected:'',actual:'',acceptanceCriteria:['保存源码判断依据'],route:'investigate',sources:[],missingInfo:[]}});
+ store.put('jobs',{...source,status:'completed',artifact:systemReport,result:asAnalysis(systemReport)});
+ wb.orchestration.completed(store.get('jobs',sourceId));
+ const handoffPage=await browser.newPage({viewport:{width,height:1000}});const handoffErrors=[];handoffPage.on('pageerror',e=>handoffErrors.push(e.message));
+ await handoffPage.goto(`http://127.0.0.1:${server.address().port}/app`);
+ await handoffPage.locator('[aria-label="选择仓库"]:visible, .mw-mobile-repo select:visible').first().selectOption(original.repoId);
+ await handoffPage.locator(`[id="mw-item-${systemIssue.id}"]`).click();
+ const flow=handoffPage.getByRole('region',{name:'事项处理流程',exact:true});
+ await expect(flow.getByText('系统待检查',{exact:true})).toBeVisible();
+ await flow.getByRole('navigation',{name:'处理阶段'}).getByRole('button',{name:/^定位与范围/}).click();
+ const start=flow.getByRole('button',{name:'开始调查',exact:true});await expect(start).toBeEnabled();
+ await expect(flow.getByRole('textbox',{name:'用户补充信息',exact:true})).toHaveCount(0);
+ const dispatch=handoffPage.waitForResponse(r=>r.url().endsWith('/jobs') && r.request().method()==='POST');
+ await start.click();const dispatched=await dispatch;assert.equal(dispatched.status(),200);
+ const childId=(await dispatched.json()).created[0];const child=store.get('jobs',childId);
+ assert.equal(child.kind,'investigate');assert.equal(child.sourceJobId,sourceId);
+ assert.equal(child.handoff.find(h=>h.id===sourceId).artifact.gaps[0].kind,'system_check');
+ assert.equal(store.get('jobs',sourceId).artifact.gaps[0].status,'not_checked');
+ assert.equal(store.processing.current(systemIssue.id).waits.some(w=>w.type==='user_input' && w.state==='open'),false);
+ await expect(flow.getByRole('region',{name:'处理进度',exact:true})).toContainText('等待执行');
+ await handoffPage.screenshot({path:join(dir,`system-gap-handoff-${width}.png`),fullPage:true});
+ assert.deepEqual(handoffErrors,[]);await handoffPage.close();
+ console.log(`Gaps input fixture PASS ${width}px; screenshots ${dir}`);
 }}finally{await browser.close();await new Promise(r=>server.close(r));await wb.close();}

@@ -274,7 +274,7 @@ export interface Job {
   findingThreadLinks?: Record<string, string>;
   findingFollowups?: FindingFollowup[];
   deliveryReviewId?: string;
-  formatRecovery?: { baseSha: string; patchHash: string };
+  formatRecovery?: { baseSha: string; patchHash: string; reason?: import('./execution-errors.ts').ReportFailureKind; repairAttempts?: number };
   waitingReason?: string;
   artifactState?: string;
   formatOnly?: boolean;

@@ -1,3 +1,4 @@
+import { taskGroups } from "../src/client/task-presentation.ts";
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -8,6 +9,9 @@ import { artifactSchemas, asAnalysis } from '../src/core/artifacts.ts';
 import { AcceptArtifactButton, ReviewSummary, type DetailTab } from '../src/client/ReviewSummary.tsx';
 import { acceptanceEligibility, executionExplanation, patchScope, reviewEvidence, reviewQueue, selectedAnalysis, taskStatus, revisionHistory } from '../src/client/review-evidence.ts';
 import { WorkflowPanel } from '../src/client/WorkflowPanel.tsx';
+import { StageProgress } from '../src/client/StageProgress.tsx';
+import { jobNodeState } from '../src/workflow/presentation.ts';
+import { availableActions } from '../src/workflow/actions.ts';
 
 const saved = JSON.parse(readFileSync(new URL('../docs/evidence/product-trial-2026-10-02/after.json', import.meta.url), 'utf8'));
 const trial = () => structuredClone(saved) as { jobs: Job[]; observations: { originalImplementationJobId: string } };
@@ -224,13 +228,29 @@ test('execution summary distinguishes queued, waiting, failed recovery, cancella
   const f = finalChain(); const job = { ...f.implementation, status:'failed' as const, result:undefined,rawOutput:'saved output',formatRecovery:{baseSha:'base',patchHash:'hash'},waitingReason:'obsolete reason' };
   const rows: Audit[] = [{id:2,at:'now',jobId:job.id,action:'tool',detail:'latest actual record'}, {id:3,at:'now',jobId:'other',action:'tool',detail:'unrelated'}];
   assert.equal(executionExplanation(job,true,rows).formatRetry,true);
-  assert.equal(executionExplanation(job,false,rows).formatRetry,false);
+  assert.equal(executionExplanation(job,false,rows).formatRetry,true);
   assert.equal(executionExplanation(job,true,rows).waitingReason,undefined);
   assert.equal(executionExplanation(job,true,rows).latest?.id,2);
   assert.match(executionExplanation({...job,status:'running',waitingReason:'等待审批'},true,[]).waitingReason!,/等待审批/);
   assert.match(executionExplanation({...job,status:'queued'},true,[]).next,/没有承诺开始时间/);
   assert.match(executionExplanation({...job,status:'cancelled'},true,[]).next,/不会自动恢复/);
   assert.match(executionExplanation({...job,artifactState:'stale'},true,[]).next,/旧结果不能批准/);
+});
+
+test('report-only failure is distinct from execution failure across status, stage and recovery action', () => {
+  const f = finalChain();
+  const job: Job = { ...f.implementation, status: 'failed', result: undefined, artifact: undefined, rawOutput: '{}', formatRecovery: { baseSha: 'base', patchHash: 'hash' }, error: '报告整理失败' };
+  assert.equal(taskGroups([job], true)[0].state, 'attention');
+  assert.equal(taskGroups([{ ...job, formatRecovery: undefined }], true)[0].state, 'failed');
+  assert.equal(taskStatus(job).label, '报告待整理'); assert.notEqual(taskStatus(job).tone, 'green');
+  assert.equal(jobNodeState(job).result, '报告待整理');
+  assert.equal(availableActions(job.issueSnapshot, job, [job]).controls![0].label, '重新整理报告');
+  const markup = renderToStaticMarkup(React.createElement(StageProgress, { job, issue: job.issueSnapshot, audit: [], readOnly: false }));
+  assert.match(markup, /报告整理失败/); assert.doesNotMatch(markup, /本次执行失败/);
+  assert.equal(acceptanceEligibility(job, f.jobs).allowed, false);
+  assert.equal(taskStatus({ ...job, status: 'running', formatOnly: true }).label, '正在整理报告');
+  assert.equal(jobNodeState({ ...job, status: 'queued', formatOnly: true }).result, '等待整理报告');
+  assert.equal(jobNodeState({ ...job, formatRecovery: undefined }).result, '执行失败');
 });
 
 test('list status never paints locally accepted failing or incomplete validation as green', () => {

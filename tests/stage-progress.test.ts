@@ -218,7 +218,6 @@ test("execution detail retains its view when results arrive and surfaces live pe
     currentJob: job,
     history: [job],
     readOnly: false,
-    viewingHistory: false,
     selection: { view: "stage", detail: "execution" },
     choose: () => {
       throw Error("render must not change selection");
@@ -240,8 +239,7 @@ test("execution detail retains its view when results arrive and surfaces live pe
     React.createElement(StagePanel, {
       ...props,
       readOnly: true,
-      viewingHistory: true,
-    }),
+      }),
   );
   assert.deepEqual(
     calls.map((c) => c[4]),

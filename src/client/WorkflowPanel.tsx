@@ -156,16 +156,6 @@ export function WorkflowPanel({
         <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
         </details>
       )}
-      {job?.deliveryReviewId && (
-        <p className="mw-callout">
-          此产物保存了审查关联；当前有效性与限制请核对审阅摘要，发布时仍会再次检查。
-        </p>
-      )}
-      {job?.artifactState === "stale" && (
-        <div className="mw-callout amber">
-          此产物对应旧版本，仅供参考；请对当前版本重新执行。
-        </div>
-      )}
       {!hideSummary && (
         <p className="mw-muted">
           {a?.summary ??

@@ -1,3 +1,6 @@
+import { parseObject } from "./report-json.ts";
+export { parseObject } from "./report-json.ts";
+import { finalizeReport, reportRecoveryBudget, reportRecoveryPrompt } from "./report-finalizer.ts";
 import { ciGuidance, ciPromptEvidence } from "./remote-progress.ts";
 import {
   triageInput,
@@ -6,7 +9,6 @@ import {
   preflightBudgetPrompt,
 } from "./triage-input.ts";
 import {
-  artifactSchemas,
   artifactPrompt,
   asAnalysis,
   lightweight,
@@ -38,61 +40,6 @@ export function parseAnalysis(text: string, repaired?: () => void) {
   if (changed) repaired?.();
   return result.data;
 }
-export function parseObject(text: string, repaired?: () => void): unknown {
-  const trimmed = text
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/, "");
-  if (trimmed.length > 200000)
-    throw new Error("模型输出过长，请缩小任务范围后重试。");
-  let value: unknown;
-  let changed = false;
-  try {
-    value = JSON.parse(trimmed);
-  } catch {
-    // Remove redundant punctuation outside strings; never invent missing content.
-    let fixed = "",
-      quoted = false,
-      escaped = false;
-    const stack: string[] = [];
-    for (let i = 0; i < trimmed.length; i++) {
-      const c = trimmed[i];
-      if (quoted) {
-        fixed += c;
-        if (escaped) escaped = false;
-        else if (c === "\\") escaped = true;
-        else if (c === '"') quoted = false;
-        continue;
-      }
-      if (c === '"') quoted = true;
-      else if (c === "{" || c === "[") stack.push(c);
-      else if (
-        c === "]" &&
-        stack.at(-1) === "{" &&
-        /^\s*[,}]/.test(trimmed.slice(i + 1))
-      )
-        continue;
-      else if (c === "}" || c === "]") {
-        if (stack.at(-1) !== (c === "}" ? "{" : "["))
-          throw new Error("模型结果格式不完整，请重试任务；原始输出已保留。");
-        stack.pop();
-      } else if (c === "," && /^\s*[}\]]/.test(trimmed.slice(i + 1))) continue;
-      fixed += c;
-    }
-    if (quoted || stack.length || !trimmed.endsWith("}"))
-      throw new Error(
-        "模型结果可能被截断，请提高输出上限或缩小任务范围后重试；原始输出已保留。",
-      );
-    try {
-      value = JSON.parse(fixed);
-    } catch {
-      throw new Error("模型未返回有效的结果格式，请重试任务；原始输出已保留。");
-    }
-    changed = true;
-  }
-  if (changed) repaired?.();
-  return value;
-}
 export const modelRunner: Runner = async ({
   repo,
   issue,
@@ -114,6 +61,7 @@ export const modelRunner: Runner = async ({
     );
   progress("获取讨论与 PR 变更作为分析证据");
   const context =
+    job.formatOnly ||
     issue.origin === "repository" ||
     job.kind === "preflight" ||
     (job.kind === "triage" && issue.comments === 0)
@@ -121,69 +69,69 @@ export const modelRunner: Runner = async ({
       : await new GitHub().context(repo, issue, signal, lightweight(job.kind));
   const base = process.env.MAINTAINER_BASE_URL ?? "https://api.deepseek.com";
   progress(`调用 ${settings.model}；输入按不可信仓库资料处理`);
-  const response = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
-    method: "POST",
-    signal,
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
+  const messages = [
+    {
+      role: "system",
+      content: `${artifactPrompt(job.kind)}\n\n${job.kind === "triage" ? triageBudgetPrompt : job.kind === "preflight" ? preflightBudgetPrompt : taskPrompt(job.kind, false)}\n${issueTaskGuidance(issue)}\n${job.kind === "ci" ? ciGuidance() : ""}`,
     },
-    body: JSON.stringify({
-      model: settings.model,
-      max_tokens: settings.maxTokens,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: `${artifactPrompt(job.kind)}\n\n${job.kind === "triage" ? triageBudgetPrompt : job.kind === "preflight" ? preflightBudgetPrompt : taskPrompt(job.kind, false)}\n${issueTaskGuidance(issue)}\n${job.kind === "ci" ? ciGuidance() : ""}`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify(job.kind === "triage" ? { ...triageInput(repo, issue, related, context), maintainerContext: issuePromptContext(issue) } : job.kind === "preflight" ? preflightInput(repo, issue, job.prContext) : {
-            repository: repo.profile,
-            handoff: job.handoff,
-            instructions: job.instructions,
-            pr: job.prContext,
-            ciEvidence: ciPromptEvidence(job.ciEvidence),
-            task: job.kind,
-            revision: job.revision,
-            checkoutSha: job.baseSha,
-            comparisonBaseSha: job.prContext?.baseSha,
-            issue: issuePromptContext(issue),
-            related: related
-              .map((i) => ({
-                number: i.number,
-                title: i.title,
-                body: i.body.slice(0, 1200),
-              }))
-              .slice(0, 35),
-            context,
-            constraint:
-              "Remote metadata analysis only. No local code was read and no tests can be run. Explicitly state this limitation.",
-          }),
-        },
-      ],
-    }),
-  });
-  if (!response.ok)
-    throw new Error(
-      `模型服务返回 HTTP ${response.status}，请检查模型、端点和密钥配置`,
-    );
-  const payload = z
-    .object({
-      choices: z
-        .array(z.object({ message: z.object({ content: z.string() }) }))
-        .min(1),
-      usage: z.object({ total_tokens: z.number() }).optional(),
-    })
-    .parse(await response.json());
-  recordOutput?.(payload.choices[0].message.content);
-  // This executor has no test tool, so model claims cannot be represented as execution evidence.
-  const artifact = withoutExecutedTests(
-    artifactSchemas[job.kind].parse(
-      parseObject(payload.choices[0].message.content),
-    ),
-  );
+    {
+      role: "user",
+      content: JSON.stringify(job.kind === "triage" ? { ...triageInput(repo, issue, related, context), maintainerContext: issuePromptContext(issue) } : job.kind === "preflight" ? preflightInput(repo, issue, job.prContext) : {
+        repository: repo.profile,
+        handoff: job.handoff,
+        instructions: job.instructions,
+        pr: job.prContext,
+        ciEvidence: ciPromptEvidence(job.ciEvidence),
+        task: job.kind,
+        revision: job.revision,
+        checkoutSha: job.baseSha,
+        comparisonBaseSha: job.prContext?.baseSha,
+        issue: issuePromptContext(issue),
+        related: related
+          .map((i) => ({
+            number: i.number,
+            title: i.title,
+            body: i.body.slice(0, 1200),
+          }))
+          .slice(0, 35),
+        context,
+        constraint:
+          "Remote metadata analysis only. No local code was read and no tests can be run. Explicitly state this limitation.",
+      }),
+    },
+  ];
+  const request = async (requestMessages: { role: string; content: string }[]) => {
+    signal.throwIfAborted();
+    const response = await fetch(`${base.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST", signal,
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: settings.model, max_tokens: settings.maxTokens,
+        response_format: { type: "json_object" }, messages: requestMessages }),
+    });
+    if (!response.ok) throw new Error(`模型服务返回 HTTP ${response.status}，请检查模型、端点和密钥配置`);
+    return z.object({ choices: z.array(z.object({ message: z.object({ content: z.string() }), finish_reason: z.string().nullable().optional() })).min(1),
+      usage: z.object({ total_tokens: z.number() }).optional() }).parse(await response.json());
+  };
+  const budget = reportRecoveryBudget(!!job.formatOnly);
+  const payload = await request(job.formatOnly
+    ? [{ role: "system", content: reportRecoveryPrompt(job.kind, job.rawOutput ?? "", job.formatRecovery?.reason) }]
+    : messages);
+  // Preserve the original report, including on failed format recovery.
+  if (!job.formatOnly) recordOutput?.(payload.choices[0].message.content);
+  let totalTokens = payload.usage?.total_tokens;
+  const artifact = withoutExecutedTests(await finalizeReport({
+    kind: job.kind, text: payload.choices[0].message.content, budget, signal, progress,
+    truncated: payload.choices[0].finish_reason === "length",
+    recover: async (raw, failure, detail) => {
+      const fixed = await request([{ role: "system", content: reportRecoveryPrompt(job.kind, raw, failure, detail) }]);
+      if (fixed.usage?.total_tokens !== undefined) totalTokens = (totalTokens ?? 0) + fixed.usage.total_tokens;
+      return finalizeReport({
+        kind: job.kind, text: fixed.choices[0].message.content, budget, signal, progress,
+        truncated: fixed.choices[0].finish_reason === "length",
+        recover: async () => { throw new Error("报告整理额度已用尽"); },
+      });
+    },
+  }));
   const result = asAnalysis(artifact);
   if (
     result.duplicateOf !== null &&
@@ -194,6 +142,6 @@ export const modelRunner: Runner = async ({
     artifact,
     result,
     engine: "model / remote evidence",
-    tokens: payload.usage?.total_tokens,
+    tokens: totalTokens,
   };
 };

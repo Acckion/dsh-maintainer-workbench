@@ -1,3 +1,4 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
 import { useEffect, useState } from 'react';
 import { Search, FileSearch, BookOpen, GitBranch, Workflow, ArrowLeft, RefreshCw } from 'lucide-react';
 import { organizeActions, type OrganizeMode } from '../core/organize.ts';
@@ -107,7 +108,7 @@ export function RepositoryOrganize({ state, repoId, busy, run, open, act }: {
           {running && <button className="mw-button" onClick={() => { setSelectedJob(running.id); setPanel('Results'); }}>查看正在执行的任务</button>}
         </>}
         {panel === 'Results' && (chosen ? <>
-          <div className="mw-repository-section-heading"><div><Tag tone={taskStatus(chosen).tone}>{taskStatus(chosen).label}</Tag><small> {when(chosen.updatedAt)}</small></div><div className="mw-repository-actions">{active && <button className="mw-button" disabled={busy} onClick={() => void command('/cancel', chosen)}>取消任务</button>}{chosen.status === 'failed' && <button className="mw-button" disabled={busy} onClick={() => void command('/rerun', chosen)}><RefreshCw size={14}/>重试</button>}<button className="mw-button" onClick={() => open(chosen.id)}>查看执行与审阅</button></div></div>
+          <div className="mw-repository-section-heading"><div><Tag tone={taskStatus(chosen).tone}>{taskStatus(chosen).label}</Tag><small> {when(chosen.updatedAt)}</small></div><div className="mw-repository-actions">{active && <button className="mw-button" disabled={busy} onClick={() => void command('/cancel', chosen)}>取消任务</button>}{chosen.status === 'failed' && <button className="mw-button" disabled={busy} onClick={() => void command(reportNeedsRecovery(chosen) ? '/retry' : '/rerun', chosen)}><RefreshCw size={14}/>{reportNeedsRecovery(chosen) ? "重新整理报告" : "重试"}</button>}<button className="mw-button" onClick={() => open(chosen.id)}>查看执行与审阅</button></div></div>
           {chosen.error && <p role="alert" className="mw-repository-error">{chosen.error}</p>}
           {report ? <><section className="mw-repository-section"><h3>结论</h3><RepositoryMarkdown text={report.summary}/></section>{'facts' in report && <section className="mw-repository-section"><h3>仓库事实与文档职责</h3><ul>{report.facts.map((s, i) => <li key={i}>{s}</li>)}</ul></section>}{'proposedChanges' in report && <section className="mw-repository-section"><h3>建议修改</h3><ul>{report.proposedChanges.map((s, i) => <li key={i}>{s}</li>)}</ul></section>}{'changes' in report && <section className="mw-repository-section"><h3>已准备的修改</h3><ul>{report.changes.map((s, i) => <li key={i}>{s}</li>)}</ul></section>}
             <details><summary>证据 · {report.evidence.length}</summary>{report.evidence.map((e, i) => <div className="mw-repository-evidence" key={i}><code>{e.source}</code><p>{e.detail}</p></div>)}</details>

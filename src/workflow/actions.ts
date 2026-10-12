@@ -1,3 +1,4 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
 import {
   manualSource,
   scopeResolved,
@@ -8,6 +9,7 @@ import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
+import { blockingGaps } from "../domain/gaps.ts";
 
 export interface WorkflowAction {
   kind: JobKind;
@@ -105,12 +107,22 @@ export function availableActions(
           ? "preflight"
           : "triage";
   else if (artifact?.stage === "triage") {
+    const investigationGaps = blockingGaps(artifact.gaps ?? [], "investigate");
+    // Reading source and checking a claim are investigation work, not human input.
+    const systemInvestigation =
+      artifact.route === "needs_info" &&
+      investigationGaps.some((g) => g.kind === "system_check") &&
+      investigationGaps.every((g) =>
+        ["system_check", "unclassified"].includes(g.kind),
+      );
     primary =
       artifact.route === "implement"
         ? category === "docs"
           ? "docs"
           : "fix"
-        : artifact.route === "investigate" || artifact.route === "answer"
+        : artifact.route === "investigate" ||
+            artifact.route === "answer" ||
+            systemInvestigation
           ? "investigate"
           : undefined;
     if (issue.plan?.decision === "accepted" && category !== "question")
@@ -257,7 +269,7 @@ export function availableActions(
     controls.push({
       kind: "retry",
       runId: job.id,
-      label: "重试任务",
+      label: reportNeedsRecovery(job) ? "重新整理报告" : "重试任务",
       enabled:
         job.artifactState !== "stale" &&
         issue.state === "open" &&

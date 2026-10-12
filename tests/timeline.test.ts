@@ -475,7 +475,6 @@ test("browsing an earlier scope decision never mounts the current editable plan 
       currentJob: current,
       history: [current],
       readOnly: true,
-      viewingHistory: true,
       selection: { view: "stage", detail: "result" },
       choose: () => {},
       render: (tab) => {
