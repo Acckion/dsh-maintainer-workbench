@@ -34,7 +34,7 @@ test('host supplies commands and original output; failed, cancelled and unexecut
   const artifact = assembleReport('validate', report, context);
   assert.deepEqual('tests' in artifact && artifact.tests[0], { executionId: record.id, command: record.command, status: 'failed', output: record.output });
   assert.ok(artifact.evidence[0].detail.includes(record.output));
-  for (const change of [{ exitCode: null }, { exitCode: 0, signal: 'SIGTERM' }]) {
+  for (const change of [{ exitCode: null }, { exitCode: null, isError: true }, { exitCode: null, isError: true, signal: 'SIGTERM' }, { exitCode: 0, signal: 'SIGTERM' }]) {
     const result = assembleReport('validate', report, { ...context, executionRecords: [{ ...record, ...change }] });
     assert.equal('tests' in result && result.tests[0].status, 'not_run');
   }
@@ -65,4 +65,31 @@ test('source quotes can be extracted only from a cited numbered read, with exist
 test('compact empty optional requests retain the previous normalization without discarding real gaps', () => {
   const artifact = assembleReport('triage', compact('triage', { inputRequest: { reason: '无追问', fields: [] }, missingInfo: ['真实缺口'], route: 'needs_info' }));
   assert.equal(artifact.inputRequest, undefined); assert.deepEqual(artifact.stage === 'triage' && artifact.missingInfo, ['真实缺口']);
+});
+
+for (const kind of ['triage', 'preflight'] as const) test(`${kind} retains bounded supplied metadata evidence without execution records`, () => {
+  const evidence = [{ source: 'Issue body', detail: '用户报告透明主题下终端背景不透明' }, { source: 'PR CI', detail: '当前 CI 状态未知，未执行本地检查' }];
+  assert.deepEqual(assembleReport(kind, compact(kind, { evidence })).evidence, evidence);
+  assert.throws(() => assembleReport(kind, compact(kind, { evidence: Array(21).fill(evidence[0]) })));
+  assert.throws(() => assembleReport(kind, compact(kind, { evidence: [{ source: 'Issue', detail: 'x'.repeat(2001) }] })));
+  assert.throws(() => assembleReport('validate', compact('validate', { evidence })));
+});
+
+for (const kind of ['fix', 'docs'] as const) test(`${kind} only accepts checks bound to its final patch`, () => {
+  const value = compact(kind, { tests: [{ executionId: record.id }] });
+  assert.throws(() => assembleReport(kind, value, { ...context, executionRecords: [{ ...record, patchHash: 'baseline' }] }));
+  assert.throws(() => assembleReport(kind, value, { ...context, executionRecords: [{ ...record, patchHash: undefined }] }));
+  assert.throws(() => assembleReport(kind, value, { ...context, patchSha256: undefined }));
+  const artifact = assembleReport(kind, value, { ...context, executionRecords: [{ ...record, exitCode: 0 }] });
+  assert.equal('tests' in artifact && artifact.tests[0].status, 'passed');
+});
+
+for (const [command, output] of [
+  ['nl -ba source.ts', '    12\t  const text = "quoted";'],
+  ['cat -n source.ts', '    12\t  const text = "quoted";'],
+  ['nl -ba source.ts', '12    const text = "quoted";'],
+  ['rg -n text source.ts', '12:  const text = "quoted";'],
+]) test(`compact source reads support ${JSON.stringify(output)} from ${command}`, () => {
+  const artifact = assembleReport('review', compact('review', { inspectedSources: [{ executionId: record.id, path: 'source.ts', line: 12 }] }), { ...context, executionRecords: [{ ...record, command, output }] });
+  assert.equal(artifact.stage === 'review' && artifact.inspectedSources?.[0].quote.trim(), 'const text = "quoted";');
 });

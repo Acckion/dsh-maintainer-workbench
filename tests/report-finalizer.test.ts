@@ -87,7 +87,7 @@ for (const scenario of ['local', 'compact', 'schema', 'truncated', 'invalid', 'h
   process.env.MAINTAINER_API_KEY = 'test-only';
   t.after(() => { globalThis.fetch = oldFetch; if (oldKey === undefined) delete process.env.MAINTAINER_API_KEY; else process.env.MAINTAINER_API_KEY = oldKey; });
   const { schemaVersion, stage, evidence, nextSteps, responseDraft, ...business } = triage;
-  const raw = scenario === 'compact' ? JSON.stringify({ reportFormat: 'compact-v1', ...business }) : scenario === 'local' ? JSON.stringify(triage).replace(',"category":', '],"category":') : scenario === 'truncated' ? JSON.stringify(triage) : '{}';
+  const raw = scenario === 'compact' ? JSON.stringify({ reportFormat: 'compact-v1', ...business, evidence: [{ source: 'Issue body', detail: '用户报告主题问题' }] }) : scenario === 'local' ? JSON.stringify(triage).replace(',"category":', '],"category":') : scenario === 'truncated' ? JSON.stringify(triage) : '{}';
   const requests: any[] = [];
   globalThis.fetch = async (_, init) => {
     requests.push(JSON.parse(init!.body as string));
@@ -101,7 +101,7 @@ for (const scenario of ['local', 'compact', 'schema', 'truncated', 'invalid', 'h
   const input: Parameters<Runner>[0] = { repo: store.repos()[0], issue, related: [], job, settings: store.settings(), signal, progress: () => {}, recordOutput: text => outputs.push(text) };
   if (scenario === 'invalid') await assert.rejects(modelRunner(input), error => error instanceof ArtifactFormatError && error.failure.repairAttempts === 1);
   else if (scenario === 'http') await assert.rejects(modelRunner(input), /HTTP 503/);
-  else { const result = await modelRunner(input); assert.equal(result.artifact?.stage, 'triage'); assert.equal(result.tokens, scenario === 'local' || scenario === 'compact' ? 9 : 18); }
+  else { const result = await modelRunner(input); assert.equal(result.artifact?.stage, 'triage'); if (scenario === 'compact') assert.deepEqual(result.artifact?.evidence, [{ source: 'Issue body', detail: '用户报告主题问题' }]); assert.equal(result.tokens, scenario === 'local' || scenario === 'compact' ? 9 : 18); }
   assert.ok(requests[0].messages[1].content.includes(issue.body));
   assert.doesNotMatch(requests[0].messages[1].content, /UNTRUSTED_INPUT_JSON/);
   assert.equal(requests.length, scenario === 'local' || scenario === 'compact' || scenario === 'http' ? 1 : 2);

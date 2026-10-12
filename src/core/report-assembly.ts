@@ -15,6 +15,7 @@ export function compactReportSchema(kind: JobKind) {
     inputRequest: artifactSchemas[kind].shape.inputRequest.nullable(),
     evidenceRefs: z.array(z.string().min(1).max(200)).max(30).optional(),
     nextSteps: nextSteps.optional(), responseDraft: responseDraft.optional() };
+  if (['triage', 'preflight'].includes(kind)) fields.evidence = z.array(z.object({ source: z.string().min(1).max(400), detail: z.string().min(1).max(2000) })).max(20).optional();
   if (['fix', 'docs', 'validate'].includes(kind)) fields.tests = z.array(testRef).max(20);
   if (kind === 'review') {
     fields.inspectedSources = z.array(sourceRef).max(80).optional();
@@ -24,12 +25,12 @@ export function compactReportSchema(kind: JobKind) {
 }
 
 /** Select only host records from the same session, checkout and (for read-only stages) patch. */
-function recordFor(kind: JobKind, id: string, context?: ReportContext): ExecutionRecord {
+function recordFor(kind: JobKind, id: string, context?: ReportContext, implementationCheck = false): ExecutionRecord {
   const matches = context?.executionRecords?.filter(record => record.id === id || record.callId === id) ?? [];
   const record = matches[0];
   if (matches.length !== 1 || !context?.sessionId || !record || record.sessionId !== context.sessionId ||
     record.checkoutSha !== context.baseSha || (context.worktree && record.cwd !== context.worktree) ||
-    (['validate', 'review', 'ci'].includes(kind) && context.worktree && (!context.patchSha256 || record.patchHash !== context.patchSha256)))
+    ((['validate', 'review', 'ci'].includes(kind) || implementationCheck) && context.worktree && (!context.patchSha256 || record.patchHash !== context.patchSha256)))
     throw new ReportParseError(`报告引用缺少同会话、同版本的工具记录：${id}`, 'schema');
   return record;
 }
@@ -39,10 +40,10 @@ export function assembleReport(kind: JobKind, value: unknown, context?: ReportCo
     return parseArtifact(kind, value);
   const candidate = value as Record<string, unknown>;
   const report = compactReportSchema(kind).parse(emptyInputRequest(candidate.inputRequest) ? { ...candidate, inputRequest: undefined } : candidate);
-  const evidence = (report.evidenceRefs as string[] | undefined ?? []).map(id => {
+  const evidence = [...(report.evidence as { source: string; detail: string }[] | undefined ?? []), ...(report.evidenceRefs as string[] | undefined ?? []).map(id => {
     const record = recordFor(kind, id, context);
     return { source: `Harness execution ${record.id}`, detail: `${record.command ?? record.sourcePath ?? record.tool}\n${record.output.slice(-1200)}` };
-  });
+  })];
   const body: Record<string, unknown> = { ...report, schemaVersion: 1, stage: kind, evidence, nextSteps: report.nextSteps ?? [], responseDraft: report.responseDraft ?? '' };
   delete body.reportFormat; delete body.evidenceRefs;
   if (['fix', 'docs', 'validate'].includes(kind)) body.tests = (report.tests as z.infer<typeof testRef>[]).map(test => {
@@ -50,9 +51,9 @@ export function assembleReport(kind: JobKind, value: unknown, context?: ReportCo
       if (!test.command?.trim() || test.status !== 'not_run') throw new ReportParseError('没有执行引用的检查必须提供命令并标记 not_run', 'schema');
       return { command: test.command, status: 'not_run', output: test.output ?? '' };
     }
-    const record = recordFor(kind, test.executionId, context);
+    const record = recordFor(kind, test.executionId, context, ['fix', 'docs'].includes(kind));
     if (!record.command || test.command !== undefined && test.command.trim() !== record.command.trim()) throw new ReportParseError('检查引用与实际执行命令不符', 'schema');
-    const status = test.status === 'not_run' || record.signal || record.exitCode === null && !record.isError
+    const status = test.status === 'not_run' || record.signal || record.exitCode === null
       ? 'not_run' : test.status === 'failed' || record.isError || record.exitCode !== 0 ? 'failed' : 'passed';
     return { command: record.command, status, output: record.output, executionId: record.id };
   });
@@ -62,7 +63,7 @@ export function assembleReport(kind: JobKind, value: unknown, context?: ReportCo
       if (ref.quote !== undefined) return ref; // The existing review gate verifies explicit quotes.
       const readPath = record.sourcePath && context?.worktree && resolve(context.worktree, record.sourcePath) === resolve(context.worktree, ref.path) && /read|file|open/i.test(record.tool);
       const readCommand = record.command && /\b(cat|nl|sed|rg|head|tail|awk)\b/.test(record.command) && record.command.includes(ref.path);
-      const line = record.output.split('\n').map(text => text.match(/^\s*(\d+)\s*[|:] ?(.*)$/)).find(match => match && Number(match[1]) === ref.line);
+      const line = record.output.split('\n').map(text => text.match(/^\s*(\d+)(?:\s*[|:] ?|[ \t]+)(.*)$/)).find(match => match && Number(match[1]) === ref.line);
       if ((!readPath && !readCommand) || !line?.[2].trim()) throw new ReportParseError('工具输出没有可提取的编号源码行，请提供简短原文引用', 'schema');
       return { ...ref, quote: line[2] };
     };

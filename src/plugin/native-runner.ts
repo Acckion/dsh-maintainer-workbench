@@ -17,6 +17,9 @@ import type {} from "@deepseek-ai/dsh-tools";
 import type {} from "@deepseek-ai/dsh-user-approval";
 import type {} from "@deepseek-ai/dsh-workspace";
 import { createHash } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   artifactPrompt,
   asAnalysis,
@@ -40,7 +43,7 @@ import {
 } from "../core/document-validation.ts";
 import { ArtifactFormatError } from "../core/execution-errors.ts";
 import { executionRecord } from "../core/execution-evidence.ts";
-import { collectPatch } from "../core/git.ts";
+import { collectPatch, git } from "../core/git.ts";
 import { GitHub } from "../core/github.ts";
 import {
   implementationPromptHandoff,
@@ -328,19 +331,20 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           maxTokens: settings.maxTokens,
         },
         setup: async (agentCtx, agent) => {
+          // Own-scope tools survive inherited-tool restrictions. Naming this local
+          // tool in restrict.allow is rejected by the Harness SDK as an unknown global.
           agentCtx.tools.register(reportTool(job.kind, value => {
             submittedReport = value; finalText = JSON.stringify(value);
           }));
           agentCtx.tools.guard(execution => {
             if (execution.name !== 'submit_stage_report') return reportOnly ? '报告阶段只提交已有结果，不再执行工具' : undefined;
             if (submittedReport !== undefined) return '本轮报告已收到，请勿重复提交';
+            if (!reportReady) return '执行阶段尚未结束，请先完成当前任务';
             reportAttempts++;
-            if (reportReady) {
-              const args = execution.arguments as { report?: unknown };
-              finalText = typeof args === 'string' ? args : JSON.stringify(args?.report ?? args) ?? '';
-            }
+            const args = execution.arguments as { report?: unknown };
+            finalText = typeof args === 'string' ? args : JSON.stringify(args?.report ?? args) ?? '';
             if (reportAttempts > 2) return reportBlocked = '报告提交格式未通过，两次提交额度已用尽；仅保留已有输出，不继续请求模型';
-            return !reportReady ? '执行阶段尚未结束，请先完成当前任务' : loop.guard(execution.name, execution.arguments);
+            return loop.guard(execution.name, execution.arguments);
           });
           if (lightweight(job.kind) || job.formatOnly) {
             agentCtx.tools.restrict({ allow: [] });
@@ -428,6 +432,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
     };
     let remove = () => {};
     let removeTools = () => {};
+    let removePatchCapture = () => {};
     const abort = () => handle.agent.cancel({ kind: "user" });
     try {
       await workspace?.attachSession(sessionId);
@@ -474,12 +479,37 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           canonical.set(execution.callId, result.value);
         }
       });
-      const executionPatchHash =
+      let executionPatchHash =
         job.worktree && ["validate", "review", "ci"].includes(job.kind)
           ? createHash("sha256")
               .update(await collectPatch(job.worktree, job.baseSha))
               .digest("hex")
           : undefined;
+      // Bind implementation process evidence to the patch actually present during execution.
+      // A command that changes the patch cannot establish a check of either version.
+      const processPatches = new Map<string, string>();
+      if (!job.formatOnly && job.worktree && ["fix", "docs"].includes(job.kind)) {
+        const patchHash = async () => {
+          // Isolate snapshot indexes from agent commands and parallel tool calls.
+          const directory = await mkdtemp(join(tmpdir(), "maintainer-check-patch-"));
+          try {
+            const indexPath = join(directory, "index");
+            await git(job.worktree!, ["read-tree", job.baseSha], false, undefined, 30000, false, indexPath);
+            return createHash("sha256").update(await collectPatch(
+              job.worktree!, job.baseSha, false, indexPath,
+            )).digest("hex");
+          } finally { await rm(directory, { recursive: true, force: true }); }
+        };
+        removePatchCapture = ctx.on("tools/execute", async (execution, next) => {
+          if (execution.agent?.session.id !== sessionId ||
+              typeof (execution.arguments as { command?: unknown })?.command !== "string") return next();
+          const before = await patchHash();
+          const result = await next();
+          const after = await patchHash();
+          if (before === after) processPatches.set(execution.callId, after);
+          return result;
+        });
+      }
       let finishTurn!: () => void, failTurn!: (error: unknown) => void;
       const waitForTurn = () =>
         new Promise<void>((resolve, reject) => {
@@ -521,7 +551,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
               event.seq,
               calls.get(event.data.message.toolCallId),
               { ...event.data, meta: value ?? event.data.meta },
-              executionPatchHash,
+              processPatches.get(event.data.message.toolCallId) ?? executionPatchHash,
             );
           loop.edited(record.tool, record.isError);
           observedRecords.push(record);
@@ -559,7 +589,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
               },
               meta: value,
             },
-            executionPatchHash,
+            processPatches.get(event.data.subCallId) ?? executionPatchHash,
           );
           loop.edited(record.tool, record.isError);
           observedRecords.push(record);
@@ -717,6 +747,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
           recordOutput?.(finalText);
         }
         const actualPatch = await collectPatch(job.worktree!, job.baseSha);
+        executionPatchHash = createHash("sha256").update(actualPatch).digest("hex");
         await prepareDocumentPhase("最终报告");
         progress(
           actualPatch
@@ -921,6 +952,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
       removeContextRecovery();
       remove();
       removeTools();
+      removePatchCapture();
       signal.removeEventListener("abort", abort);
       await handle.dispose();
       if (lightweight(job.kind) || job.formatOnly) {
