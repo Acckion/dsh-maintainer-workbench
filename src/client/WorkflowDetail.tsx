@@ -1,5 +1,5 @@
 import { stepDisposition } from "../workflow/manual.ts";
-import { ManualStepForm } from "./ManualStepForm.tsx";
+import { ManualStepForm, manualStepAccess } from "./ManualStepForm.tsx";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Issue, Job } from "../core/types.ts";
 import { eventDescription } from "../workflow/presentation.ts";
@@ -28,7 +28,6 @@ interface Props {
   ) => ReactNode;
   actions: (job?: Job, actions?: ProcessingTimeline["actions"]) => ReactNode;
   evidence: (job?: Job) => ReactNode;
-  context: () => ReactNode;
   instructions?: ReactNode;
   track: (job?: Job, readOnly?: boolean, monitoring?: boolean) => ReactNode;
 }
@@ -66,7 +65,6 @@ export function WorkflowDetail({
   render,
   actions,
   evidence,
-  context,
   instructions,
   track,
 }: Props) {
@@ -90,7 +88,7 @@ export function WorkflowDetail({
   const [error, setError] = useState("");
   const [manualNotices, setManualNotices] = useState<string[]>([]);
   const [selection, setSelection] = useState<Selection>(() => {
-    if (legacyTab === "plan") return { view: "plan", detail: "result" };
+    if (legacyTab === "plan") return { view: "stage", detail: "plan" };
     if (legacyTab === "work" || legacyTab === "review")
       return {
         view: "stage",
@@ -104,7 +102,8 @@ export function WorkflowDetail({
       );
       if (saved?.view === "overview")
         return { view: "stage", detail: "result" };
-      if (saved && ["stage", "plan"].includes(saved.view)) return saved;
+      if (saved?.view === "plan") return { view: "stage", detail: "plan" };
+      if (saved?.view === "stage") return saved;
     } catch {}
     return {
       view: "stage",
@@ -158,8 +157,13 @@ export function WorkflowDetail({
     if (legacyTab === "overview") return;
     setSelection((s) => ({
       ...s,
-      view: legacyTab === "plan" ? "plan" : "stage",
-      detail: legacyTab === "work" ? "execution" : "result",
+      view: "stage",
+      detail:
+        legacyTab === "work"
+          ? "execution"
+          : legacyTab === "plan"
+            ? "plan"
+            : "result",
       nodeId: undefined,
       attemptId: job?.id,
     }));
@@ -277,83 +281,80 @@ export function WorkflowDetail({
             selected={selection.view === "stage" ? selected?.id : undefined}
             select={select}
           />
-          {(issue.type === "issue" ||
-            viewingHistory ||
-            selection.view !== "stage") && (
-            <NextAction
-              timeline={timeline}
-              back={back}
-              showBack={viewingHistory || selection.view !== "stage"}
-              tools={
-                issue.type === "issue" && (
-                  <button
-                    type="button"
-                    className="mw-text-button"
-                    onClick={() => choose({ view: "plan", detail: "result" })}
-                  >
-                    调整分类与计划
-                  </button>
-                )
-              }
-            />
-          )}
+          {viewingHistory && <NextAction timeline={timeline} back={back} />}
           {viewingHistory && seenVersion < state.version && (
             <p className="mw-callout">
               当前阶段有更新。查看历史不会改变正在执行的任务。
             </p>
           )}
-          {selection.view === "plan"
-            ? render("plan", currentJob, timeline.historical)
-            : selected && (
-                <StagePanel
-                  selected={selected}
-                  manual={
-                    <ManualStepForm
-                      key={`${timeline.caseId}:${selected.stage}`}
-                      issue={issue}
-                      timeline={timeline}
-                      selected={selected}
-                      readOnlyAttempt={
-                        !!selection.attemptId &&
-                        !!attempt &&
-                        attempt.id !== timeline.currentRunId
-                      }
-                      onUpdated={(warnings) => {
-                        setManualNotices(warnings ?? []);
-                        setLoaded(undefined);
-                        choose({ view: "stage", detail: "result" });
-                      }}
-                    />
-                  }
-                  timeline={timeline}
-                  issue={issue}
-                  attempt={attempt}
-                  currentJob={currentJob}
-                  history={history}
-                  readOnly={readOnly}
-                  viewingHistory={viewingHistory}
-                  selection={selection}
-                  choose={choose}
-                  render={render}
-                  track={track}
-                  evidence={evidence}
-                  context={
-                    actionsForStage(timeline, selected)?.primary
-                      ? context
-                      : undefined
-                  }
-                  instructions={
-                    actionsForStage(timeline, selected)?.primary
-                      ? instructions
-                      : undefined
-                  }
-                  actions={
-                    actionsForStage(timeline, selected)
-                      ? actions(currentJob, actionsForStage(timeline, selected))
-                      : undefined
-                  }
-                />
-              )}
+          {selected && (
+            <StagePanel
+              selected={selected}
+              manual={
+                manualStepAccess(
+                  issue,
+                  timeline,
+                  selected,
+                  !!selection.attemptId &&
+                    !!attempt &&
+                    attempt.id !== timeline.currentRunId,
+                ).available ? (
+                  <ManualStepForm
+                    key={`${timeline.caseId}:${selected.stage}`}
+                    issue={issue}
+                    timeline={timeline}
+                    selected={selected}
+                    job={currentJob}
+                    readOnlyAttempt={
+                      !!selection.attemptId &&
+                      !!attempt &&
+                      attempt.id !== timeline.currentRunId
+                    }
+                    onUpdated={(mode, warnings) => {
+                      setManualNotices(warnings ?? []);
+                      setLoaded(undefined);
+                      choose({
+                        view: "stage",
+                        detail: ["takeover", "supplement"].includes(mode)
+                          ? "manual"
+                          : "result",
+                      });
+                    }}
+                  />
+                ) : undefined
+              }
+              timeline={timeline}
+              issue={issue}
+              attempt={attempt}
+              currentJob={currentJob}
+              history={history}
+              readOnly={readOnly}
+              viewingHistory={viewingHistory}
+              selection={selection}
+              choose={choose}
+              render={render}
+              track={track}
+              evidence={evidence}
+              context={
+                !issue.origin &&
+                !timeline.historical &&
+                (selected.id === timeline.currentNodeId ||
+                  actionsForStage(timeline, selected)?.primary)
+                  ? () => render("plan", currentJob, issue.state !== "open")
+                  : undefined
+              }
+              instructions={
+                actionsForStage(timeline, selected)?.primary
+                  ? instructions
+                  : undefined
+              }
+              actions={
+                actionsForStage(timeline, selected)
+                  ? actions(currentJob, actionsForStage(timeline, selected))
+                  : undefined
+              }
+            />
+          )}
           <details className="mw-stage-activity">
             <summary>阶段活动记录 · {timeline.eventTotal}</summary>
             <p className="mw-muted">

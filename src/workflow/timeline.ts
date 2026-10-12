@@ -300,7 +300,7 @@ export function projectTimeline(
         ? ["先完成前序调查或审查，核对目标、范围与证据"]
         : n.stage === "track"
           ? ["维护者确认产物后，预览并确认交付；发布后跟踪远端活动"]
-          : ["前序阶段完成且输入版本仍有效后，按服务端条件继续"];
+          : ["前序阶段完成后，核对最新信息再继续"];
     if (draft && (n.stage === "decision" || n.stage === "track"))
       n.conditions.push(
         "当前 PR 是 Draft，需核对作者的暂缓条件；审查完成不代表可以合并",

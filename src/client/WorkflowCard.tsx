@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { Issue, IssuePlan, Job } from "../core/types.ts";
 import type { WorkflowAction } from "./IssuePlanning.tsx";
 import { useItemDraft, flushItemDraft } from "./item-draft.ts";
-import { taskStatus } from "./review-evidence.ts";
+import { categoryNames } from "../core/issue-flow.ts";
 import { kindNames } from "../core/types.ts";
 
 const fieldLabels: Record<keyof IssuePlan, string> = {
@@ -28,10 +28,17 @@ export function WorkflowCard({
   busy: boolean;
   act: WorkflowAction;
 }) {
-  const act: WorkflowAction = (path, data, message) => perform(path, {
-    ...(data as Record<string, unknown>),
-    ...(path === "/workflow/analyze" ? {} : { expectedVersion: issue.processing?.version }),
-  }, message);
+  const act: WorkflowAction = (path, data, message) =>
+    perform(
+      path,
+      {
+        ...(data as Record<string, unknown>),
+        ...(path === "/workflow/analyze"
+          ? {}
+          : { expectedVersion: issue.processing?.version }),
+      },
+      message,
+    );
   const draft = issue.orchestration?.draft,
     run = issue.orchestration?.run;
   const {
@@ -40,8 +47,9 @@ export function WorkflowCard({
     error: draftError,
     update,
   } = useItemDraft(issue.id);
-  const [editing, setEditing] = useState(false);
   const [plan, setPlan] = useState<IssuePlan | undefined>();
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
   useEffect(() => {
     setPlan(
       draft
@@ -58,7 +66,8 @@ export function WorkflowCard({
                 scope: draft.scope,
                 acceptanceCriteria: draft.acceptanceCriteria,
                 reproduction: draft.reproduction,
-                reproductionMode: issue.plan?.reproductionMode ?? draft.reproductionMode,
+                reproductionMode:
+                  issue.plan?.reproductionMode ?? draft.reproductionMode,
                 expected: draft.expected,
                 actual: draft.actual,
                 decision: "accepted",
@@ -66,10 +75,6 @@ export function WorkflowCard({
         : undefined,
     );
   }, [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id, ready]);
-  useEffect(
-    () => setEditing(false),
-    [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id],
-  );
   const active = history.find((j) => ["queued", "running"].includes(j.status));
   const current = history.find((j) => j.id === run?.currentJobId);
   const edit = (key: keyof IssuePlan, value: string) => {
@@ -85,6 +90,16 @@ export function WorkflowCard({
     update({ plan: next, systemPlanInputKey: draft.inputKey });
   };
   const status = issue.orchestrationView?.status;
+  const suggestedRoute =
+    issue.type === "pr" || !draft || !plan
+      ? draft?.route
+      : plan.category === "question"
+        ? "answer"
+        : plan.category === "docs"
+          ? "docs"
+          : ["answer", "docs"].includes(draft.route)
+            ? "investigate"
+            : draft.route;
   const start = async (
     route?: "fix" | "docs" | "investigate" | "review",
     sourceJobId?: string,
@@ -98,7 +113,7 @@ export function WorkflowCard({
         inputKey: draft.inputKey,
         expectedVersion: issue.processing?.version,
         plan,
-        route,
+        route: route ?? suggestedRoute,
         sourceJobId,
         feedback: current?.reviewNote,
       },
@@ -116,13 +131,6 @@ export function WorkflowCard({
       </p>
       {run && (
         <>
-          <ol className="mw-workflow-progress">
-            {["确认计划", "实施或调查", "验证", "审查", "最终审核"].map(
-              (label) => (
-                <li key={label}>{label}</li>
-              ),
-            )}
-          </ol>
           <p className="mw-muted">
             本次最多 {run.maxSteps} 个步骤 · 截止{" "}
             {new Date(run.deadlineAt).toLocaleString("zh-CN")} ·
@@ -181,9 +189,38 @@ export function WorkflowCard({
                 </p>
               </div>
             )}
-            {editing && (
+            <details className="mw-plan-editor">
+              <summary>编辑目标、范围与验收</summary>
               <div className="mw-issue-planning">
-                {plan.category === "bug" && issue.type === "issue" && <label>复现策略<select aria-label="复现策略" value={plan.reproductionMode ?? "omit"} onChange={e => edit("reproductionMode", e.target.value)}><option value="omit">不主动复现（默认）</option><option value="best_effort">让 Agent 尝试复现</option><option value="required">必须复现后继续</option></select></label>}
+                <label>
+                  处理类型
+                  <select
+                    aria-label="处理类型"
+                    value={plan.category}
+                    disabled={busy || !ready}
+                    onChange={(e) => edit("category", e.target.value)}
+                  >
+                    {Object.entries(categoryNames).map(([value, label]) => (
+                      <option value={value} key={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {plan.category === "bug" && issue.type === "issue" && (
+                  <label>
+                    复现策略
+                    <select
+                      aria-label="复现策略"
+                      value={plan.reproductionMode ?? "omit"}
+                      onChange={(e) => edit("reproductionMode", e.target.value)}
+                    >
+                      <option value="omit">不主动复现（默认）</option>
+                      <option value="best_effort">让 Agent 尝试复现</option>
+                      <option value="required">必须复现后继续</option>
+                    </select>
+                  </label>
+                )}
                 {(
                   [
                     "goal",
@@ -208,10 +245,53 @@ export function WorkflowCard({
                     />
                   </label>
                 ))}
+                <button
+                  type="button"
+                  className="mw-button"
+                  disabled={
+                    busy ||
+                    saving ||
+                    !ready ||
+                    (issue.type === "issue" && !!active)
+                  }
+                  onClick={async () => {
+                    setSaving(true);
+                    setSaveMessage("");
+                    try {
+                      await flushItemDraft(issue.id);
+                      if (issue.type === "issue")
+                        await act(
+                          "/issue-plan",
+                          {
+                            issueId: issue.id,
+                            plan: {
+                              ...plan,
+                              decision: issue.plan?.decision ?? "proposed",
+                            },
+                          },
+                          "已保存计划，尚未开始执行",
+                        );
+                      else setSaveMessage("草稿已保存，确认开始后才生效。");
+                    } catch (error) {
+                      setSaveMessage(
+                        error instanceof Error ? error.message : "保存失败",
+                      );
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  {saving
+                    ? "正在保存…"
+                    : issue.type === "pr"
+                      ? "保存草稿"
+                      : "保存计划"}
+                </button>
+                {saveMessage && <p role="status">{saveMessage}</p>}
               </div>
-            )}
+            </details>
             <div className="mw-workflow-actions">
-              {!["answer", "track"].includes(draft.route) &&
+              {!["answer", "track"].includes(suggestedRoute ?? "") &&
                 status !== "stale" &&
                 !run && (
                   <button
@@ -231,20 +311,13 @@ export function WorkflowCard({
                     }
                     onClick={() => void start()}
                   >
-                    {draft.route === "review"
+                    {suggestedRoute === "review"
                       ? "确认并开始审查"
-                      : draft.route === "investigate"
+                      : suggestedRoute === "investigate"
                         ? "确认并开始调查"
                         : "确认并开始"}
                   </button>
                 )}
-              <button
-                className="mw-button"
-                disabled={!ready || busy}
-                onClick={() => setEditing(!editing)}
-              >
-                修改建议
-              </button>
               {!plan.scope || !plan.acceptanceCriteria.length ? (
                 <button
                   className="mw-text-button"
@@ -454,23 +527,10 @@ export function WorkflowCard({
                     交给作者，等待新提交
                   </button>
                 )}
-              <p>
-                本次执行已汇总到 Review 的最终审核；接受或退回后再选择具体交付。
-              </p>
+              <p>请在维护者确认阶段核对结果，接受或退回后再选择交付操作。</p>
             </>
           )}
         </div>
-      )}
-      {history.length > 0 && (
-        <details>
-          <summary>事项执行历史 · {history.length} 次运行</summary>
-          {history.map((j) => (
-            <p key={j.id}>
-              {kindNames[j.kind]} · {taskStatus(j).label} ·{" "}
-              {new Date(j.createdAt).toLocaleString("zh-CN")}
-            </p>
-          ))}
-        </details>
       )}
     </section>
   );

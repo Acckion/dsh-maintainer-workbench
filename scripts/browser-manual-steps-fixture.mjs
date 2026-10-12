@@ -9,6 +9,7 @@ import { Store } from "../src/core/store.ts";
 import { GitHub } from "../src/core/github.ts";
 import { Workbench } from "../src/core/workbench.ts";
 import { handler, localRejection } from "../src/server/http.ts";
+import { draftFromJob } from "../src/core/change-plan.ts";
 import { seedFixture, fixtureAnalysis } from "../tests/support/fixtures.ts";
 const root = await mkdtemp(join(tmpdir(), "maintainer-manual-browser-"));
 const screenshots = join(process.cwd(), "artifacts", "manual-steps");
@@ -46,6 +47,23 @@ try {
       id,
     );
     store.put("jobs", { ...store.get("jobs", id), status: "waiting_input" });
+    const current = store.get("issues", issue.id);
+    const draft = draftFromJob(
+      current,
+      store.repos()[0],
+      store.get("jobs", id),
+    );
+    store.put("issues", {
+      ...current,
+      orchestration: {
+        draft: {
+          ...draft,
+          scope: "只修改插件注册路径",
+          acceptanceCriteria: ["避免重复注册"],
+          missingInfo: [],
+        },
+      },
+    });
     const api = handler(wb, localRejection);
     const server = createServer(async (req, res) => {
       if (req.url?.startsWith("/maintainer/api")) return api(req, res);
@@ -92,18 +110,110 @@ try {
         await nav.getByRole("button", { name: /^范围确认/ }).count(),
         0,
       );
+      const tabs = panel.getByRole("tablist", { name: "阶段详情" });
+      await tabs.getByRole("tab", { name: "处理计划", exact: true }).click();
+      await expect(
+        panel
+          .locator(".mw-workflow-card")
+          .getByText("范围：只修改插件注册路径", { exact: true }),
+      ).toBeVisible();
+      assert.equal(
+        await panel
+          .locator("summary")
+          .filter({ hasText: "处理建议与进度" })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await panel
+          .getByRole("button", { name: "修改建议", exact: true })
+          .count(),
+        0,
+      );
+      await panel.locator(".mw-plan-editor > summary").click();
+      await expect(
+        panel.getByRole("textbox", { name: "维护目标", exact: true }),
+      ).toBeVisible();
+      // Every disclosure exposes content directly, rather than only a second disclosure.
+      assert.equal(
+        await panel.locator("details:not([open]) details").count(),
+        0,
+      );
+      await tabs.getByRole("tab", { name: "进度与结果", exact: true }).click();
+      await page.screenshot({
+        path: join(screenshots, `workflow-result-${width}.png`),
+        fullPage: true,
+      });
+      await tabs.getByRole("tab", { name: "进度与结果", exact: true }).focus();
+      await page.keyboard.press("ArrowRight");
+      await expect(
+        tabs.getByRole("tab", { name: "手动处理", exact: true }),
+      ).toBeFocused();
+      await expect(
+        tabs.getByRole("tab", { name: "手动处理", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      const input = panel.getByRole("textbox", { name: "你的结果或要求" });
+      await expect(input).toBeVisible();
+      const manualText =
+        "我已人工定位：插件注册被调用两次。只修改注册逻辑，不再复现。";
+      await input.fill(manualText);
+      await tabs.getByRole("tab", { name: "进度与结果", exact: true }).click();
+      await tabs.getByRole("tab", { name: "手动处理", exact: true }).click();
+      await expect(input).toHaveValue(manualText);
+      assert.equal(store.jobs().length, 1);
+      assert.equal(
+        store.processing.current(issue.id).manualSteps?.length ?? 0,
+        0,
+        "navigation must not change workflow state",
+      );
       await panel
-        .getByRole("button", { name: "我来完成", exact: true })
+        .getByRole("button", { name: "停止 Agent，由我处理", exact: true })
         .click();
       await expect(panel).toContainText("等待手动结果");
-      const input = panel.getByRole("textbox", { name: "你的结果或要求" });
-      await input.fill(
-        "我已人工定位：插件注册被调用两次。只修改注册逻辑，不再复现。",
+      await expect(input).toHaveValue(manualText);
+      assert.equal(
+        store.processing.current(issue.id).manualSteps.at(-1).text,
+        "",
+        "taking control must not implicitly submit a draft result",
       );
+      await panel
+        .getByRole("button", { name: "保存补充", exact: true })
+        .click();
+      await expect(panel.getByRole("status")).toContainText("补充已保存");
+      await expect(nav.locator('[aria-current="step"]')).toContainText(
+        "定位与范围",
+      );
+      assert.equal(
+        store.processing.current(issue.id).manualSteps.at(-1).mode,
+        "supplement",
+      );
+      await input.fill(manualText);
       await page.screenshot({
         path: join(screenshots, `manual-input-${width}.png`),
         fullPage: true,
       });
+      await page.emulateMedia({ colorScheme: "dark" });
+      await expect(
+        tabs.getByRole("tab", { name: "手动处理", exact: true }),
+      ).toHaveCSS("color", "rgb(236, 238, 240)");
+      await page.screenshot({
+        path: join(screenshots, `manual-input-dark-${width}.png`),
+        fullPage: true,
+      });
+      await page.emulateMedia({ colorScheme: "light" });
+      await tabs.getByRole("tab", { name: "执行记录", exact: true }).click();
+      await expect(
+        panel.getByRole("region", { name: "执行详情", exact: true }),
+      ).toBeVisible();
+      assert.equal(
+        await panel
+          .getByRole("button", { name: "保存补充输入", exact: true })
+          .count(),
+        0,
+        "cancelled execution must stay read-only",
+      );
+      await tabs.getByRole("tab", { name: "手动处理", exact: true }).click();
+      await expect(input).toHaveValue(manualText);
       await panel
         .getByRole("button", { name: "提交结果并继续", exact: true })
         .click();
@@ -114,15 +224,23 @@ try {
       assert.match(state.manualSteps.at(-1).text, /不再复现/);
       await nav.getByRole("button", { name: /^定位与范围/ }).click();
       await expect(panel).toContainText("只修改注册逻辑，不再复现。");
+      await tabs.getByRole("tab", { name: "手动处理", exact: true }).click();
       await expect(
         panel.getByRole("button", { name: "重新打开此步骤" }),
       ).toBeVisible();
       await nav.locator('[aria-current="step"]').click();
+      await tabs.getByRole("tab", { name: "手动处理", exact: true }).click();
       await panel
         .getByRole("button", { name: "跳过此步骤", exact: true })
         .click();
       await expect(nav.locator('[aria-current="step"]')).toContainText("验证");
       assert.equal(store.processing.current(issue.id).manualCursor, "validate");
+      assert.equal(
+        store.processing.current(issue.id).manualSteps.at(-1).text,
+        "",
+        "skipping must not implicitly submit a draft result",
+      );
+      await tabs.getByRole("tab", { name: "手动处理", exact: true }).click();
       await panel
         .getByRole("button", { name: "跳过此步骤", exact: true })
         .click();

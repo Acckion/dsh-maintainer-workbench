@@ -9,6 +9,7 @@ import { Store } from "../src/core/store.ts";
 import { Workbench, revision } from "../src/core/workbench.ts";
 import { GitHub } from "../src/core/github.ts";
 import { handler, localRejection } from "../src/server/http.ts";
+import { draftFromJob } from "../src/core/change-plan.ts";
 import { seedFixture, fixtureAnalysis } from "../tests/support/fixtures.ts";
 
 const root = await mkdtemp(join(tmpdir(), "maintainer-timeline-browser-"));
@@ -136,6 +137,11 @@ try {
       ],
     };
     saveRun(review);
+    const plannedItem = store.get("issues", item.id);
+    store.put("issues", {
+      ...plannedItem,
+      orchestration: { draft: draftFromJob(plannedItem, repo, review) },
+    });
     let mutations = 0;
     const api = handler(w, localRejection),
       files = {
@@ -271,6 +277,49 @@ try {
           .isEnabled(),
       );
       assert.equal(await panel.locator(".mw-stage-history").count(), 0);
+      // A PR plan is an editable draft, never an Issue-only plan mutation.
+      await panel.getByRole("tab", { name: "处理计划", exact: true }).click();
+      await panel.locator(".mw-plan-editor > summary").click();
+      const goal = panel.getByRole("textbox", {
+        name: "维护目标",
+        exact: true,
+      });
+      await goal.fill("核对 Gateway 测试时序与生命周期");
+      await panel
+        .getByRole("button", { name: "保存草稿", exact: true })
+        .click();
+      await expect(panel.getByRole("status")).toContainText("草稿已保存");
+      assert.equal(
+        await panel
+          .getByRole("button", { name: "保存计划", exact: true })
+          .count(),
+        0,
+      );
+      assert.equal(
+        await panel
+          .getByRole("region", { name: "事项类型与补充信息", exact: true })
+          .count(),
+        0,
+      );
+      const savedPlan = await page.evaluate(
+        async (id) =>
+          (
+            await (
+              await fetch(
+                `/maintainer/api/item-draft?id=${encodeURIComponent(id)}`,
+              )
+            ).json()
+          ).plan,
+        item.id,
+      );
+      assert.equal(savedPlan.goal, "核对 Gateway 测试时序与生命周期");
+      assert.equal(
+        mutations,
+        0,
+        "saving a PR draft must not execute workflow tasks",
+      );
+      await panel.getByRole("tab", { name: "进度与结果", exact: true }).click();
+
       if (width === 1440) {
         const title = await panel.locator("header h3").boundingBox();
         const action = await panel
@@ -363,20 +412,11 @@ try {
       await expect(
         panel.getByRole("region", { name: "处理进度", exact: true }),
       ).toContainText("正在处理");
-      assert.equal(
-        await panel
-          .locator("header .mw-assistant-more button")
-          .filter({ hasText: "停止任务" })
-          .count(),
-        1,
-      );
-      assert.equal(
-        await panel
-          .locator("header .mw-assistant-more button")
-          .filter({ hasText: "停止任务" })
-          .isVisible(),
-        false,
-      );
+      await expect(
+        panel
+          .locator("header")
+          .getByRole("button", { name: "停止任务", exact: true }),
+      ).toBeVisible();
       assert.equal(
         await panel.getByText("结论与证据", { exact: true }).count(),
         0,
@@ -385,9 +425,7 @@ try {
         await panel.getByText("分析依据 · 0", { exact: true }).count(),
         0,
       );
-      await panel
-        .getByRole("button", { name: "查看执行详情", exact: true })
-        .click();
+      await panel.getByRole("tab", { name: "执行记录", exact: true }).click();
       await expect(
         panel.getByRole("region", { name: "执行详情", exact: true }),
       ).toContainText("正在核对源码覆盖");
@@ -395,9 +433,7 @@ try {
         path: join(root, `timeline-execution-${width}.png`),
         fullPage: true,
       });
-      await panel
-        .getByRole("button", { name: "查看阶段结果", exact: true })
-        .click();
+      await panel.getByRole("tab", { name: "进度与结果", exact: true }).click();
       await expect(nav.getByRole("button", { name: /^复审/ })).toBeVisible();
       await page.emulateMedia({ colorScheme: "dark" });
       await page.waitForTimeout(250);

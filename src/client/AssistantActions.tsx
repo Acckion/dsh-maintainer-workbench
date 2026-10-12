@@ -32,7 +32,7 @@ export function AssistantActions({
   if (control) {
     const button = (
       <button
-        className="mw-button primary"
+        className={`mw-button ${control.kind === "cancel" ? "" : "primary"}`}
         disabled={busy || !control.enabled}
         title={control.blockedReasons.join("；")}
         onClick={() =>
@@ -58,14 +58,7 @@ export function AssistantActions({
         {control.label}
       </button>
     );
-    return control.kind === "cancel" ? (
-      <details className="mw-assistant-more">
-        <summary>更多</summary>
-        <div>{button}</div>
-      </details>
-    ) : (
-      button
-    );
+    return button;
   }
   const run = (action: WorkflowAction, goal: boolean) =>
     act(

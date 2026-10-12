@@ -1678,7 +1678,6 @@ export function App({
         render={renderStage}
         track={renderTrack}
         evidence={renderLinkedEvidence}
-        context={renderProcessingAdvice}
         instructions={
           <ItemInstructions
             issueId={displayedIssue.id}
@@ -1736,10 +1735,9 @@ export function App({
         </p>
       ) : (
         <>
-          {renderProcessingAdvice(true)}
-          <details open={!displayedIssue.orchestration?.draft}>
-            <summary>高级操作</summary>
-            <IssuePlanning
+          {renderProcessingAdvice()}
+          {displayedIssue.type === "issue" && !displayedIssue.origin && <IssuePlanning
+              informationOnly={!!displayedIssue.orchestration?.draft}
               start={(kind, expectedVersion) =>
                 action(
                   "workflow",
@@ -1763,8 +1761,7 @@ export function App({
               act={(path, data, message) =>
                 action("workflow", path, data, message)
               }
-            />
-          </details>
+            />}
         </>
       );
     if (stage === "work") {
@@ -1798,8 +1795,7 @@ export function App({
           openEvidence={(id) => openEvidenceJob(id, "log")}
           openSession={openSession}
           tools={
-            <details className="mw-processing-tools">
-              <summary>处理记录与操作追踪</summary>
+            <section className="mw-processing-tools" aria-label="处理记录与操作追踪">
               {!readOnly && (
                 <ProcessingHistory
                   issue={displayedIssue}
@@ -1831,7 +1827,7 @@ export function App({
                   moveFocusToDetail();
                 }}
               />
-            </details>
+            </section>
           }
         />
       );
@@ -1863,8 +1859,7 @@ export function App({
               </details>
             ))}
           {job.kind === "review" && !readOnly && (
-            <details>
-              <summary>发现处置与讨论串</summary>
+            <section aria-label="发现处置与讨论串">
               <ReviewFindingControls
                 job={job}
                 history={history}
@@ -1873,7 +1868,7 @@ export function App({
                   action("workflow", path, data, message)
                 }
               />
-            </details>
+            </section>
           )}
         </>
       ) : (
@@ -1883,7 +1878,7 @@ export function App({
     return null;
   }
 
-  function renderProcessingAdvice(full = false) {
+  function renderProcessingAdvice() {
     if (!displayedIssue) return null;
     const card = (
       <WorkflowCard
@@ -1893,14 +1888,7 @@ export function App({
         act={(path, data, message) => action("workflow", path, data, message)}
       />
     );
-    return full || displayedIssue.orchestration ? (
-      card
-    ) : (
-      <details>
-        <summary>处理建议与进度</summary>
-        {card}
-      </details>
-    );
+    return card;
   }
 
   function renderLinkedEvidence(selectedJob?: typeof job) {
