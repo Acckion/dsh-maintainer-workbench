@@ -369,7 +369,7 @@ export class StageWorker extends ServiceBase {
       const runner = this.nativeRunner ?? modelRunner;
       let savedArtifact: Job['artifact'];
       if (job.formatOnly && job.rawOutput && !['truncated', 'oversized'].includes(job.formatRecovery?.reason ?? '')) {
-        try { savedArtifact = parseReport(job.kind, job.rawOutput, progress); }
+        try { savedArtifact = parseReport(job.kind, job.rawOutput, progress, job); }
         catch (error) {
           if (!(error instanceof ReportParseError) && !(error instanceof ZodError)) throw error;
         }

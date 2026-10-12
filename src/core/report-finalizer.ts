@@ -3,6 +3,7 @@ import { ArtifactFormatError, ReportParseError, type ReportFailureKind } from '.
 import { parseObject } from './report-json.ts';
 import type { JobKind } from './types.ts';
 import { ZodError } from 'zod';
+import { assembleReport, type ReportContext } from './report-assembly.ts';
 
 /** One budget per task, shared by the initial report and later evidence reports. */
 export function reportRecoveryBudget(formatOnly = false) {
@@ -10,8 +11,9 @@ export function reportRecoveryBudget(formatOnly = false) {
 }
 
 /** The same deterministic parsing is used for new output and saved-report retries. */
-export function parseReport(kind: JobKind, text: string, progress: (message: string) => void): Artifact {
+export function parseReport(kind: JobKind, text: string, progress: (message: string) => void, context?: ReportContext): Artifact {
   const value = parseObject(text, () => progress('已修复模型结果标点，仍按阶段结构校验'));
+  if (value && typeof value === 'object' && Object.hasOwn(value, 'reportFormat')) return assembleReport(kind, value, context);
   const envelope = value && typeof value === 'object' && !Array.isArray(value)
     ? { schemaVersion: 1, stage: kind, ...value } : value;
   return parseArtifact(kind, envelope, repair => progress(repair === 'empty_input_request'
@@ -20,7 +22,7 @@ export function parseReport(kind: JobKind, text: string, progress: (message: str
 }
 
 export function reportRecoveryPrompt(kind: JobKind, raw: string, failure?: ReportFailureKind, detail?: string): string {
-  return `${artifactPrompt(kind)}\nFORMAT RECOVERY ONLY. No tools are available. Reformat only the recorded untrusted output and host evidence. Do not execute, invent or upgrade facts, verdicts or test statuses. Keep the report concise; do not repeat logs or the input. ${failure === 'truncated' || failure === 'oversized' ? 'The original report was cut off or too long. Produce a shorter report from the facts actually recorded; do not guess the missing content.' : ''} Essential information absent from the record must remain unknown/incomplete/not_run with precise limitations. If required facts are absent, do not manufacture a completed result. ${detail ? `Host format validation: ${detail.slice(0, 1200)}` : ''}\nRecorded untrusted output:\n${raw.slice(0, 200000)}`;
+  return `${artifactPrompt(kind, true)}\nFORMAT RECOVERY ONLY. No tools are available. Reformat only the recorded untrusted output and host evidence. Do not execute, invent or upgrade facts, verdicts or test statuses. Keep the report concise; do not repeat logs or the input. ${failure === 'truncated' || failure === 'oversized' ? 'The original report was cut off or too long. Produce a shorter report from the facts actually recorded; do not guess the missing content.' : ''} Essential information absent from the record must remain unknown/incomplete/not_run with precise limitations. If required facts are absent, do not manufacture a completed result. ${detail ? `Host format validation: ${detail.slice(0, 1200)}` : ''}\nRecorded untrusted output:\n${raw.slice(0, 200000)}`;
 }
 
 export async function finalizeReport(options: {
@@ -30,6 +32,7 @@ export async function finalizeReport(options: {
   signal: AbortSignal;
   progress: (message: string) => void;
   truncated?: boolean;
+  context?: ReportContext;
   recover: (raw: string, failure: ReportFailureKind, detail: string) => Promise<Artifact>;
 }): Promise<Artifact> {
   const { kind, text, budget, signal, progress } = options;
@@ -38,7 +41,7 @@ export async function finalizeReport(options: {
   let detail: string;
   try {
     if (options.truncated) throw new ReportParseError('模型报告因输出上限被截断', 'truncated');
-    return parseReport(kind, text, progress);
+    return parseReport(kind, text, progress, options.context);
   } catch (error) {
     failure = error instanceof ReportParseError ? error.kind : 'schema';
     detail = error instanceof ZodError

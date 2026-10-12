@@ -1,3 +1,4 @@
+import { modelData } from "../core/model-input.ts";
 import { withManualContext, stepResolved } from "../workflow/manual.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -423,7 +424,7 @@ export class TaskService extends ServiceBase {
       instructions:
         (job.instructions ?? "") +
         "\nMaintainer supplied input (use only within accepted scope):\n" +
-        JSON.stringify(waits.map(w=>w.answers ?? responses.filter(r=>r.waitId===w.id).at(-1)?.values)),
+        modelData(waits.map(w=>w.answers ?? responses.filter(r=>r.waitId===w.id).at(-1)?.values)),
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,

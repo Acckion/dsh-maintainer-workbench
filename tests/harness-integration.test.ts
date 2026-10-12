@@ -122,7 +122,7 @@ for (const failures of [1,3]) test(`Messages pre-start recovery stays inside one
   agentPresets:{resolve:async()=>({id:'standard'})},permissionPresets:{resolve:()=>{},set:()=>{}},workspaceRegistry:{archiveSession:async()=>{}},
   on:(name:string,fn:any)=>{listeners.set(name,fn);return()=>listeners.delete(name);},
   agents:{create:async(options:any)=>{
-   await options.setup({tools:{schemas:()=>[],restrict:()=>{},guard:()=>{}}});
+   await options.setup({tools:{register:()=>()=>{},schemas:()=>[],restrict:()=>{},guard:()=>{}}});
    return {dispose:async()=>{},agent:{session:{},cancel:()=>{},whenIdle:async()=>{},followup:()=>{
     followups++;
     queueMicrotask(async()=>{
