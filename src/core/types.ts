@@ -292,7 +292,6 @@ export interface Job {
     findings?: Record<string, import("./artifacts.ts").FindingDecision>;
   }[];
   instructions?: string;
-  supplementalInfo?: string;
   findingDecisions?: Record<string, import("./artifacts.ts").FindingDecision>;
   prContext?: PRContext;
   rawOutput?: string;

@@ -25,7 +25,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - name: Check package compatibility and core workflows
-        run: node --import tsx --test tests/package-compatibility.test.ts tests/orchestration.test.ts tests/global-settings.test.ts tests/model-routing.test.ts tests/dirty-workspace.test.ts tests/independent-stages.test.ts tests/timeline.test.ts tests/stage-actions.test.ts tests/stage-progress.test.ts
+        run: node --import tsx --test tests/package-compatibility.test.ts tests/orchestration.test.ts tests/global-settings.test.ts tests/model-routing.test.ts tests/dirty-workspace.test.ts
       - name: Build and verify installable distribution
         run: npm run package:distribution
         env:

@@ -68,7 +68,6 @@ export function WorkflowPanel({
         kind,
         sourceJobId: actions.stages.find((action) => action.kind === kind)
           ?.sourceJobId,
-        supplementalInfo: instructions,
         instructions:
           kind === "validate"
             ? validationInstructions(instructions, job?.kind)
@@ -382,7 +381,7 @@ export function WorkflowPanel({
                 rows={3}
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
-                placeholder="缺少依赖节点结果时必填。已有调查、验收条件和处置记录将自动传递。"
+                placeholder="可选。已有调查、验收条件和处置记录将自动传递。"
               />
             </label>
             <div className="mw-workflow-actions">
@@ -392,9 +391,8 @@ export function WorkflowPanel({
                   disabled={
                     busy ||
                     !!blocker ||
-                    (actions.primary?.input?.required && !instructions.trim()) ||
                     history.some((j) =>
-                      j.kind === primary && ["running", "queued"].includes(j.status),
+                      ["running", "queued"].includes(j.status),
                     )
                   }
                   onClick={() => void next(primary)}
@@ -417,22 +415,17 @@ export function WorkflowPanel({
                       disabled={
                         busy ||
                         !action.enabled ||
-                        (action.input?.required && !instructions.trim()) ||
                         history.some((j) =>
-                          j.kind === k && ["running", "queued"].includes(j.status),
+                          ["running", "queued"].includes(j.status),
                         )
                       }
                       onClick={() => void next(k as JobKind)}
-                      title={[...action.blockedReasons, ...(action.input?.reasons ?? [])].join("；")}
                     >
                       {kindNames[k as JobKind]}
                     </button>
                   );
                 })}
               </div>
-              {actions.stages.filter(action => action.input?.required).map(action => (
-                <p className="mw-callout amber" key={action.kind}>{kindNames[action.kind]}：{action.input!.reasons.join("；")}</p>
-              ))}
             </details>
           )}
           {issue.type === "issue" && (

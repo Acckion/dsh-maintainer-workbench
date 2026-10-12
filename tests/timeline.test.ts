@@ -93,7 +93,7 @@ test("timeline preserves first-stage order, attempts and selected artifacts acro
   assert.equal(JSON.stringify([first, investigation, second]), before);
 });
 
-test("question route keeps its recommendation and exposes independent nodes with required input", () => {
+test("question route has no implementation or validation forecast", () => {
   const item = {
     ...issue,
     type: "issue" as const,
@@ -109,11 +109,13 @@ test("question route keeps its recommendation and exposes independent nodes with
     [],
     availableActions(item),
   );
-  assert.equal(view.actions?.primary?.kind, "triage");
-  for (const stage of ["fix", "docs", "validate"] as const) {
-    assert.equal(view.nodes.find(n => n.stage === stage)?.status, "future");
-    assert.equal(view.actions?.stages.find(a => a.kind === stage)?.input?.required, true);
-  }
+  assert.deepEqual(
+    view.nodes.map((n) => n.stage),
+    ["triage", "investigate", "decision", "track"],
+  );
+  assert.ok(
+    !view.nodes.some((n) => ["fix", "docs", "validate"].includes(n.stage)),
+  );
 });
 
 test("Draft and no findings mean maintainer confirmation, never merge approval", () => {

@@ -24,7 +24,7 @@ for (const status of ['passed','failed'] as const) test(`explicit goal resumes a
   return {artifact,result:asAnalysis(artifact),engine:'controlled goal fixture'};
  };
  const first=new Store(db);seedFixture(first);first.put('repos',{...first.repos()[0],headSha:sha,localPath:path});const issue=first.issues()[0];const w=new Workbench(first,dir,runner,gh,false);
- const root=w.enqueue([issue.id],'fix',{goal:'resolve',instructions:'Implement the fixture change, then validate and review its exact patch.'}).created[0];await w.close();
+ const root=w.enqueue([issue.id],'fix',{goal:'resolve'}).created[0];await w.close();
  const store=new Store(db),resumed=new Workbench(store,dir,runner,gh,false);t.after(async()=>{await resumed.close();await rm(dir,{recursive:true,force:true});});
  resumed.pump();await resumed.drain();const jobs=store.jobs();
  assert.equal(jobs.length,status==='passed'?3:2,JSON.stringify(jobs.map(j=>({kind:j.kind,error:j.error,pause:j.goalPauseReason}))));

@@ -302,8 +302,7 @@ test("an accepted feature plan is actionable and needs fresh approval after GitH
   store.put("issues", { ...accepted, body: "New compatibility constraint" });
   assert.throws(() => w.enqueue([issue.id], "fix"), /重新确认/);
   w.decide(issue.id, "accepted", "Confirmed compatibility constraint");
-  assert.throws(() => w.enqueue([issue.id], "fix"), /用户补充信息为必填/);
-  assert.equal(w.enqueue([issue.id], "fix", { instructions: "Implement the confirmed offline queue scope; preserve order and compatibility." }).created.length, 1);
+  assert.equal(w.enqueue([issue.id], "fix").created.length, 1);
 });
 
 test("legacy queued executions migrate once without invoking the Agent or replaying events", async (t) => {
@@ -498,7 +497,6 @@ test("Agent input request releases execution capacity; user answer resumes only 
   w.prepareRepository = async () => {};
   const id = w.enqueue([store.issues()[0].id], "investigate", {
     goal: "resolve",
-    instructions: "Investigate queue ordering and ask for missing reproduction details.",
   }).created[0];
   w.pump();
   await w.drain();
