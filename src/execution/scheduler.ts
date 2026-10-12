@@ -62,6 +62,7 @@ export class Scheduler extends ServiceBase {
             this.enqueue([job.issueId], continuation.next, {
               sourceJobId: job.id,
               instructions: job.instructions,
+              supplementalInfo: job.supplementalInfo,
               goal: job.goal,
               goalId: job.goalId,
             });

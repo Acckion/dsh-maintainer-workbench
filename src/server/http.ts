@@ -502,13 +502,14 @@ export function handler(
             repoId: z.string(),
             mode: z.enum(organizeModes),
             issueId: z.string().optional(),
+            auditJobId: z.string().optional(),
             instructions: z.string().max(4000).optional(),
           })
           .parse(input);
         send(
           res,
           200,
-          workbench.organize(p.repoId, p.mode, p.issueId, p.instructions),
+          workbench.organize(p.repoId, p.mode, p.issueId, p.instructions, p.auditJobId),
         );
         return;
       } else if (path === "/jobs") {
@@ -518,6 +519,7 @@ export function handler(
             kind: z.enum(kinds),
             sourceJobId: z.string().optional(),
             instructions: z.string().max(8000).optional(),
+            supplementalInfo: z.string().max(8000).optional(),
             forceNew: z.boolean().optional(),
             goal: z.enum(["resolve"]).optional(),
           })
@@ -528,6 +530,7 @@ export function handler(
           workbench.enqueue(p.issueIds, p.kind, {
             sourceJobId: p.sourceJobId,
             instructions: p.instructions,
+            supplementalInfo: p.supplementalInfo,
             forceNew: p.forceNew,
             goal: p.goal,
           }),

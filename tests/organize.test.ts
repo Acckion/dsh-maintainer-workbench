@@ -61,3 +61,23 @@ test('merged publication preview binds a local repository task to its GitHub bra
  await assert.rejects(previewPublication(store,job,repo,'labels',gh),/仓库整理/);
  store.put('repos',{...repo,githubName:undefined});await assert.rejects(previewPublication(store,job,{...repo,githubName:undefined},'pr',gh),/未关联唯一/);store.close();
 });
+
+test('saved audits seed repository changes only while completed, same-repository and revision-current', async () => {
+ const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0];
+ const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-audit-handoff-')),async({issue,job})=>({result:fixtureAnalysis(issue,job.kind),engine:'fixture'}),undefined,false);
+ try {
+  const id=w.organize(repo.id,'audit').created[0];const audit=store.get<Job>('jobs',id)!;
+  const artifact={schemaVersion:1 as const,stage:'investigate' as const,summary:'README setup command is outdated',coverage:'README',evidence:[{source:'package.json',detail:'build command'}],nextSteps:[],responseDraft:'',facts:['npm run build exists'],hypotheses:[],reproduction:'',rootCause:'',impact:'setup',proposedChanges:['Update setup instructions'],acceptanceCriteria:['README matches manifests'],blockers:[]};
+  store.put('jobs',{...audit,status:'completed',artifact});
+  const next=w.organize(repo.id,'docs',undefined,'README only',id).created[0];
+  assert.match(store.get<Job>('jobs',next)!.instructions!,/Saved audit reference/);
+  assert.match(store.get<Job>('jobs',next)!.instructions!,/README setup command is outdated/);
+  assert.throws(()=>w.organize(repo.id,'audit',undefined,'',id),/有效的检查报告/);
+  store.put('jobs',{...audit,status:'failed',artifact});
+  assert.throws(()=>w.organize(repo.id,'docs',undefined,'',id),/有效的检查报告/);
+  store.put('jobs',{...audit,status:'completed',artifact,repoId:'other'});
+  assert.throws(()=>w.organize(repo.id,'docs',undefined,'',id),/有效的检查报告/);
+  store.put('jobs',{...audit,status:'completed',artifact,baseSha:'old'});
+  assert.throws(()=>w.organize(repo.id,'docs',undefined,'',id),/版本已变化/);
+ } finally { await w.close(); }
+});
