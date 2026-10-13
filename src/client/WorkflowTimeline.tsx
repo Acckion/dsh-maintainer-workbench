@@ -1,5 +1,7 @@
 import {
   Check,
+  CircleSlash,
+  UserRound,
   Circle,
   Clock3,
   Loader2,
@@ -47,7 +49,7 @@ export function WorkflowTimeline({
       <ol>
         {timeline.nodes.map((node, index) => {
           const Icon =
-            node.status === "running"
+            node.status === "skipped" ? CircleSlash : node.status === "manual" ? UserRound : node.status === "running"
               ? Loader2
               : node.status === "queued"
                 ? Clock3

@@ -173,7 +173,9 @@ export function App({
   useEffect(() => {
     void refresh();
     const id = setInterval(() => void refresh(), 2000);
-    return () => clearInterval(id);
+    const updated = () => void refresh();
+    window.addEventListener("maintainer:manual-updated", updated);
+    return () => { clearInterval(id); window.removeEventListener("maintainer:manual-updated", updated); };
   }, [refresh]);
   useEffect(() => {
     if (state && !state.repos.some((r) => r.id === repoId))
@@ -231,7 +233,7 @@ export function App({
   };
   const moveFocusToDetail = () =>
     focusDetail({
-      frame: requestAnimationFrame,
+      frame: (callback) => requestAnimationFrame(callback),
       focus: (id) => {
         const element = document.getElementById(id) as HTMLElement | null;
         element?.focus({ preventScroll: true });
@@ -1634,7 +1636,6 @@ export function App({
         render={renderStage}
         track={renderTrack}
         evidence={renderLinkedEvidence}
-        context={renderProcessingAdvice}
         instructions={
           <ItemInstructions
             issueId={displayedIssue.id}
@@ -1692,7 +1693,7 @@ export function App({
         </p>
       ) : (
         <>
-          {renderProcessingAdvice(true)}
+          {renderProcessingAdvice()}
           <ProcessingInput
             issue={displayedIssue}
             runId={job?.id}
@@ -1701,9 +1702,8 @@ export function App({
               action("workflow", path, data, message)
             }
           />
-          <details open={!displayedIssue.orchestration?.draft}>
-            <summary>高级操作</summary>
-            <IssuePlanning
+          {displayedIssue.type === "issue" && !displayedIssue.origin && <IssuePlanning
+              informationOnly={!!displayedIssue.orchestration?.draft}
               start={(kind, expectedVersion, confirmedPlan) =>
                 action(
                   "workflow",
@@ -1730,8 +1730,7 @@ export function App({
               act={(path, data, message) =>
                 action("workflow", path, data, message)
               }
-            />
-          </details>
+            />}
         </>
       );
     if (stage === "work") {
@@ -1765,8 +1764,7 @@ export function App({
           openEvidence={(id) => openEvidenceJob(id, "log")}
           openSession={openSession}
           tools={
-            <details className="mw-processing-tools">
-              <summary>处理记录与操作追踪</summary>
+            <section className="mw-processing-tools" aria-label="处理记录与操作追踪">
               {!readOnly && (
                 <ProcessingHistory
                   issue={displayedIssue}
@@ -1798,7 +1796,7 @@ export function App({
                   moveFocusToDetail();
                 }}
               />
-            </details>
+            </section>
           }
         />
       );
@@ -1830,8 +1828,7 @@ export function App({
               </details>
             ))}
           {job.kind === "review" && !readOnly && (
-            <details>
-              <summary>发现处置与讨论串</summary>
+            <section aria-label="发现处置与讨论串">
               <ReviewFindingControls
                 job={job}
                 history={history}
@@ -1840,7 +1837,7 @@ export function App({
                   action("workflow", path, data, message)
                 }
               />
-            </details>
+            </section>
           )}
         </>
       ) : (
@@ -1850,7 +1847,7 @@ export function App({
     return null;
   }
 
-  function renderProcessingAdvice(full = false) {
+  function renderProcessingAdvice() {
     if (!displayedIssue) return null;
     const card = (
       <WorkflowCard
@@ -1860,14 +1857,7 @@ export function App({
         act={(path, data, message) => action("workflow", path, data, message)}
       />
     );
-    return full || displayedIssue.orchestration ? (
-      card
-    ) : (
-      <details>
-        <summary>处理建议与进度</summary>
-        {card}
-      </details>
-    );
+    return card;
   }
 
   function renderLinkedEvidence(selectedJob?: typeof job) {

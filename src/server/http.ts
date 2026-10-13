@@ -223,7 +223,7 @@ export function handler(
         })
         .passthrough()
         .parse(input);
-      if (version.expectedVersion !== undefined) {
+      if (path !== "/processing/step" && version.expectedVersion !== undefined) {
         const itemId =
           version.issueId ??
           (version.issueIds?.length === 1 ? version.issueIds[0] : undefined) ??
@@ -250,6 +250,10 @@ export function handler(
             !!p.confirmedStopped,
           );
         send(res, 200, { ok: true });
+        return;
+      }
+      if (path === "/processing/step") {
+        send(res, 200, workbench.manualSteps.submit(input));
         return;
       }
       if (path === "/processing/wait/cancel") {
@@ -519,7 +523,6 @@ export function handler(
             kind: z.enum(kinds),
             sourceJobId: z.string().optional(),
             instructions: z.string().max(8000).optional(),
-            supplementalInfo: z.string().max(8000).optional(),
             forceNew: z.boolean().optional(),
             goal: z.enum(["resolve"]).optional(),
           })
@@ -530,7 +533,6 @@ export function handler(
           workbench.enqueue(p.issueIds, p.kind, {
             sourceJobId: p.sourceJobId,
             instructions: p.instructions,
-            supplementalInfo: p.supplementalInfo,
             forceNew: p.forceNew,
             goal: p.goal,
           }),

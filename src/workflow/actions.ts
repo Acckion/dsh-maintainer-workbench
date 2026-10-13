@@ -1,7 +1,15 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
+import {
+  manualSource,
+  scopeResolved,
+  stepResolved,
+  stepDisposition,
+} from "./manual.ts";
+import { planBlocker } from "../core/issue-flow.ts";
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
-import { stageInput, stageSource } from "./stage-input.ts";
+import { blockingGaps } from "../domain/gaps.ts";
 
 export interface WorkflowAction {
   kind: JobKind;
@@ -9,7 +17,6 @@ export interface WorkflowAction {
   enabled: boolean;
   blockedReasons: string[];
   sourceJobId?: string;
-  input?: import("./stage-input.ts").StageInput;
 }
 export interface WorkflowActions {
   controls?: {
@@ -41,18 +48,39 @@ export function stageBlocker(
     return "答复已记录，请先恢复处理后再启动任务";
   if (
     issue.processing?.waits.some(
+      (w) => w.state === "open" && w.type === "user_input",
+    )
+  )
+    return "等待用户补充输入，请先回答当前请求";
+  if (
+    issue.processing?.waits.some(
       (w) => w.state === "open" && w.type === "environment_ready",
     ) &&
     !["triage", "preflight"].includes(kind)
   )
     return "等待仓库环境准备";
+  if (issue.informationRequests?.some((r) => r.state === "asked"))
+    return "补充信息尚未收到新回复，请先核对或结束已有追问";
   if (kind === "triage" && issue.type === "pr")
     return "PR 请使用变更预检，不执行 Issue 分诊";
   if (
-    ["preflight", "ci"].includes(kind) &&
+    (["preflight", "ci"].includes(kind) || (kind === "review" && !source)) &&
     issue.type !== "pr"
   )
     return "PR 审查只能选择 Pull Request";
+  if (
+    ["fix", "docs"].includes(kind) &&
+    !scopeResolved(issue) &&
+    issue.plan?.decision === "accepted" &&
+    issue.processing?.planSourceFingerprint &&
+    issue.processing.planSourceFingerprint !==
+      issue.processing.sourceFingerprint
+  )
+    return "输入已变化，请重新确认目标、范围与验收条件";
+  if (stepDisposition(issue.processing, kind)?.mode === "takeover")
+    return "此步骤由用户手动完成；重新打开后可交给 Agent";
+  if (stepResolved(issue.processing, kind)) return "用户已跳过或手动完成此步骤";
+  return planBlocker(issue, kind);
 }
 
 /** The server attaches this projection; UI renders it without inventing transitions. */
@@ -71,18 +99,30 @@ export function availableActions(
         ? "preflight"
         : "triage";
   else if (job.artifactState === "stale")
-    primary = issue.origin
-      ? "investigate"
-      : issue.type === "pr"
-        ? "preflight"
-        : "triage";
+    primary = scopeResolved(issue)
+      ? job.kind
+      : issue.origin
+        ? "investigate"
+        : issue.type === "pr"
+          ? "preflight"
+          : "triage";
   else if (artifact?.stage === "triage") {
+    const investigationGaps = blockingGaps(artifact.gaps ?? [], "investigate");
+    // Reading source and checking a claim are investigation work, not human input.
+    const systemInvestigation =
+      artifact.route === "needs_info" &&
+      investigationGaps.some((g) => g.kind === "system_check") &&
+      investigationGaps.every((g) =>
+        ["system_check", "unclassified"].includes(g.kind),
+      );
     primary =
       artifact.route === "implement"
         ? category === "docs"
           ? "docs"
           : "fix"
-        : artifact.route === "investigate" || artifact.route === "answer"
+        : artifact.route === "investigate" ||
+            artifact.route === "answer" ||
+            systemInvestigation
           ? "investigate"
           : undefined;
     if (issue.plan?.decision === "accepted" && category !== "question")
@@ -153,7 +193,22 @@ export function availableActions(
     ["completed", "cancelled", "deferred"].includes(issue.processing.lifecycle)
   )
     primary = undefined;
-  const inputs = [...history.filter(j => j.id !== job?.id), ...(job ? [job] : [])];
+  const cursor = issue.processing?.manualCursor;
+  if (cursor)
+    primary =
+      stepDisposition(issue.processing, cursor)?.mode === "takeover"
+        ? undefined
+        : ["decision", "track"].includes(cursor)
+          ? undefined
+          : (cursor as JobKind);
+  const revoked = !!job && !!issue.processing?.revokedRunIds?.includes(job.id);
+  const validSource =
+    !revoked &&
+    job?.result &&
+    job.artifactState !== "stale" &&
+    ["completed", "awaiting_review", "approved"].includes(job.status)
+      ? job
+      : undefined;
   const kinds: JobKind[] =
     issue.type === "pr"
       ? ["preflight", "review", "ci", "investigate", "fix", "docs", "validate"]
@@ -162,7 +217,9 @@ export function availableActions(
           "investigate",
           "fix",
           "docs",
-          "validate", "review",
+          ...(validSource?.patch || cursor === "validate" || cursor === "review"
+            ? (["validate", "review"] as JobKind[])
+            : []),
         ];
   const labels: Partial<Record<JobKind, string>> = {
     triage: "分析此 Issue",
@@ -174,11 +231,16 @@ export function availableActions(
     validate: "验证改动",
   };
   const stages = kinds.map((kind) => {
-    const source = stageSource(issue, kind, inputs);
+    const source = cursor ? manualSource(issue, history, kind) : validSource;
     const blockers = [
+      ["validate", "review"].includes(kind) &&
+      issue.type === "issue" &&
+      !source?.patch
+        ? "当前没有可用于此操作的补丁；可以提交人工结果或跳过"
+        : undefined,
       stageBlocker(issue, kind, source),
-      history.some((j) => j.kind === kind && ["running", "queued"].includes(j.status))
-        ? "本节点已有排队或运行中的任务"
+      history.some((j) => ["running", "queued"].includes(j.status))
+        ? "当前事项已有排队或运行中的任务"
         : undefined,
     ].filter((s): s is string => !!s);
     return {
@@ -187,7 +249,6 @@ export function availableActions(
       enabled: !blockers.length,
       blockedReasons: blockers,
       sourceJobId: source?.id,
-      input: stageInput(issue, kind, inputs),
     };
   });
   const controls: NonNullable<WorkflowActions["controls"]> = [];
@@ -200,11 +261,15 @@ export function availableActions(
       enabled: true,
       blockedReasons: [],
     });
-  else if (job && ["failed", "cancelled", "rejected"].includes(job.status))
+  else if (
+    !cursor &&
+    job &&
+    ["failed", "cancelled", "rejected"].includes(job.status)
+  )
     controls.push({
       kind: "retry",
       runId: job.id,
-      label: "重试任务",
+      label: reportNeedsRecovery(job) ? "重新整理报告" : "重试任务",
       enabled:
         job.artifactState !== "stale" &&
         issue.state === "open" &&

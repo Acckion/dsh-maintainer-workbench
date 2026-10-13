@@ -62,7 +62,6 @@ export class Scheduler extends ServiceBase {
             this.enqueue([job.issueId], continuation.next, {
               sourceJobId: job.id,
               instructions: job.instructions,
-              supplementalInfo: job.supplementalInfo,
               goal: job.goal,
               goalId: job.goalId,
             });
@@ -82,7 +81,7 @@ export class Scheduler extends ServiceBase {
   pump(): void {
     if (this.closed || this.advancingGoals) return;
     this.advanceGoals();
-    const queued = this.store.jobs().filter((j) => j.status === "queued");
+    const queued = this.store.jobs().filter((j) => j.status === "queued" && !this.store.processing.current(j.issueId)?.revokedRunIds?.includes(j.id));
     const repos = [...new Set(queued.map((j) => j.repoId))];
     const pivot = repos.indexOf(this.lastRepo);
     if (pivot >= 0) repos.push(...repos.splice(0, pivot + 1));

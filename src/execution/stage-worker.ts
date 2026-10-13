@@ -2,6 +2,7 @@ import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
 import {normalizePreflight} from '../core/preflight-policy.ts';
 import {effectiveOutputTokens} from '../core/output-budget.ts';
+import { withManualContext } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -12,9 +13,11 @@ import {
   type ServiceDependencies,
 } from "../application/service.ts";
 import { waitFor } from "../core/abort.ts";
-import { asAnalysis, lightweight } from "../core/artifacts.ts";
+import { asAnalysis, lightweight, withoutExecutedTests } from "../core/artifacts.ts";
 import { documentAcceptance } from "../core/document-acceptance.ts";
-import { ArtifactFormatError } from "../core/execution-errors.ts";
+import { ArtifactFormatError, ReportParseError } from "../core/execution-errors.ts";
+import { parseReport } from "../core/report-finalizer.ts";
+import { ZodError } from "zod";
 import { saveExecutionLog } from "../core/execution-evidence.ts";
 import { reconcileTestExecutions } from "../core/execution-links.ts";
 import { reconcileReviewFollowups } from "../core/finding-followup.ts";
@@ -64,8 +67,11 @@ export class StageWorker extends ServiceBase {
   private understand = (repo: Repo, signal: AbortSignal) =>
     this.hooks.understand(repo, signal);
   async execute(initial: Job, controller: AbortController): Promise<void> {
+    const issue = this.store.get<Issue>("issues", initial.issueId);
     let job = {
       ...initial,
+      issueSnapshot: { ...initial.issueSnapshot, processing: issue?.processing },
+      instructions: issue ? withManualContext(initial.instructions, issue) : initial.instructions,
       status: "running" as const,
       startedAt: new Date().toISOString(),
     } as Job;
@@ -367,7 +373,18 @@ export class StageWorker extends ServiceBase {
         this.saveJob(job);
       }
       const runner = this.nativeRunner ?? modelRunner;
-      output = await runner({
+      let savedArtifact: Job['artifact'];
+      if (job.formatOnly && job.rawOutput && !['truncated', 'oversized'].includes(job.formatRecovery?.reason ?? '')) {
+        try { savedArtifact = parseReport(job.kind, job.rawOutput, progress, job); }
+        catch (error) {
+          if (!(error instanceof ReportParseError) && !(error instanceof ZodError)) throw error;
+        }
+      }
+      if (savedArtifact) {
+        if (!this.nativeRunner) savedArtifact = withoutExecutedTests(savedArtifact);
+        progress('已在本地整理保存的报告，未调用模型或重新执行任务');
+        output = { artifact: savedArtifact, result: asAnalysis(savedArtifact), engine: 'local / saved report' };
+      } else output = await runner({
         repo,
         issue: job.issueSnapshot,
         related,
@@ -600,6 +617,7 @@ export class StageWorker extends ServiceBase {
     } catch (error) {
       const current = this.job(job.id);
       let formatRecovery: Job["formatRecovery"];
+      let preservedPatch: string | undefined;
       if (
         error instanceof ArtifactFormatError &&
         current.status !== "cancelled" &&
@@ -632,7 +650,8 @@ export class StageWorker extends ServiceBase {
             throw new Error("工作区 HEAD 已变化，不能仅整理输出；请重新派发");
           if (["fix", "docs"].includes(current.kind) && !patch)
             throw new Error("Agent 未产生可审核的代码差异，请重新派发");
-          formatRecovery = { baseSha: current.baseSha, patchHash: digest };
+          preservedPatch = patch;
+          formatRecovery = { baseSha: current.baseSha, patchHash: digest, reason: error.failure.kind, repairAttempts: error.failure.repairAttempts };
         } catch (integrityError) {
           error = integrityError;
         }
@@ -648,6 +667,7 @@ export class StageWorker extends ServiceBase {
           formatRecovery: controller.signal.aborted
             ? undefined
             : formatRecovery,
+          ...(formatRecovery && !controller.signal.aborted ? { patch: preservedPatch, patchSha256: formatRecovery.patchHash } : {}),
           waitingReason: undefined,
           error: controller.signal.aborted
             ? String(controller.signal.reason?.message ?? "已中断")

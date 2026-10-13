@@ -75,7 +75,7 @@ test('sync keeps plans and asked questions across versions, signals fresh replie
   } finally { await workbench.close(); }
 });
 
-test('type-specific acceptance enforces feature decisions and reproduction; docs and questions have short paths', async () => {
+test('type-specific acceptance enforces feature decisions and explicit reproduction policy; docs and questions have short paths', async () => {
   const { store, workbench, issue, repo } = setup();
   const plan: IssuePlan = { ...defaultPlan(issue), category: 'feature', goal: 'sync offline', scope: 'only sync', acceptanceCriteria: ['offline queue'], decision: 'proposed' };
   try {
@@ -85,7 +85,8 @@ test('type-specific acceptance enforces feature decisions and reproduction; docs
     assert.equal(planBlocker(store.issues()[0], 'fix'), undefined);
     assert.equal(availableActions(store.issues()[0]).primary?.kind, 'fix');
     assert.notEqual(revision(issue, repo), revision(store.issues()[0], repo));
-    assert.match(planBlocker({ ...issue, plan: { ...accepted, category: 'bug' } }, 'fix')!, /复现/);
+    assert.equal(planBlocker({ ...issue, plan: { ...accepted, category: 'bug' } }, 'fix'), undefined);
+    assert.match(planBlocker({ ...issue, plan: { ...accepted, category: 'bug', reproductionMode: 'required' } }, 'fix')!, /复现/);
     const doc = { ...issue, plan: { ...accepted, category: 'docs' as const } };
     assert.equal(availableActions(doc).primary?.kind, 'docs'); assert.match(planBlocker(doc, 'fix')!, /文档/);
     workbench.savePlan(issue.id, { ...accepted, category: 'question' });

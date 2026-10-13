@@ -32,8 +32,12 @@ npm start
 3. **准备仓库**：分诊可以直接使用远程仓库资料；调查、审查、修复与文档任务自动克隆到插件管理的目录，并在固定提交创建专用 worktree，无需用户配置路径。也可在设置中点击「自动准备仓库」，或绑定已有 clone。自动准备不安装依赖、不执行仓库脚本。私有仓库仍需 GitHub 凭据。已有用户克隆需要包含同步时提交，缺失时会提示 fetch。
 4. **批量派发**：勾选 Issue/PR，执行智能分诊、调查、修复、文档维护或 PR 审查。选中 Issue 时不能使用 PR 专属审查。默认每批 20 个、并发 2 个，可在设置修改。
 5. **处理宿主审批**：实际命令遵循 Harness 的权限 preset。调查/审查使用 `read-only`；修复/文档任务默认继承宿主权限预设。需要审批时在对应 Harness 会话中处理。任务详情可点击「打开 Harness 会话 / 审批」，直接进入对应原生会话。
-6. **处理结果**：在“处理流程”的横向节点查看历史、当前阶段和下一步条件。下方只显示所选阶段的结论与证据或执行记录，切换节点不会启动任务；Issue 可通过“调整分类与计划”确认目标，当前阶段的独立按钮用于继续、审批和交付。明确启动的修复目标会在改动完成后进入验证，通过验证后进入审查。Tasks 按处理链集中展示需要确认、运行中、完成和失败任务，快速分诊与预检默认隐藏。审核时查看工具结果、测试记录、真实 diff 和输入版本。测试列表是 Agent 的报告，实际执行输出保存在工具证据与 Harness Session 中；二者应一起检查。可以退回并重试、取消运行任务、导出结果 JSON 和补丁。
+6. **处理结果**：在“处理流程”的横向节点查看历史、当前阶段和下一步条件。下方通过“进度与结果 / 手动处理 / 执行记录 / 处理计划”页签查看所选阶段，切换节点或页签不会启动任务。阶段下方的“处理记录”统一展示执行及人工操作；一次展开即可查看状态变化、工作区路径，并进入执行详情或会话。在“手动处理”直接填写结果，可保存补充、提交结果并继续或跳过；存在相关执行任务时可停止 Agent 并接管。在“处理计划”确认或编辑目标，独立执行按钮用于继续、审批和交付。明确启动的修复目标会在改动完成后进入验证，通过验证后进入审查。Tasks 按处理链集中展示需要确认、运行中、完成和失败任务，快速分诊与预检默认隐藏。审核时查看工具结果、测试记录、真实 diff 和输入版本。测试列表是 Agent 的报告，实际执行输出保存在工具证据与 Harness Session 中；二者应一起检查。可以退回并重试、取消运行任务、导出结果 JSON 和补丁。
 7. **发布**：接受结果后，点击发布回复、应用标签或创建草稿 PR。二次预览显示即将写入的内容；草稿 PR 会提交已审核差异、推送专用分支并调用 GitHub API。工作台不自动合并 PR。发布记录保存在任务中。
+
+报告格式恢复：分诊、调查、实施、验证及审查共用严格报告校验。标点错误优先本地修复；字段错误或报告截断最多自动整理一次，使用已有输出和执行证据，不重新实施代码，也不提高输出上限。同一任务的初始报告与证据补齐后的报告共享整理额度。仍失败时显示“报告待整理”，保留原始输出、补丁和工作区；点击“重新整理报告”先尝试本地恢复已有输出，仍有格式问题才调用工具被禁用的整理会话；保留原执行会话、诊断和完整工具日志。模型报告中的空补充信息请求（`null` 或 `fields: []`）按未提出问题处理，不触发格式重试；真实资料缺口、阻塞项及有问题的输入请求仍严格校验。也可通过“手动处理”补充结果。网络、权限、工具执行失败仍按执行错误处理，报告未生成不能作为可批准或交付的产物。
+
+模型输入与报告：仓库正文、讨论、源码提示、维护者输入和工具摘要使用保留原始换行、引号及反斜杠的分段文本，维护者任务与仓库资料分开提供；只解码程序生成的 GitHub 传输对象，不对源码做全局反转义。最终报告使用 `compact-v1`：模型填写阶段结论、发现与限制，执行命令和日志通过当前工具 ID 引用，由程序按同会话、同提交及对应补丁组装为现有内部报告。Harness 提供 `submit_stage_report` 结构化工具；文本 JSON 是兼容入口，普通 API 使用较小的 JSON 对象。报告提交不代表批准，也不执行工具或产生测试证据；连续两次工具提交不合格后停止模型请求。旧完整报告仍可读取，状态机、审批及交付检查保持原有逻辑。
 
 
 ## 功能与实现范围
@@ -147,8 +151,6 @@ The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers 
 Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. This command requires pnpm 11 or later: before running it, verify `pnpm --version`; use an isolated pnpm 11+ tool directory if the user's PATH provides an older version. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).
 
 ### 类型化事项与当前版本复核
-
-各执行节点可从“独立执行节点”选择，也可在尚未执行的阶段节点中直接启动。依赖节点没有当前版本的可用结果时，界面会显示提醒，并将“用户补充信息”标为必填；请说明本节点的目标、范围、已有背景和验证对象。已有执行结果会作为交接线索，仍需本次重新核实。补充信息不能代替真实测试、审查证据或交付确认；通过独立入口启动一个节点不会自动启动下一个节点。API 也执行相同的必填校验。
 
 Issue 详情现支持类型化目标与验收计划、已提出的问题和等待用户记录；同步后提示新回复，维护者核对后再继续。后续审查显式追踪历史发现，支持批量处置和经预览确认的 GitHub 讨论串状态更新。原生测试报告可直接关联工具调用、实际退出码、执行基线、补丁指纹和原始日志。用法、证据限制和浏览器复现见 [本轮实现说明](docs/product/ISSUE-REVIEW-EVIDENCE.md)。
 

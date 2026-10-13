@@ -20,7 +20,62 @@ export function transition(
     throw new Error("事件不属于当前处理周期");
   const next = structuredClone(state);
   const payload = event.payload;
-  if (payload.type === "planning.recorded") {
+  if (payload.type === "step.manual") {
+    if (event.source !== "user" || payload.record.actor !== "user")
+      throw new Error("阶段处置只能由用户决定");
+    next.manualSteps = [
+      ...(next.manualSteps ?? []),
+      structuredClone(payload.record),
+    ];
+    if (payload.record.mode !== "supplement") {
+      next.revokedRunIds = [
+        ...new Set([...(next.revokedRunIds ?? []), ...payload.record.runIds]),
+      ];
+      next.activeRunIds = next.activeRunIds.filter(
+        (id) => !payload.record.runIds.includes(id),
+      );
+      next.currentRunId = undefined;
+      next.manualCursor = ["takeover", "reopen"].includes(payload.record.mode)
+        ? payload.record.stage
+        : (payload.nextStage ?? payload.record.stage);
+      next.phase =
+        next.manualCursor === "decision" ? "decision" : next.manualCursor;
+      next.lifecycle =
+        payload.record.stage === "track" &&
+        ["skip", "complete"].includes(payload.record.mode)
+          ? "completed"
+          : "waiting";
+      next.reason =
+        payload.record.mode === "takeover"
+          ? "等待用户手动结果"
+          : payload.record.mode === "skip"
+            ? "用户已跳过此步骤"
+            : payload.record.mode === "reopen"
+              ? "用户已重新打开此步骤"
+              : "用户已提交阶段结果";
+      next.waits = next.waits.map((w) =>
+        pending(w) &&
+        ((!w.requestedByRunId &&
+          [
+            "user_input",
+            "approval",
+            "reporter_reply",
+            "environment_ready",
+          ].includes(w.type)) ||
+          (!!w.requestedByRunId &&
+            payload.record.runIds.includes(w.requestedByRunId)))
+          ? { ...w, state: "cancelled" }
+          : w,
+      );
+      if (next.planning?.run)
+        next.planning.run = {
+          ...next.planning.run,
+          status: "paused",
+          currentJobId: undefined,
+          reason: next.reason,
+        };
+    }
+  } else if (payload.type === "planning.recorded") {
     if (payload.planning.run && payload.planning.run.caseId !== next.id)
       throw new Error("计划授权不属于当前处理周期");
     next.planning = structuredClone(payload.planning);
@@ -72,7 +127,7 @@ export function transition(
           ? { ...w, state: "superseded" }
           : w,
       );
-      if (!terminal(next)) {
+      if (!terminal(next) && !next.manualCursor) {
         next.phase = "decision";
         next.lifecycle = "waiting";
         next.reason =
@@ -140,7 +195,9 @@ export function transition(
       }
     }
   } else if (payload.type === "run.observed") {
-    const executing = ["queued", "running"].includes(payload.status);
+    const revoked = next.revokedRunIds?.includes(payload.runId);
+    const executing =
+      !revoked && ["queued", "running"].includes(payload.status);
     next.activeRunIds = [
       ...new Set(
         next.activeRunIds
@@ -166,15 +223,18 @@ export function transition(
     if (
       (payload.status === "queued" || !next.currentRunId) &&
       payload.current &&
+      !revoked &&
       !terminal(next)
     )
       next.currentRunId = payload.runId;
     // A late result may retain its evidence but cannot advance another run or input version.
     if (
       payload.current &&
+      !revoked &&
       next.currentRunId === payload.runId &&
       !terminal(next)
     ) {
+      next.manualCursor = undefined;
       next.phase = payload.phase;
       next.reason =
         payload.pauseReason ?? payload.waitingReason ?? payload.reason;
@@ -220,7 +280,13 @@ export function transition(
         });
     }
   } else if (payload.type === "input.requested") {
-    if (!terminal(next)) {
+    if (
+      !terminal(next) &&
+      !(
+        payload.wait.requestedByRunId &&
+        next.revokedRunIds?.includes(payload.wait.requestedByRunId)
+      )
+    ) {
       next.waits = [
         ...next.waits.filter((w) => w.id !== payload.wait.id),
         payload.wait,

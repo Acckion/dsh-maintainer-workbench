@@ -26,7 +26,7 @@ async function setup(t:TestContext, validationStatus:'passed'|'failed'|'not_run'
   const gh=new GitHub('fixture',async(_url,init)=>{if(init?.method&&init.method!=='GET'){writes++;throw Error('No external writes in this test');}return Response.json({sha:remoteSha});});
   const runner:Runner=async({job})=>{let artifact;if(job.kind==='fix'){await writeFile(join(job.worktree!,'value.txt'),'after\n');artifact=artifactSchemas.fix.parse({...common,stage:'fix',changes:['value'],acceptanceCriteria:[],limitations:[],tests:[]});}else if(job.kind==='validate')artifact=validation(validationStatus);else artifact=artifactSchemas.review.parse({...common,stage:'review',findings:[],verdict:'no_findings',blockers:[]});return{artifact,result:asAnalysis(artifact),engine:'controlled test'};};
   const w=new Workbench(store,dir,runner,gh,false);
-  const run=async(kind:Job['kind'],sourceJobId?:string)=>{const id=w.enqueue([issue.id],kind,{sourceJobId,instructions:'Implement the fixture value change and validate/review the resulting exact patch.'}).created[0];w.pump();await w.drain();const job=store.get<Job>('jobs',id)!;assert.notEqual(job.status,'failed',job.error);return job;};
+  const run=async(kind:Job['kind'],sourceJobId?:string)=>{const id=w.enqueue([issue.id],kind,{sourceJobId}).created[0];w.pump();await w.drain();const job=store.get<Job>('jobs',id)!;assert.notEqual(job.status,'failed',job.error);return job;};
   const fix=await run('fix'),check=await run('validate',fix.id);
   t.after(async()=>{await w.close();await rm(dir,{recursive:true,force:true});});
   return{store,w,gh,fix,check,issue,repo:store.repos()[0],run,setRemote:(value:string)=>{remoteSha=value;},writes:()=>writes};
@@ -158,4 +158,19 @@ test('remote base drift during publication checks prevents even a branch push', 
     await assert.rejects(publish(f.store, f.store.get<Job>('jobs', f.fix.id)!, f.repo, 'pr', f.gh, async () => { pushes++; return ''; }), /代码基线.*变化/);
     assert.equal(pushes, 0); assert.equal(posts, 0);
   } finally { if (token === undefined) delete process.env.GITHUB_TOKEN; else process.env.GITHUB_TOKEN = token; }
+});
+
+
+test('manual skip of failed validation allows delivery of the exact real patch without fabricating success', async t => {
+  const f = await setup(t, 'failed');
+  const state = f.store.processing.current(f.issue.id)!;
+  f.w.manualSteps.submit({issueId:f.issue.id,caseId:state.id,stage:'validate',mode:'skip',text:'我已检查这份补丁，继续审查',requestId:'manual-validation',expectedVersion:state.version});
+  const review = await f.run('review', f.fix.id);
+  const result = await f.w.review(review.id, 'approve', 'accepted');
+  assert.equal(result.delivery?.implementationJobId, f.fix.id);
+  assert.equal(result.delivery?.validationJobId, undefined);
+  assert.equal(validationState(f.store.get<Job>('jobs', f.check.id)!.artifact)?.state, 'failed');
+  await f.w.review(f.fix.id, 'approve', 'accepted');
+  assert.equal(f.store.get<Job>('jobs', f.fix.id)!.status, 'approved');
+  assert.equal(f.writes(), 0);
 });

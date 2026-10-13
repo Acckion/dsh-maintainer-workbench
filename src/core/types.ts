@@ -52,6 +52,7 @@ export interface IssuePlan {
   category: IssueCategory;
   goal: string;
   reproduction: string;
+  reproductionMode?: "omit" | "best_effort" | "required";
   expected: string;
   actual: string;
   scope: string;
@@ -279,7 +280,7 @@ export interface Job {
   findingThreadLinks?: Record<string, string>;
   findingFollowups?: FindingFollowup[];
   deliveryReviewId?: string;
-  formatRecovery?: { baseSha: string; patchHash: string };
+  formatRecovery?: { baseSha: string; patchHash: string; reason?: import('./execution-errors.ts').ReportFailureKind; repairAttempts?: number };
   waitingReason?: string;
   artifactState?: string;
   formatOnly?: boolean;
@@ -297,7 +298,6 @@ export interface Job {
     findings?: Record<string, import("./artifacts.ts").FindingDecision>;
   }[];
   instructions?: string;
-  supplementalInfo?: string;
   findingDecisions?: Record<string, import("./artifacts.ts").FindingDecision>;
   prContext?: PRContext;
   rawOutput?: string;

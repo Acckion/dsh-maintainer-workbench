@@ -70,7 +70,7 @@ test('dirty local checkout permits isolated fix and frozen validation handoff wi
     }
     return { result: fixtureAnalysis(issue, job.kind), engine: 'fixture' };
   });
-  const id = f.w.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Change the fixture file in an isolated worktree; preserve the source index.' }).created[0];
+  const id = f.w.enqueue([f.store.issues()[0].id], 'fix').created[0];
   f.w.pump(); await f.w.drain();
   const source = f.store.get<Job>('jobs', id)!;
   assert.equal(source.status, 'awaiting_review', source.error);
@@ -101,7 +101,7 @@ test('ordinary PR review uses pinned PR head even with staged AGENTS.md in the s
   const issue: Issue = { ...f.store.issues()[0], type: 'pr', number: 7, headSha: f.headSha, prBaseSha: f.headSha };
   f.store.put('issues', issue);
   f.github.pullRequest = async () => ({ headSha: f.headSha, baseSha: f.headSha, headRef: 'topic', headRepo: f.repo.fullName, baseRef: 'main', draft: false, merged: false, mergeable: true, checks: [], reviews: [], warnings: [] });
-  const id = f.w.enqueue([issue.id], 'review', { instructions: 'Review this pinned PR head without changing its checkout.' }).created[0];
+  const id = f.w.enqueue([issue.id], 'review').created[0];
   f.w.pump(); await f.w.drain();
   const job = f.store.get<Job>('jobs', id)!;
   assert.equal(inspected, true, job.error);

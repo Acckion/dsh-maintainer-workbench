@@ -68,7 +68,6 @@ export function WorkflowPanel({
         kind,
         sourceJobId: actions.stages.find((action) => action.kind === kind)
           ?.sourceJobId,
-        supplementalInfo: instructions,
         instructions:
           kind === "validate"
             ? validationInstructions(instructions, job?.kind)
@@ -156,16 +155,6 @@ export function WorkflowPanel({
         <details><summary>高级操作</summary>
         <IssuePlanning issue={issue} job={job} busy={busy} act={act} />
         </details>
-      )}
-      {job?.deliveryReviewId && (
-        <p className="mw-callout">
-          此产物保存了审查关联；当前有效性与限制请核对审阅摘要，发布时仍会再次检查。
-        </p>
-      )}
-      {job?.artifactState === "stale" && (
-        <div className="mw-callout amber">
-          此产物对应旧版本，仅供参考；请对当前版本重新执行。
-        </div>
       )}
       {!hideSummary && (
         <p className="mw-muted">
@@ -382,7 +371,7 @@ export function WorkflowPanel({
                 rows={3}
                 value={instructions}
                 onChange={(e) => setInstructions(e.target.value)}
-                placeholder="缺少依赖节点结果时必填。已有调查、验收条件和处置记录将自动传递。"
+                placeholder="可选。已有调查、验收条件和处置记录将自动传递。"
               />
             </label>
             <div className="mw-workflow-actions">
@@ -392,9 +381,8 @@ export function WorkflowPanel({
                   disabled={
                     busy ||
                     !!blocker ||
-                    (actions.primary?.input?.required && !instructions.trim()) ||
                     history.some((j) =>
-                      j.kind === primary && ["running", "queued"].includes(j.status),
+                      ["running", "queued"].includes(j.status),
                     )
                   }
                   onClick={() => void next(primary)}
@@ -417,22 +405,17 @@ export function WorkflowPanel({
                       disabled={
                         busy ||
                         !action.enabled ||
-                        (action.input?.required && !instructions.trim()) ||
                         history.some((j) =>
-                          j.kind === k && ["running", "queued"].includes(j.status),
+                          ["running", "queued"].includes(j.status),
                         )
                       }
                       onClick={() => void next(k as JobKind)}
-                      title={[...action.blockedReasons, ...(action.input?.reasons ?? [])].join("；")}
                     >
                       {kindNames[k as JobKind]}
                     </button>
                   );
                 })}
               </div>
-              {actions.stages.filter(action => action.input?.required).map(action => (
-                <p className="mw-callout amber" key={action.kind}>{kindNames[action.kind]}：{action.input!.reasons.join("；")}</p>
-              ))}
             </details>
           )}
           {issue.type === "issue" && (

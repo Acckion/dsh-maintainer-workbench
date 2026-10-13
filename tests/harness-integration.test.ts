@@ -73,8 +73,10 @@ test('format recovery creates a tool-free session and never reruns implementatio
   let listener:any;let mounted=0;let restricted=0;let count=0;
   const ctx={agentDefaultModel:{currentSelection:()=>({provider:'p',model:'m'})},llm:{listProviders:()=>[{id:'p'}]},agentPresets:{resolve:async()=>({id:'standard'}),mount:async()=>{mounted++;}},permissionPresets:{defaultPreset:'workspace-write',resolve:()=>{},set:()=>{}},workspaceRegistry:{create:async(path:string)=>({path,attachSession:async()=>{}})},on:(_:string,fn:any)=>{listener=fn;return()=>{};},agents:{create:async(options:any)=>{count++;await options.setup({tools:{register:()=>()=>{},schemas:()=>[],restrict:()=>{restricted++;},guard:()=>{}}});return{dispose:async()=>{},agent:{session:{},cancel:()=>{},whenIdle:async()=>{},followup:()=>{const callback=listener;queueMicrotask(()=>{const text=count===1?'broken result':JSON.stringify({schemaVersion:1,stage:'fix',summary:'recorded change',coverage:'recorded only',evidence:[],nextSteps:[],responseDraft:'',changes:['recorded change'],acceptanceCriteria:[],limitations:['checks unavailable'],tests:[]});callback({id:options.sessionId},{type:'assistant/message',data:{message:{content:[{type:'text',text}]}}});callback({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'completed'}}});});}}};}}} as unknown as Context;
   const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0],issue=store.issues()[0];const now=new Date().toISOString();
-  const output=await harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'format-test',repoId:repo.id,issueId:issue.id,kind:'fix',status:'running',revision:'r',baseSha:sha,issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,worktree:root},settings:store.settings(),signal:new AbortController().signal,progress:()=>{}});
+  const sessions:string[]=[];
+  const output=await harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'format-test',repoId:repo.id,issueId:issue.id,kind:'fix',status:'running',revision:'r',baseSha:sha,issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,worktree:root},settings:store.settings(),signal:new AbortController().signal,progress:(_,session)=>{if(session)sessions.push(session);}});
   assert.equal(count,2);assert.equal(mounted,1);assert.equal(restricted,1);assert.equal(output.artifact?.stage,'fix');store.close();
+  assert.ok(sessions.length);assert.ok(sessions.every(id=>id==='maintainer-format-test'));
 });
 
 test('native docs loop stops model requests and keeps the specific blocker without implementation retry', async () => {
@@ -120,7 +122,7 @@ for (const failures of [1,3]) test(`Messages pre-start recovery stays inside one
   agentPresets:{resolve:async()=>({id:'standard'})},permissionPresets:{resolve:()=>{},set:()=>{}},workspaceRegistry:{archiveSession:async()=>{}},
   on:(name:string,fn:any)=>{listeners.set(name,fn);return()=>listeners.delete(name);},
   agents:{create:async(options:any)=>{
-   await options.setup({tools:{schemas:()=>[],restrict:()=>{},guard:()=>{}}});
+   await options.setup({tools:{register:()=>()=>{},schemas:()=>[],restrict:()=>{},guard:()=>{}}});
    return {dispose:async()=>{},agent:{session:{},cancel:()=>{},whenIdle:async()=>{},followup:()=>{
     followups++;
     queueMicrotask(async()=>{

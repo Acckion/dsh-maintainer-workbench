@@ -956,3 +956,19 @@ test('current PR preflight is ready while its plan remains unconfirmed; reconcil
     assert.equal(store.issues()[0].orchestration?.run?.status,'running');
   } finally {await wb.close();}
 });
+
+test("snapshot reads task history once for all items and preserves progress", () => {
+  const store = new Store(":memory:");
+  seedFixture(store);
+  const wb = new Workbench(store, "/private/tmp/maintainer-snapshot-test", undefined, undefined, false);
+  const original = store.jobs.bind(store);
+  let reads = 0;
+  store.jobs = () => { reads++; return original(); };
+  const snapshot = wb.snapshot();
+  assert.equal(reads, 1);
+  for (const issue of snapshot.issues) {
+    assert.deepEqual(issue.orchestrationView, wb.orchestration.view(store.get<Issue>("issues", issue.id)!));
+    assert.deepEqual(issue.processingSuggestion, issue.orchestrationView);
+  }
+  wb.close();
+});

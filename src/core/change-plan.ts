@@ -78,7 +78,7 @@ export function planInputKey(issue: Issue, repo: Repo): string {
     )
     .digest("hex");
 }
-export const planningGuidance = gapsGuidance + `For triage, preflight and investigation, also return planDraft. Build a concise Chinese editable plan from the supplied issue/PR, repository guidance and current investigation. Do not ask humans to copy known facts. Read applicable guidance for investigation. Never invent acceptance, reproduction or facts. Distinguish recommendations in sources.detail; missing required facts go in missingInfo. planDraft fields: category:bug|feature|docs|question|maintenance, goal:string, scope:string, reproduction:string, expected:string, actual:string, acceptanceCriteria:string[], route:docs|fix|investigate|answer|review|track, sources:[{field:goal|scope|acceptanceCriteria|reproduction|expected|actual|category,source:string,detail:string}], missingInfo:string[]. Sources reference the provided issue/PR URL, repository source path, or current report evidence. Document plans specify exact requested edits and patch-level checks, never invent capabilities or add whole-repository audits. PRs can have mixed changes: include all relevant review focuses in acceptanceCriteria, do not require bug reproduction fields for PR review. Pure questions use answer. Unclear root causes use investigate. All plan fields are draft suggestions, not execution evidence or human authorization. PLAN CONFIRMATION IS OWNED BY THE HOST UI: return the draft and stop; never ask whether to confirm/start/execute it in inputRequest. inputRequest is only for genuinely missing human-provided facts (purpose:information) or substantive choices not resolved by supplied materials (purpose:decision). Unread repository files, file existence and anchor checks are future system checks, not human information gaps; put them in nextSteps or acceptanceCriteria, not missingInfo.`;
+export const planningGuidance = gapsGuidance + `For triage, preflight and investigation, also return planDraft. Build a concise Chinese editable plan from the supplied issue/PR, repository guidance and current investigation. Do not ask humans to copy known facts. Read applicable guidance for investigation. Never invent acceptance, reproduction or facts. Distinguish recommendations in sources.detail; missing required facts go in missingInfo. planDraft fields: category:bug|feature|docs|question|maintenance, goal:string, scope:string, reproduction:string, expected:string, actual:string, acceptanceCriteria:string[], route:docs|fix|investigate|answer|review|track, sources:[{field:goal|scope|acceptanceCriteria|reproduction|expected|actual|category,source:string,detail:string}], missingInfo:string[]. Sources reference the provided issue/PR URL, repository source path, or current report evidence. Document plans specify exact requested edits and patch-level checks, never invent capabilities or add whole-repository audits. PRs can have mixed changes: include all relevant review focuses in acceptanceCriteria, do not require bug reproduction fields for PR review. Pure questions use answer. Unclear root causes use investigate. Active bug reproduction is optional by default: missing reproduction or expected/actual fields alone must not go in missingInfo or block implementation. Respect explicit reproductionMode and authoritative manual step decisions; do not request the same skipped information again. All plan fields are draft suggestions, not execution evidence or human authorization. PLAN CONFIRMATION IS OWNED BY THE HOST UI: return the draft and stop; never ask whether to confirm/start/execute it in inputRequest. inputRequest is only for genuinely missing human-provided facts (purpose:information) or substantive choices not resolved by supplied materials (purpose:decision). Unread repository files, file existence and anchor checks are future system checks, not human information gaps; put them in nextSteps or acceptanceCriteria, not missingInfo.`;
 
 export function draftFromJob(issue: Issue, repo: Repo, job: Job): PlanDraft {
   const a = job.artifact ? normalizePreflight(job.artifact, job.prContext) : undefined;
@@ -89,6 +89,7 @@ export function draftFromJob(issue: Issue, repo: Repo, job: Job): PlanDraft {
     return {
       ...parsed.data,
       gaps: planGaps({...parsed.data, gaps: parsed.data.gaps ?? a?.gaps}),
+      reproductionMode: issue.plan?.reproductionMode ?? parsed.data.reproductionMode,
       inputKey: planInputKey(issue, repo),
       sourceJobId: job.id,
       generatedAt: new Date().toISOString(),
@@ -108,6 +109,7 @@ export function draftFromJob(issue: Issue, repo: Repo, job: Job): PlanDraft {
     reproduction:
       issue.plan?.reproduction ||
       (a?.stage === "investigate" ? a.reproduction : ""),
+    reproductionMode: issue.plan?.reproductionMode,
     expected: issue.plan?.expected ?? "",
     actual: issue.plan?.actual ?? "",
     acceptanceCriteria:

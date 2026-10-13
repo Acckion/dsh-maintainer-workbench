@@ -1,3 +1,4 @@
+import { reportNeedsRecovery, reportFailureMessage } from "../core/report-state.ts";
 import type { ReactNode } from "react";
 import { Loader2, Clock3, CircleAlert } from "lucide-react";
 import type { Audit, Issue, Job } from "../core/types.ts";
@@ -36,6 +37,7 @@ export function StageProgress({
   const permission = waits.find((w) => w.type === "host_permission");
   const environment = waits.find((w) => w.type === "environment_ready");
   const external = waits.find(w=>['ci_completion','author_revision','reporter_reply'].includes(w.type));
+  const reportPending = reportNeedsRecovery(job);
   const failure = job.status === "failed";
   const waiting =
     userInput ||
@@ -50,7 +52,7 @@ export function StageProgress({
     latest?.detail && !latest.detail.includes("已创建 Harness Session")
       ? latest.detail
       : "等待新的执行信息";
-  const title = failure
+  const title = reportPending ? "报告整理失败" : job.formatOnly && job.status === "running" ? "正在整理报告" : job.formatOnly && job.status === "queued" ? "等待整理报告" : failure
     ? "本次执行失败"
     : userInput
       ? inputWait?.questions?.every(q=>q.actor==="reporter") ? "等待报告者资料" : inputWait?.questions?.every(q=>q.purpose==="decision") ? "需要维护者决定" : "需要补充资料"
@@ -75,7 +77,7 @@ export function StageProgress({
         : Clock3;
   return (
     <section
-      className={`mw-stage-progress ${failure ? "failed" : ""}`}
+      className={`mw-stage-progress ${failure && !reportPending ? "failed" : ""}`}
       aria-label="处理进度"
     >
       <div className="mw-stage-progress-heading">
@@ -92,7 +94,7 @@ export function StageProgress({
       ) : (
         <p role={failure ? "alert" : "status"}>
           {failure
-            ? job.error || "未保存具体失败原因，请查看执行详情。"
+            ? reportFailureMessage(job) || "未保存具体失败原因，请查看执行详情。"
             : (permission?.reason ??
               environment?.reason ??
               external?.reason ??
@@ -148,7 +150,7 @@ export function StageProgress({
       </div>
       {failure && (job.result || job.patch || job.rawOutput) && (
         <p className="mw-stage-progress-hint">
-          已有产物和执行记录保留，可在执行详情中核对。
+          {reportPending ? "执行成果和原始输出已保留。重新整理报告会沿用这些记录。" : "已有产物和执行记录保留，可在执行详情中核对。"}
         </p>
       )}
       {job.evidenceGate && !job.evidenceGate.allowed && (

@@ -1,3 +1,5 @@
+import { modelData } from "../core/model-input.ts";
+import { withManualContext, stepResolved } from "../workflow/manual.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {defaultTriageMaxTokens} from '../core/output-budget.ts';
@@ -10,6 +12,7 @@ import {
 import { lightweight, type FindingDecision } from "../core/artifacts.ts";
 import { resolveDelivery, type DeliveryTarget } from "../core/delivery.ts";
 import { documentAcceptance } from "../core/document-acceptance.ts";
+import { copyExecutionLogs } from '../core/execution-evidence.ts';
 import { collectPatch } from "../core/git.ts";
 import { assertReviewEvidence } from "../core/review-evidence.ts";
 import { revision } from "../core/revision.ts";
@@ -23,7 +26,6 @@ import {
 import { validationAcceptance } from "../core/validation-acceptance.ts";
 import { validationInstructions } from "../core/validation-context.ts";
 import { stageBlocker } from "../workflow/actions.ts";
-import { stageInput } from "../workflow/stage-input.ts";
 const modelChoiceSchema = z.object({
   provider: z.string().min(1).max(200), model: z.string().min(1).max(500),
   reasoningEffort: z.string().min(1).max(100).optional(),
@@ -70,7 +72,6 @@ export class TaskService extends ServiceBase {
     options: EnqueueOptions = {},
   ): { created: string[]; reused: string[] } {
     z.enum(kinds).parse(kind);
-    options = { ...options, instructions: options.instructions?.trim() ? options.instructions : options.supplementalInfo };
     const ids = [
       ...new Set(
         z
@@ -94,7 +95,8 @@ export class TaskService extends ServiceBase {
       // Code tasks run in a fresh worktree pinned to baseSha. The source
       // checkout's index and uncommitted files are never task input.
       if (
-        ["preflight", "ci"].includes(kind) &&
+        (["preflight", "ci"].includes(kind) ||
+          (kind === "review" && !options.sourceJobId)) &&
         issue.type !== "pr"
       )
         throw new Error("PR 审查只能选择 Pull Request");
@@ -111,6 +113,13 @@ export class TaskService extends ServiceBase {
         options.sourceJobId ? this.job(options.sourceJobId) : undefined,
       );
       if (blocker) throw new Error(blocker);
+      if (
+        kind === "triage" &&
+        issue.informationRequests?.some((r) => r.state === "asked")
+      )
+        throw new Error(
+          "补充信息尚未收到新回复，请先核对或结束已有追问，避免重复分诊。",
+        );
       return { issue, repo };
     });
     if (options.sourceJobId) {
@@ -144,14 +153,6 @@ export class TaskService extends ServiceBase {
       )
         throw new Error("来源产物已过期，请先重新分析");
     }
-    for (const { issue, repo } of candidates) {
-      const input = stageInput(issue, kind, this.store.jobs().filter(job => job.issueId === issue.id).map(job => ({
-        ...job,
-        artifactState: job.revision !== revision(issue, repo, job.kind) ? "stale" : job.artifactState,
-      })));
-      if (input.required && !(options.supplementalInfo ?? options.instructions)?.trim())
-        throw new Error(`用户补充信息为必填：${input.reasons.join("；")}`);
-    }
     if (kind === "validate")
       options = {
         ...options,
@@ -170,6 +171,7 @@ export class TaskService extends ServiceBase {
           .find(
             (j) =>
               (!j.caseId || j.caseId === issue.processing?.id) &&
+              !issue.processing?.revokedRunIds?.includes(j.id) &&
               j.workflowRunId === options.workflowRunId &&
               j.sourceJobId === options.sourceJobId &&
               (j.instructions ?? "") === (options.instructions ?? "") &&
@@ -248,8 +250,7 @@ export class TaskService extends ServiceBase {
           goalId: options.goal ? (options.goalId ?? id) : undefined,
           handoff,
           sourceJobId: options.sourceJobId,
-          instructions: options.instructions?.slice(0, 8000),
-          supplementalInfo: options.supplementalInfo?.slice(0, 8000),
+          instructions: withManualContext(options.instructions?.slice(0, 8000), issue),
           id,
           caseId: this.store.processing.current(issue.id)?.id,
           repoId: repo.id,
@@ -319,7 +320,6 @@ export class TaskService extends ServiceBase {
     const result = this.hooks.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
-      supplementalInfo: job.supplementalInfo,
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
@@ -342,12 +342,11 @@ export class TaskService extends ServiceBase {
     if (revision(current, this.repo(job.repoId), job.kind) !== job.revision)
       throw new Error("输入版本已变化，请从收件箱重新派发");
     if (
-      this.nativeRunner &&
       job.status === "failed" &&
       job.formatRecovery &&
       job.rawOutput &&
       !job.result &&
-      (job.worktree || job.analysisPath)
+      (!this.nativeRunner || job.worktree || job.analysisPath)
     ) {
       const now = new Date().toISOString();
       const recovered: Job = {
@@ -365,8 +364,10 @@ export class TaskService extends ServiceBase {
         formatSourceJobId: job.formatSourceJobId ?? job.id,
         formatSessionId: undefined,
         formatDiagnostics: undefined,
+        sessionId: job.sessionId ?? job.toolDiagnostics?.sessionId,
         publications: undefined,
       };
+      copyExecutionLogs(this.dataDir, job, recovered.id);
       this.store.put("jobs", recovered);
       this.store.audit(
         "job.format_retry",
@@ -379,7 +380,6 @@ export class TaskService extends ServiceBase {
     return this.hooks.enqueue([job.issueId], job.kind, {
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
-      supplementalInfo: job.supplementalInfo,
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
@@ -401,7 +401,6 @@ export class TaskService extends ServiceBase {
         sourceJobId: job.sourceJobId,
         forceNew: true,
         instructions: job.instructions,
-        supplementalInfo: job.supplementalInfo,
         goal: job.goal,
         goalId: job.goalId,
         workflowRunId: job.workflowRunId,
@@ -429,7 +428,7 @@ export class TaskService extends ServiceBase {
       instructions:
         (job.instructions ?? "") +
         "\nMaintainer supplied input (use only within accepted scope):\n" +
-        JSON.stringify(waits.map(w=>w.answers ?? responses.filter(r=>r.waitId===w.id).at(-1)?.values)),
+        modelData(waits.map(w=>w.answers ?? responses.filter(r=>r.waitId===w.id).at(-1)?.values)),
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
@@ -461,9 +460,10 @@ export class TaskService extends ServiceBase {
         )
           throw new Error(checked.blockers.join("；"));
       }
-      await assertReviewEvidence(job);
+      const item = this.store.get<Issue>("issues", job.issueId)!;
+      if (!stepResolved(item.processing, "review")) await assertReviewEvidence(job);
       const validation = validationAcceptance(
-        job,
+        { ...job, issueSnapshot: { ...job.issueSnapshot, processing: item.processing } },
         this.store.jobs(),
         (candidate) => {
           const issue = this.store.get<Issue>("issues", candidate.issueId);

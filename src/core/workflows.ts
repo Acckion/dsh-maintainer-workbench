@@ -3,7 +3,6 @@ import type { JobKind } from './types.ts';
 const root = [new URL('./skills/', import.meta.url), new URL('../skills/', import.meta.url), new URL('../../skills/', import.meta.url)].find(url => existsSync(url));
 if (!root) throw new Error('Missing packaged maintainer workflows');
 const cache = new Map<JobKind, string>();
-export const independentStageGuidance = 'INDEPENDENT STAGE: execute only the requested node. Previous stages are optional context and may not have run. Use the supplied maintainer instructions for the missing goal, scope and background; never invent prior results or require a prior stage solely to begin this one. If the information is still insufficient, request concrete missing input. Without a source patch, validation or review targets the recorded checkout and the explicitly supplied scope; do not claim to have validated an absent patch. Accepted scope, host permissions and current execution-evidence requirements still apply. Do not automatically start another stage.';
 export function taskPrompt(kind: JobKind, checkout: boolean): string {
   let text = cache.get(kind);
   if (!text) { text = readFileSync(new URL(`maintainer-${kind}/SKILL.md`, root), 'utf8').replace(/^---[\s\S]*?---\s*/, ''); cache.set(kind, text); }

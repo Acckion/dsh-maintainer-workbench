@@ -1,3 +1,4 @@
+import { reportNeedsRecovery } from "../core/report-state.ts";
 import type { Analysis, Audit, Issue, Job } from "../core/types.ts";
 import {
   validationAcceptance,
@@ -34,6 +35,7 @@ export function acceptanceEligibility(
   job: Job,
   jobs: Job[],
 ): ValidationAcceptance {
+  if (reportNeedsRecovery(job)) return { allowed: false, reason: '报告尚未整理完成' };
   return validationAcceptance(job, jobs);
 }
 export function reviewQueue(jobs: Job[]): Job[] {
@@ -48,13 +50,14 @@ export function taskStatus(job: Job): { label: string; tone: string } {
   const validation = terminal.has(job.status)
     ? validationState(job.artifact)
     : undefined;
-  const label = validation
+  const reportPending = reportNeedsRecovery(job);
+  const label = reportPending ? "报告待整理" : job.formatOnly && job.status === "running" ? "正在整理报告" : job.formatOnly && job.status === "queued" ? "等待整理报告" : validation
     ? `${validation.state === "failed" ? "验证报告有失败" : validation.state === "incomplete" ? "验证报告不完整" : "验证报告通过"}${job.status === "approved" ? " · 本地已接受" : ""}`
     : statusLabels[job.status];
   const tone =
     job.artifactState === "stale"
       ? "amber"
-      : job.status === "failed" || validation?.state === "failed"
+      : reportPending ? "violet" : job.status === "failed" || validation?.state === "failed"
         ? "red"
         : validation?.state === "incomplete" || job.status === "awaiting_review"
           ? "amber"
@@ -306,19 +309,13 @@ export function executionExplanation(
   native: boolean,
   audit: Audit[],
 ) {
-  const formatRetry =
-    native &&
-    job.status === "failed" &&
-    !!job.formatRecovery &&
-    !!job.rawOutput &&
-    !job.result &&
-    !!(job.worktree || job.analysisPath);
+  const formatRetry = reportNeedsRecovery(job);
   const next =
     job.artifactState === "stale"
       ? "从当前事项重新派发；旧结果不能批准。"
       : job.status === "failed"
         ? formatRetry
-          ? "查看错误和原始输出后，可仅整理已保存输出；不会重新实施代码。"
+          ? "可重新整理已保存的报告；沿用执行记录和工作区。"
           : "查看错误和执行记录；重试会创建新任务，保留本次历史。"
         : job.status === "cancelled"
           ? "已保留执行记录；停止完成后可以重新执行，不会自动恢复。"

@@ -73,10 +73,11 @@ for (const [kind, denied, patched] of [['review', false, false], ['fix', false, 
     const requestText = requestTexts[0];
     if (kind === 'review') assert.match(requestText, /Session maintainer-default-review/);
     assert.match(requestText, kind === 'review' ? /changed source, and relevant existing tests/ : kind === 'validate' ? /supplied patch already applied/ : /actual edits in the dedicated worktree/);
-    const input = JSON.parse(requestText.split('UNTRUSTED_INPUT_JSON:\n')[1]);
-    if (kind !== 'validate') assert.equal(input.handoff[0].sourceJobId, 'old-job');
-    if (kind !== 'validate') assert.equal(input.handoff[0].evidenceStatus, 'historical_unverified');
-    assert.equal(input.instructions, undefined);
+    assert.match(requestText, /REPOSITORY DATA/);
+    if (kind !== 'validate') assert.match(requestText, /sourceJobId: old-job/);
+    if (kind !== 'validate') assert.match(requestText, /evidenceStatus: historical_unverified/);
+    assert.doesNotMatch(requestText, /UNTRUSTED_INPUT_JSON/);
+    assert.doesNotMatch(requestText, /instructions:/);
     assert.doesNotMatch(requestText, /call_oldRead|Old source read/);
   } finally { store.close(); }
 });

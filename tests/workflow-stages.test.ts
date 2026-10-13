@@ -54,7 +54,7 @@ test('implementation patch is handed into a fresh validation and independent rev
   const store=new Store(':memory:');seedFixture(store);store.put('repos',{...store.repos()[0],headSha:sha,localPath:path});const issue=store.issues()[0];const seen:Job[]=[];
   const runner:Runner=async({job,issue})=>{seen.push(job);if(job.kind==='fix')await writeFile(join(job.worktree!,'sum.cjs'),'module.exports=(a,b)=>a+b;\n');else assert.match(await readFile(join(job.worktree!,'sum.cjs'),'utf8'),/a\+b/);return{result:fixtureAnalysis(issue,job.kind),engine:'test'};};
   const w=new Workbench(store,dir,runner,undefined,false);
-  const fix=w.enqueue([issue.id],'fix',{instructions:'Implement the requested scoped change in a fresh worktree.'}).created[0];w.pump();await w.drain();assert.equal(store.get<Job>('jobs',fix)?.status,'awaiting_review');
+  const fix=w.enqueue([issue.id],'fix').created[0];w.pump();await w.drain();assert.equal(store.get<Job>('jobs',fix)?.status,'awaiting_review');
   const validation=w.enqueue([issue.id],'validate',{sourceJobId:fix,instructions:'check addition'}).created[0];w.pump();await w.drain();assert.equal(store.get<Job>('jobs',validation)?.status,'completed', store.get<Job>('jobs',validation)?.error);
   const review=w.enqueue([issue.id],'review',{sourceJobId:validation}).created[0];w.pump();await w.drain();assert.equal(store.get<Job>('jobs',review)?.status,'awaiting_review');
   assert.equal(new Set(seen.map(j=>j.worktree)).size,3);assert.match(await readFile(join(path,'sum.cjs'),'utf8'),/a-b/);await w.close();
@@ -101,8 +101,8 @@ test('PR fetch pins the API head, including fork refs, and rejects a concurrent 
 
 test('a new PR head can inherit historical review findings but not apply an old patch',async()=>{
   const store=new Store(':memory:');seedFixture(store);const repo=store.repos()[0];const issue={...store.issues()[0],type:'pr' as const,headSha:'a'.repeat(40),prBaseSha:'b'.repeat(40)};store.put('issues',issue);
-  const w=new Workbench(store,'/tmp/mw-stale-review',undefined,undefined,false);const id=w.enqueue([issue.id],'review',{instructions:'Review this PR head for actionable regressions.'}).created[0];const old=store.get<Job>('jobs',id)!;store.put('jobs',{...old,status:'awaiting_review',result:fixtureAnalysis(issue,'review'),patch:'historical-patch',findingDecisions:{f1:'accepted'}});store.put('issues',{...issue,headSha:'c'.repeat(40)});
-  const next=w.enqueue([issue.id],'review',{sourceJobId:id,instructions:'Re-review the current PR head and verify historical findings.'}).created[0];const handoff=store.get<Job>('jobs',next)?.handoff;assert.equal(handoff?.[0].stale,true);assert.equal(handoff?.[0].findings?.f1,'accepted');assert.notEqual(store.get<Job>('jobs',next)?.revision,old.revision);await w.close();
+  const w=new Workbench(store,'/tmp/mw-stale-review',undefined,undefined,false);const id=w.enqueue([issue.id],'review').created[0];const old=store.get<Job>('jobs',id)!;store.put('jobs',{...old,status:'awaiting_review',result:fixtureAnalysis(issue,'review'),patch:'historical-patch',findingDecisions:{f1:'accepted'}});store.put('issues',{...issue,headSha:'c'.repeat(40)});
+  const next=w.enqueue([issue.id],'review',{sourceJobId:id}).created[0];const handoff=store.get<Job>('jobs',next)?.handoff;assert.equal(handoff?.[0].stale,true);assert.equal(handoff?.[0].findings?.f1,'accepted');assert.notEqual(store.get<Job>('jobs',next)?.revision,old.revision);await w.close();
 });
 
 test('preflight can proceed with an evidence gap and no external reply; empty comments never access GitHub', async () => {

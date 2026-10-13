@@ -10,6 +10,7 @@ import {seedFixture,fixtureAnalysis} from './support/fixtures.ts';
 import {Workbench} from '../src/core/workbench.ts';
 import {artifactSchemas,asAnalysis,parseArtifact} from '../src/core/artifacts.ts';
 import type {IssuePlan,Job} from '../src/core/types.ts';
+import { availableActions } from '../src/workflow/actions.ts';
 const gap={id:'file_check',kind:'system_check' as const,summary:'读取指定文件',status:'not_checked' as const,blocks:['investigate' as const],resolution:'系统读取指定范围',sources:[]};
 const common={schemaVersion:1 as const,summary:'已整理已有资料',coverage:'只读检查',evidence:[],nextSteps:[],responseDraft:'请提供失败日志'};
 const plan:IssuePlan={category:'bug',goal:'生成追问草稿',scope:'只读查阅，不修改文件、不实施修复',acceptanceCriteria:['区分事实和缺失资料'],reproduction:'尚未提供，无法复现',expected:'正常启动',actual:'偶尔失败',decision:'accepted'};
@@ -23,7 +24,7 @@ test('read-only/unknown reproduction cannot authorize fixes; all-stage confirmat
  const s=new Store(':memory:');seedFixture(s);const i=s.issues()[0];
  assert.match(planBlocker({...i,plan},'fix')!,/只读/);
  assert.equal(planBlocker({...i,plan},'investigate'),undefined);
- assert.match(planBlocker({...i,plan:{...plan,scope:'只修改启动模块'}},'fix')!,/不能复现/);
+ assert.match(planBlocker({...i,plan:{...plan,scope:'只修改启动模块',reproductionMode:'required'}},'fix')!,/必须复现/);
  const a=artifactSchemas.fix.parse({...common,stage:'fix',gaps:[gap],changes:[],acceptanceCriteria:[],limitations:[],tests:[]});
  const req:InputRequest={reason:'问题',fields:[{id:'confirm',question:'确认实施？',purpose:'plan_confirmation'},{id:'check',gapId:gap.id,question:'文件是什么？',purpose:'information'},{id:'log',question:'失败日志？',purpose:'information',actor:'reporter'}]};
  assert.deepEqual(planningInputRequest(a,req)?.fields.map(f=>f.id),['log']);s.close();
@@ -56,6 +57,41 @@ test('worker keeps unfinished system checks out of human forms and retains the r
  const a=artifactSchemas.triage.parse({...common,stage:'triage',gaps:[{...gap,blocks:['triage']}],category:'bug',priority:'P2',labels:[],module:'startup',impact:'unknown',missingInfo:[],duplicateOf:null,duplicateReason:'',route:'investigate',routeReason:'检查文件',inputRequest:{reason:'未读取',fields:[{id:'file',gapId:gap.id,question:'请读取文件',purpose:'information'}]}});
  const w=new Workbench(s,'/tmp/mw-gaps-worker-tests',async()=>({artifact:a,result:asAnalysis(a),engine:'fixture'}),undefined,true);
  w.enqueue([s.issues()[0].id],'triage');await w.drain();assert.equal(s.jobs()[0].status,'failed');assert.match(s.jobs()[0].error!,/系统检查/);assert.equal(s.jobs()[0].artifact?.gaps?.length,1);assert.equal(s.processing.current(s.issues()[0].id)?.waits.some(w=>w.type==='user_input'),false);await w.close();
+});
+for (const route of ['investigate', 'needs_info'] as const) test(`completed triage with g1 system work can start investigation without supplemental text (${route})`, async t => {
+ const s = new Store(':memory:'); seedFixture(s);
+ const a = artifactSchemas.triage.parse({...common, stage:'triage', category:'bug', priority:'P2', labels:[], module:'core/shell', impact:'Unix socket commands fail',
+  missingInfo:['g1'], duplicateOf:null, duplicateReason:'', route, routeReason:'核对评论中的修复结论',
+  gaps:[{...gap, id:'g1', summary:'评论结论未经源码核实', resolution:'Agent 读取 parse.ts 和 file-access.ts，核对当前版本', sources:['issue:comment:3']}],
+  inputRequest:{reason:'尚未检查源码', fields:[{id:'read_source', gapId:'g1', question:'请核实当前源码', purpose:'information'}]}});
+ const w = new Workbench(s,'/tmp/mw-system-gap-handoff-tests',async()=>({artifact:a,result:asAnalysis(a),engine:'fixture'}),undefined,false);
+ t.after(()=>w.close());
+ const i = s.issues()[0]; const id = w.enqueue([i.id],'triage').created[0]; w.pump(); await w.drain();
+ const triage = s.get<Job>('jobs',id)!; const current = s.get<typeof i>('issues',i.id)!;
+ assert.equal(triage.status,'completed');
+ assert.equal(current.processing?.waits.some(wait=>wait.state==='open' && wait.type==='user_input'),false);
+ assert.equal(triage.artifact?.inputRequest,undefined);
+ assert.equal(triage.artifact?.gaps?.[0].status,'not_checked');
+ const next = availableActions(current,triage,s.jobs()).primary!;
+ assert.equal(next.kind,'investigate'); assert.equal(next.enabled,true);
+ const childId = w.enqueue([i.id],next.kind,{sourceJobId:next.sourceJobId}).created[0];
+ const child = s.get<Job>('jobs',childId)!;
+ assert.equal(child.status,'queued'); assert.equal(child.sourceJobId,id);
+ assert.equal(child.handoff?.find(h=>h.id===id)?.artifact?.gaps?.[0].id,'g1');
+ assert.equal(child.handoff?.find(h=>h.id===id)?.artifact?.gaps?.[0].kind,'system_check');
+ assert.equal(child.instructions?.trim() || '', '');
+});
+for (const kind of ['reporter_information','maintainer_decision'] as const) test(`system work does not replace required ${kind} input`, async t => {
+ const s=new Store(':memory:');seedFixture(s);
+ const a=artifactSchemas.triage.parse({...common,stage:'triage',category:'bug',priority:'P2',labels:[],module:'core/shell',impact:'未知',missingInfo:['g1'],duplicateOf:null,duplicateReason:'',route:'needs_info',routeReason:'等待失败机器的日志',
+  gaps:[gap,{...gap,id:'failure_log',kind,status:'pending',summary:'失败机器日志尚未提供',resolution:'由报告者提供实际日志'}],
+  inputRequest:{reason:'失败机器日志未知',fields:[{id:'logs',gapId:'failure_log',question:'实际失败日志？',actor:kind==='maintainer_decision'?'maintainer':'reporter',purpose:kind==='maintainer_decision'?'decision':'information'}]}});
+ const w=new Workbench(s,'/tmp/mw-system-gap-handoff-tests',async()=>({artifact:a,result:asAnalysis(a),engine:'fixture'}),undefined,false);t.after(()=>w.close());
+ const i=s.issues()[0],id=w.enqueue([i.id],'triage').created[0];w.pump();await w.drain();
+ const triage=s.get<Job>('jobs',id)!,current=s.get<typeof i>('issues',i.id)!;
+ assert.equal(triage.status,'waiting_input');assert.equal(current.processing?.waits.some(wait=>wait.state==='open'&&wait.type==='user_input'),true);
+ assert.equal(availableActions(current,triage,s.jobs()).primary,undefined);
+ assert.throws(()=>w.enqueue([i.id],'investigate',{sourceJobId:id}),/等待用户补充/);
 });
 for(const kind of ['environment','external_wait'] as const) test(`${kind} uses existing waits, never a human questionnaire or a successful implementation`,async()=>{
  const s=new Store(':memory:');seedFixture(s);

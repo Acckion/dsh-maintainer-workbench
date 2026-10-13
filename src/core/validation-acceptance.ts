@@ -1,3 +1,4 @@
+import { stepResolved } from "../workflow/manual.ts";
 import type { Job } from './types.ts';
 import { validationState } from './workflow-state.ts';
 
@@ -26,6 +27,7 @@ function later(a: Job, b: Job): number {
  * exact implementation. Patch text alone must never block another change.
  */
 export function validationAcceptance(implementation: Job, jobs: Job[], isCurrent: IsCurrent = job => job.artifactState !== 'stale'): ValidationAcceptance {
+  if ((!implementation.caseId || implementation.caseId === implementation.issueSnapshot.processing?.id) && stepResolved(implementation.issueSnapshot.processing, 'validate')) return {allowed:true};
   if (!['fix', 'docs'].includes(implementation.kind) || !implementation.patch) return { allowed: true };
   const children = new Map<string, Job[]>();
   for (const job of jobs) if (job.sourceJobId && ['validate', 'review'].includes(job.kind)) children.set(job.sourceJobId, [...(children.get(job.sourceJobId) ?? []), job]);

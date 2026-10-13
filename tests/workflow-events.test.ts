@@ -373,7 +373,7 @@ test("repository preparation failures pause without automatic retries and resume
   w.prepareRepository = async () => {
     throw Error("offline fixture");
   };
-  const id = w.enqueue([store.issues()[0].id], "investigate", { instructions: "Investigate this issue using the repository once available." }).created[0];
+  const id = w.enqueue([store.issues()[0].id], "investigate").created[0];
   w.pump();
   await w.drain();
   assert.equal(store.get<Job>("jobs", id)!.status, "waiting_environment");

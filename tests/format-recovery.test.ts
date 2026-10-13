@@ -11,6 +11,8 @@ import { git } from '../src/core/git.ts';
 import { reviewEvidenceGate } from '../src/core/review-evidence.ts';
 import { ArtifactFormatError } from '../src/core/execution-errors.ts';
 import { fixtureAnalysis, seedFixture } from './support/fixtures.ts';
+import { parseReport } from '../src/core/report-finalizer.ts';
+import { executionRecord, readExecutionLog } from '../src/core/execution-evidence.ts';
 import type { Job, Runner } from '../src/core/types.ts';
 
 async function fixture(t: TestContext, runner: Runner) {
@@ -30,8 +32,41 @@ async function fixture(t: TestContext, runner: Runner) {
   const workbench = new Workbench(store, dir, runner, github, false);
   t.after(async () => { await workbench.close(); await rm(dir, { recursive: true, force: true }); });
   const run = async () => { workbench.pump(); await workbench.drain(); return store.jobs().at(-1)!; };
-  return { store, workbench, run, github };
+  return { store, workbench, run, github, dataDir: dir };
 }
+
+for (const reason of ['schema', 'truncated'] as const) test(`saved empty-request recovery preserves patch and execution evidence: ${reason}`, async t => {
+  let calls = 0, implementations = 0;
+  const sourceSession = 'source-execution';
+  const diagnostics = { sessionId: sourceSession, provider: 'p', model: 'm', preset: 'native', permission: 'workspace-write', mountedTools: ['bash'], requests: [], calls: 1, results: 1, canonicalResults: 1, errors: 0, finished: true };
+  const raw = JSON.stringify({ schemaVersion: 1, stage: 'fix', summary: '修改已完成', coverage: '真实执行记录', evidence: [], nextSteps: [], responseDraft: '', changes: ['intended change'], acceptanceCriteria: [], limitations: [], tests: [{ command: 'check', status: 'passed', output: 'model claim' }], inputRequest: { reason: '没有追问', fields: [] } });
+  const f = await fixture(t, async ({ job, progress, recordOutput, recordDiagnostics, recordExecution }) => {
+    calls++;
+    if (!job.formatOnly) {
+      implementations++;
+      await writeFile(join(job.worktree!, 'value.txt'), 'intended change\n');
+      progress('original execution', sourceSession); recordDiagnostics?.(diagnostics);
+      recordExecution?.(executionRecord(job, sourceSession, 1, { name: 'bash', arguments: JSON.stringify({ command: 'check' }) }, { meta: { exitCode: 1, output: 'actual check failed' } }), 'actual process');
+      recordOutput?.(raw);
+      throw new ArtifactFormatError('legacy empty fields error', { kind: reason, repairAttempts: 1 });
+    }
+    // A formatting session must not replace the source session or tool diagnostics.
+    progress('format session', 'formatter-session'); recordDiagnostics?.({ ...diagnostics, sessionId: 'formatter-session', calls: 0 });
+    const artifact = parseReport('fix', raw, () => {});
+    return { artifact, result: fixtureAnalysis(job.issueSnapshot, 'fix'), engine: 'format fixture' };
+  });
+  f.workbench.enqueue([f.store.issues()[0].id], 'fix');
+  const failed = await f.run(); assert.ok(failed.formatRecovery);
+  f.workbench.retry(failed.id); const recovered = await f.run();
+  assert.equal(recovered.status, 'awaiting_review', recovered.error);
+  assert.equal(calls, reason === 'schema' ? 1 : 2); assert.equal(implementations, 1);
+  assert.equal(recovered.sessionId, sourceSession); assert.deepEqual(recovered.toolDiagnostics, diagnostics);
+  assert.equal(recovered.worktree, failed.worktree); assert.match(recovered.patch!, /intended change/);
+  assert.equal(recovered.artifact?.inputRequest, undefined); assert.equal(recovered.result?.tests[0].status, 'failed');
+  assert.equal(recovered.executionRecords?.[0].sessionId, sourceSession);
+  assert.equal(readExecutionLog(f.dataDir, recovered, recovered.executionRecords![0].id).raw, 'actual process');
+  assert.equal(f.store.get<Job>('jobs', failed.id)!.rawOutput, raw);
+});
 
 for (const kind of ['validate', 'review', 'ci'] as const) {
   test(`${kind} mutation rejection cannot be relabeled as a formatting failure on retry`, async t => {
@@ -43,7 +78,7 @@ for (const kind of ['validate', 'review', 'ci'] as const) {
       return { result: fixtureAnalysis(issue, job.kind), engine: 'test' };
     });
     // Seed the execution-stage job directly; PR fetching/routing has separate tests.
-    const id = f.workbench.enqueue([f.store.issues()[0].id], 'validate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' }).created[0];
+    const id = f.workbench.enqueue([f.store.issues()[0].id], 'validate').created[0];
     f.store.put('jobs', { ...f.store.get<Job>('jobs', id)!, kind });
     const failed = await f.run();
     assert.equal(failed.status, 'failed');
@@ -76,7 +111,7 @@ test('malformed output does not make a mutated validation workspace recoverable'
     recordOutput?.('malformed output');
     throw new ArtifactFormatError('schema validation failed');
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'validate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'validate');
   const failed = await f.run();
   assert.equal(failed.status, 'failed');
   assert.match(failed.error!, /修改了代码/);
@@ -94,7 +129,7 @@ test('genuine format-only retries retain the reviewed execution patch without re
     }
     return { result: fixtureAnalysis(issue, job.kind), engine: 'test' };
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'fix');
   const failed = await f.run();
   assert.ok(failed.formatRecovery);
   f.workbench.retry(failed.id);
@@ -117,7 +152,7 @@ for (const tamper of ['patch', 'head'] as const) {
       recordOutput?.('malformed output');
       throw new ArtifactFormatError('schema validation failed');
     });
-    f.workbench.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+    f.workbench.enqueue([f.store.issues()[0].id], 'fix');
     const failed = await f.run();
     if (tamper === 'patch') await writeFile(join(failed.worktree!, 'value.txt'), 'different change\n');
     else await git(failed.worktree!, ['-c', 'user.name=Test', '-c', 'user.email=test@example.test', 'commit', '-m', 'unreviewed history']);
@@ -137,7 +172,7 @@ test('execution errors with recorded output retry as fresh work, not format-only
     recordOutput?.('partial progress, not a completed result');
     throw new Error('permission or tool execution failed');
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'investigate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'investigate');
   const failed = await f.run();
   f.workbench.retry(failed.id);
   await f.run();
@@ -156,7 +191,7 @@ for (const formatFails of [false, true]) test(`format-only recovery rejects conc
     if (formatFails) throw new ArtifactFormatError('still malformed');
     return { result: fixtureAnalysis(issue, job.kind), engine: 'test' };
   });
-  f.workbench.enqueue([f.store.issues()[0].id], 'fix', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'fix');
   const failed = await f.run();
   f.workbench.retry(failed.id);
   const retried = await f.run();
@@ -181,7 +216,7 @@ test('cancellation during checkpoint capture stays cancelled and cannot enable f
     }
     return value;
   }) as Store['get'];
-  f.workbench.enqueue([f.store.issues()[0].id], 'validate', { instructions: 'Execute the scoped fixture task and preserve its actual worktree and evidence for format recovery.' });
+  f.workbench.enqueue([f.store.issues()[0].id], 'validate');
   const job = await f.run();
   assert.equal(cancelled, true);
   assert.equal(job.status, 'cancelled');
