@@ -1,3 +1,4 @@
+import {prReviewValidation, reviewValidationNeeds} from '../core/pr-review-validation.ts';
 import {blockingGaps, planGaps} from '../domain/gaps.ts';
 import {normalizePreflight} from '../core/preflight-policy.ts';
 import {asAnalysis} from '../core/artifacts.ts';
@@ -444,6 +445,16 @@ export class Orchestration {
       this.schedule(updated, "validate", job.id);
     } else if (job.kind === "validate") {
       const validation = validationState(job.artifact);
+      const source = job.sourceJobId ? this.wb.store.get<Job>("jobs",job.sourceJobId) : undefined;
+      if (updated.type === "pr" && source?.kind === "review" && reviewValidationNeeds(source).length) {
+        const accepted=prReviewValidation(source,this.wb.store.jobs());
+        if (!accepted.passed) {
+          this.stop(updated,"blocked",`验收验证未完成：${validation?.reason ?? "缺少当前审查版本的完整验证证据"}。环境问题先准备环境；测试失败由维护者决定修订。`);
+          return;
+        }
+        this.put(updated,{...updated.orchestration,run:{...run,status:"review",currentJobId:source.id,reason:"必要验证已通过，原源码审查仍适用；等待维护者最终审核"}});
+        return;
+      }
       if (validation?.state === "passed")
         this.schedule(updated, "review", job.id);
       else
@@ -481,6 +492,12 @@ export class Orchestration {
           reason: "调查完成，请核对更新后的计划再确认实施",
         },
       });
+    } else if (updated.type === "pr" && job.kind === "review" && job.artifact?.stage === "review" &&
+      job.artifact.verdict === "no_findings" && job.evidenceGate?.allowed !== false && !job.artifact.blockers.length && reviewValidationNeeds(job).length) {
+      const evidence=prReviewValidation(job,this.wb.store.jobs());
+      if(evidence.passed) this.stop(updated,"review","源码审查与必要验证已完成，请最终审核");
+      else if(evidence.latest) this.stop(updated,"blocked","必要验证尚未通过，请检查验证记录后恢复；不会自动重复失败任务");
+      else this.schedule(updated,"validate",job.id,`补齐当前 PR 审查的验收证据。仅执行已确认范围内的必要检查，不修改代码。必须逐项覆盖以下缺口，缺少条件时输出 environment 缺口及 not_run，不以隔离探针替代项目测试：\n${reviewValidationNeeds(job).map(g=>`${g.id}：${g.summary}；解除条件：${g.resolution}`).join("\n")}`);
     } else
       this.stop(
         updated,
@@ -574,7 +591,11 @@ export class Orchestration {
   resume(id: string) {
     const issue = this.issue(id),
       run = issue.orchestration?.run;
-    if (!run || !["paused", "blocked"].includes(run.status))
+    const pendingReview=run?.currentJobId ? this.wb.store.get<Job>('jobs',run.currentJobId) : undefined;
+    const pendingValidation=run?.status==='review' && issue.type==='pr' && pendingReview?.artifact?.stage==='review' &&
+      pendingReview.artifact.verdict==='no_findings' && !pendingReview.artifact.blockers.length && pendingReview.evidenceGate?.allowed!==false &&
+      reviewValidationNeeds(pendingReview).length && !prReviewValidation(pendingReview,this.wb.store.jobs()).passed;
+    if (!run || (!["paused", "blocked"].includes(run.status) && !pendingValidation))
       throw new Error("当前计划不能恢复");
     const repo = this.wb.store.get<import("../core/types.ts").Repo>(
       "repos",
@@ -593,7 +614,17 @@ export class Orchestration {
     if (job) this.assertRecovery(job);
     if (this.wb.store.jobs().some(j => j.issueId === id && ["queued", "running"].includes(j.status)))
       throw new Error("当前事项仍有执行中的任务，请等待完成");
-    if (job && ["waiting_input", "waiting_environment"].includes(job.status)) return this.wb.resume(job.id);
+    if (job && ["waiting_input", "waiting_environment"].includes(job.status)) {
+      const previous=issue.orchestration!;
+      this.put(issue,{...previous,run:{...this.renewed(issue,run),status:"running"}});
+      try {
+        if(job.status==='waiting_environment' && job.kind==='validate' && repo.localPath && job.worktree && job.patchSha256)
+          this.wb.store.processing.dispatch(id,{type:'environment.observed',ready:true,reason:'维护者要求重新检查已准备的验证环境；测试成功仍需实际执行证据'},'user',`environment-recheck:${job.id}`);
+        const result=this.wb.resume(job.id), current=this.issue(id);
+        this.put(current,{...current.orchestration,run:{...current.orchestration!.run!,currentJobId:result.created[0] ?? result.reused[0]}});
+        return result;
+      } catch(error) {this.put(this.issue(id),previous);throw error;}
+    }
     const updated = {
       ...issue,
       orchestration: {
@@ -602,6 +633,11 @@ export class Orchestration {
       },
     };
     this.put(updated, updated.orchestration);
+    if(pendingValidation && job) {
+      this.advance(updated,job);
+      const next=this.issue(id).orchestration?.run?.currentJobId;
+      return {created:next && next!==job.id ? [next] : [],reused:[]};
+    }
     if (job && !run.completedJobIds.includes(job.id)) this.completed(job);
     else if (
       job?.kind === "validate" &&

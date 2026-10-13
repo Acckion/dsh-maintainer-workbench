@@ -274,3 +274,28 @@ test('review formatting retry retains original execution identity and evidence, 
   await writeFile(join(recovered.worktree!,'value.txt'),'changed after recovery\n');
   assert.equal((await reviewEvidenceGate(recovered)).allowed,false);
 });
+
+for(const drift of [false,true]) test(`validation environment recovery retains prepared dependencies and rejects code drift: ${drift}`,async t=>{
+ let calls=0;
+ const f=await fixture(t,async({job,issue,progress,recordExecution})=>{
+  calls++;const ready=await readFile(join(job.worktree!,'node_modules','ready'),'utf8').catch(()=>undefined);
+  if(!ready){
+   const artifact={schemaVersion:1 as const,stage:'validate' as const,summary:'缺依赖',coverage:'范围测试',evidence:[],nextSteps:[],responseDraft:'',environment:'缺依赖',tests:[{command:'scope-test',status:'not_run' as const,output:'缺依赖'}],blockers:['缺依赖'],gaps:[{id:'deps',kind:'environment' as const,summary:'缺依赖',status:'pending' as const,blocks:['validate' as const],resolution:'准备验证依赖',sources:[]}]};
+   return {artifact,result:fixtureAnalysis(issue,'validate'),engine:'fixture'};
+  }
+  const session='validation-'+job.id;progress('验证环境已具备',session);
+  recordExecution?.({id:session+':1',callId:'scope-test-call',sessionId:session,tool:'bash',command:'scope-test',cwd:job.worktree!,checkoutSha:job.baseSha,patchHash:createHash('sha256').update('').digest('hex'),exitCode:0,isError:false,output:'PASS',truncated:false,recordedAt:''},'PASS');
+  const artifact={schemaVersion:1 as const,stage:'validate' as const,summary:'通过',coverage:'范围测试',evidence:[],nextSteps:[],responseDraft:'',environment:'已准备',tests:[{command:'scope-test',status:'passed' as const,output:'PASS',executionId:session+':1'}],blockers:[]};
+  return {artifact,result:fixtureAnalysis(issue,'validate'),engine:'fixture'};
+ });
+ await writeFile(join(f.store.repos()[0].localPath,'.git','info','exclude'),'node_modules/\n');
+ f.workbench.enqueue([f.store.issues()[0].id],'validate',{instructions:'Execute scoped validation only.'});
+ const waiting=await f.run();assert.equal(waiting.status,'waiting_environment');assert.ok(waiting.patchSha256);
+ await mkdir(join(waiting.worktree!,'node_modules'));await writeFile(join(waiting.worktree!,'node_modules','ready'),'prepared');
+ if(drift)await writeFile(join(waiting.worktree!,'value.txt'),'changed\n');
+ f.workbench.processing.environmentReady(waiting.repoId);f.workbench.resume(waiting.id);
+ const recovered=await f.run();assert.equal(recovered.worktree,waiting.worktree);
+ assert.equal(calls,drift?1:2);
+ if(drift){assert.equal(recovered.status,'failed');assert.match(recovered.error!,/版本或补丁已变化/);}
+ else {assert.equal(recovered.artifact?.stage==='validate' && recovered.artifact.tests[0].status,'passed');assert.equal(recovered.status,'completed');}
+});

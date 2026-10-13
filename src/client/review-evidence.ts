@@ -1,4 +1,5 @@
 import { reportNeedsRecovery } from "../core/report-state.ts";
+import {prReviewValidation,reviewValidationNeeds,sameReviewedTarget} from '../core/pr-review-validation.ts';
 import type { Analysis, Audit, Issue, Job } from "../core/types.ts";
 import {
   validationAcceptance,
@@ -36,6 +37,10 @@ export function acceptanceEligibility(
   jobs: Job[],
 ): ValidationAcceptance {
   if (reportNeedsRecovery(job)) return { allowed: false, reason: '报告尚未整理完成' };
+  if(job.kind==='review') {
+    const validation=prReviewValidation(job,jobs);
+    if(!validation.passed) return {allowed:false,latest:validation.latest,reason:'源码审查已完成，但必要验证尚未通过；请在当前工作流补齐验证后最终接受。'};
+  }
   return validationAcceptance(job, jobs);
 }
 export function reviewQueue(jobs: Job[]): Job[] {
@@ -120,6 +125,16 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
     return evidence;
   }
   const byId = new Map(jobs.map((job) => [job.id, job]));
+  const prReview=selected.kind==='review' ? selected : selected.kind==='validate' && selected.sourceJobId ? byId.get(selected.sourceJobId) : undefined;
+  if(prReview && reviewValidationNeeds(prReview).length && (prReview.id===selected.id || sameReviewedTarget(prReview,selected))) {
+    evidence.review=prReview;
+    evidence.validations=jobs.filter(j=>j.kind==='validate' && j.sourceJobId===prReview.id && sameReviewedTarget(prReview,j) && j.artifactState!=='stale' && terminal.has(j.status))
+      .sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+    const status=prReviewValidation(prReview,jobs);
+    if(!status.passed) evidence.warnings.push('当前审查的必要验证尚未通过，不能仅凭无缺陷结论最终接受。');
+    return evidence;
+  }
+
   const isImplementation = (job: Job) =>
     job.kind === "fix" || job.kind === "docs";
   const includeLinkedValidations = (implementation: Job) => {

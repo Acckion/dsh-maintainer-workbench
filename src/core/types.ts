@@ -281,6 +281,7 @@ export interface Job {
   findingFollowups?: FindingFollowup[];
   deliveryReviewId?: string;
   formatRecovery?: { baseSha: string; patchHash: string; reason?: import('./execution-errors.ts').ReportFailureKind; repairAttempts?: number };
+  environmentRecovery?: { sourceJobId: string; baseSha: string; patchHash: string };
   waitingReason?: string;
   artifactState?: string;
   formatOnly?: boolean;

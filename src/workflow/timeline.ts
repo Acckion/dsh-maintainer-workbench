@@ -1,4 +1,5 @@
 import { canonicalStage, mergedDiagnosis, stepDisposition } from "./manual.ts";
+import {prReviewValidation,reviewValidationNeeds} from '../core/pr-review-validation.ts';
 import type { Issue, Job } from "../core/types.ts";
 import type { ProcessingCase, ProcessingEvent } from "../domain/processing.ts";
 import type {
@@ -33,7 +34,8 @@ export function projectTimeline(
     a.createdAt.localeCompare(b.createdAt),
   );
   const latest = [...ordered].reverse();
-  const currentJob =
+  const finalReview=issue.orchestration?.run?.status === 'review' ? history.find(j=>j.id===issue.orchestration?.run?.currentJobId && j.kind==='review') : undefined;
+  const currentJob = finalReview ??
     history.find((j) => j.id === state.currentRunId) ??
     (state.currentRunId || state.manualCursor ? undefined : latest[0]);
   // Recommend an existing legal re-review action for evidence-only investigations.
@@ -152,7 +154,7 @@ export function projectTimeline(
     ((issue.type === "pr" &&
       currentJob?.kind === "review" &&
       currentJob.artifact?.stage === "review" &&
-      currentJob.artifact.verdict === "no_findings") ||
+      currentJob.artifact.verdict === "no_findings" && prReviewValidation(currentJob,history).passed) ||
       (issue.type === "issue" &&
         profile.category === "question" &&
         currentJob?.kind === "investigate" &&
@@ -238,6 +240,8 @@ export function projectTimeline(
     Object.assign(current, { status: "waiting", result: "已暂缓" });
   const draft = issue.draft ?? currentJob?.prContext?.draft ?? false;
   const route = templateStages(issue, profile.category);
+  if(issue.type==='pr' && history.some(j=>reviewValidationNeeds(j).length) && !route.includes('validate'))
+    route.splice(route.indexOf('decision'),0,'validate');
   if (!terminal && state.lifecycle !== "deferred" && !historical) {
     const nextKind = actions?.primary?.kind;
     if (nextKind && !nodes.some((n) => n.stage === nextKind)) {

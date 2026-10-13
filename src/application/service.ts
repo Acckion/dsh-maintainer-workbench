@@ -10,6 +10,8 @@ export interface EnqueueOptions {
   goalId?: string;
   resumeInput?: boolean;
   workflowRunId?: string;
+  /** Internal only: resume a retained validation checkout after environment preparation. */
+  environmentSourceJobId?: string;
 }
 export type Enqueue = (
   ids: string[],

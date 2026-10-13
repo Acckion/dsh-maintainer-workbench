@@ -48,7 +48,7 @@ export function AssistantActions({
             control.kind === "resume"
               ? "已根据补充输入继续，原运行与证据保留"
               : control.kind === "prepare"
-                ? "仓库环境已准备，可继续原任务"
+                ? "已刷新仓库路径状态；运行时和依赖仍需实际验证"
                 : control.kind === "cancel"
                   ? "任务已停止，已有产物保留"
                   : "已重新派发任务",

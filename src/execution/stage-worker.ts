@@ -44,6 +44,7 @@ import {
 } from "../core/types.ts";
 import { stagePolicies } from "../workflow/stages.ts";
 import { EnvironmentUnavailable } from "./environment-error.ts";
+import { validationEnvironment } from '../core/validation-environment.ts';
 const patchHash = (patch: string): string =>
   createHash("sha256").update(patch).digest("hex");
 const readOnlyCode = (kind: JobKind): boolean =>
@@ -239,7 +240,7 @@ export class StageWorker extends ServiceBase {
         repo.profile = await this.understand(repo, controller.signal);
       if (
         this.nativeRunner &&
-        !job.formatOnly &&
+        !job.formatOnly && !job.environmentRecovery &&
         repo.localPath &&
         !lightweight(job.kind) &&
         !directAudit
@@ -258,7 +259,7 @@ export class StageWorker extends ServiceBase {
         job = { ...job, analysisPath };
         this.saveJob(job);
       }
-      if (!job.formatOnly && job.sourceJobId && job.worktree) {
+      if (!job.formatOnly && !job.environmentRecovery && job.sourceJobId && job.worktree) {
         const source = this.job(job.sourceJobId);
         if (
           source.revision === job.revision &&
@@ -283,6 +284,14 @@ export class StageWorker extends ServiceBase {
         readOnlyCode(job.kind) ||
         (job.issueSnapshot.organizeMode === "audit" &&
           job.kind === "investigate");
+      if(job.environmentRecovery) {
+        const checkpoint=job.environmentRecovery;
+        if(!job.worktree || checkpoint.baseSha!==job.baseSha || await git(job.worktree,['rev-parse','HEAD'])!==job.baseSha ||
+          patchHash(await collectPatch(job.worktree,job.baseSha))!==checkpoint.patchHash)
+          throw new Error("验证环境准备期间代码版本或补丁已变化，请重新派发；旧证据不可复用");
+        await this.deps.workspaces.acquireFormatRecovery(job);
+        progress("复用已准备依赖的原验证工作区，重新采集当前会话验证证据");
+      }
       if (job.formatOnly) {
         await this.deps.workspaces.acquireFormatRecovery(job);
         const checkpoint = job.formatRecovery;
@@ -446,6 +455,7 @@ export class StageWorker extends ServiceBase {
           artifact: output.artifact ? { ...output.artifact, inputRequest } : undefined };
         this.store.audit("workflow.plan_confirmation_routed", "计划确认、系统待办和已有同版本答复不进入人工补充；未授予实施权限", job.id);
       }
+      output.artifact = validationEnvironment(output.artifact, { ...this.job(job.id), patchSha256: patchHash(patch) });
       const stageGaps=blockingGaps(output.artifact?.gaps ?? [],job.kind);
       const ownChecks=stageGaps.filter(g=>g.kind==='system_check');
       if(ownChecks.length && !stageGaps.some(g=>g.kind==="environment")){
@@ -455,7 +465,7 @@ export class StageWorker extends ServiceBase {
       const environmentGap=stageGaps.find(g=>g.kind==='environment');
       if(environmentGap){
         this.saveJob({...this.job(job.id),...output,patch,patchSha256:patchHash(patch)});
-        throw new EnvironmentUnavailable(environmentGap.summary+'；'+environmentGap.resolution);
+        throw new EnvironmentUnavailable(environmentGap.summary+'；'+environmentGap.resolution+(job.worktree ? `；验证工作区：${job.worktree}。仓库克隆不等于依赖与运行时准备，环境恢复后需重新执行检查。` : ''));
       }
       const externalGaps=stageGaps.filter(g=>g.kind==='external_wait');
       if(externalGaps.length){

@@ -9,6 +9,7 @@ export function validationPromptHandoff(job: Pick<Job, 'sourceJobId' | 'handoff'
       summary: historicalText(artifact?.summary),
       changes: artifact && 'changes' in artifact ? artifact.changes.map(historicalText) : [],
       acceptanceCriteria: artifact && 'acceptanceCriteria' in artifact ? artifact.acceptanceCriteria.map(historicalText) : [],
+      validationGaps: artifact?.gaps?.filter(g=>g.status!=='resolved' && g.blocks.includes('validate')).map(g=>({id:g.id,kind:g.kind,summary:historicalText(g.summary),resolution:historicalText(g.resolution)})),
       suggestedCommands: artifact && 'tests' in artifact ? artifact.tests.map(test => historicalText(test.command)) : [],
     };
   });
