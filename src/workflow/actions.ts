@@ -161,7 +161,7 @@ export function availableActions(
         : artifact.verdict === "incomplete" ||
             Object.values(job.findingDecisions ?? {}).includes("needs_evidence")
           ? "investigate"
-          : !prReviewValidation(job,history).passed ? "validate" : undefined;
+          : !prReviewValidation(job,history,issue.processing).passed ? "validate" : undefined;
   } else if (job.kind === "ci") primary = "investigate";
   else
     primary =

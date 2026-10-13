@@ -154,7 +154,7 @@ export function projectTimeline(
     ((issue.type === "pr" &&
       currentJob?.kind === "review" &&
       currentJob.artifact?.stage === "review" &&
-      currentJob.artifact.verdict === "no_findings" && prReviewValidation(currentJob,history).passed) ||
+      currentJob.artifact.verdict === "no_findings" && prReviewValidation(currentJob,history,state).passed) ||
       (issue.type === "issue" &&
         profile.category === "question" &&
         currentJob?.kind === "investigate" &&

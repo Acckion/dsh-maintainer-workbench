@@ -469,7 +469,7 @@ export class TaskService extends ServiceBase {
       }
       const item = this.store.get<Issue>("issues", job.issueId)!;
       if (!stepResolved(item.processing, "review")) await assertReviewEvidence(job);
-      if(job.kind==='review' && !prReviewValidation(job,this.store.jobs()).passed)
+      if(job.kind==='review' && !prReviewValidation(job,this.store.jobs(),this.store.processing.current(job.issueId)).passed)
         throw new Error("源码审查已保存，但当前 PR 的必要验证尚未通过；请完成工作流中的验证后最终接受。");
       const validation = validationAcceptance(
         { ...job, issueSnapshot: { ...job.issueSnapshot, processing: item.processing } },
@@ -517,7 +517,7 @@ export class TaskService extends ServiceBase {
     }
     if (JSON.stringify(this.job(id)) !== original)
       throw new Error("审核期间产物状态或发现处置已变化，请重新查看后确认");
-    if(decision==='approve' && job.kind==='review' && !prReviewValidation(job,this.store.jobs()).passed)
+    if(decision==='approve' && job.kind==='review' && !prReviewValidation(job,this.store.jobs(),this.store.processing.current(job.issueId)).passed)
       throw new Error("审核期间必要验证状态已变化，请重新核对验证记录。");
     this.saveJob({
       ...job,

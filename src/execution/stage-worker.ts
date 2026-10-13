@@ -44,6 +44,7 @@ import {
 } from "../core/types.ts";
 import { stagePolicies } from "../workflow/stages.ts";
 import { EnvironmentUnavailable } from "./environment-error.ts";
+import { uncoveredReviewChecks } from '../core/pr-review-validation.ts';
 import { validationEnvironment } from '../core/validation-environment.ts';
 const patchHash = (patch: string): string =>
   createHash("sha256").update(patch).digest("hex");
@@ -541,8 +542,14 @@ export class StageWorker extends ServiceBase {
           ...job,
           patchSha256: patchHash(patch),
         });
-        if (output.artifact.stage === "validate")
+        if (output.artifact.stage === "validate") {
+          const source = job.sourceJobId ? this.store.get<Job>('jobs',job.sourceJobId) : undefined;
+          if (source?.kind === 'review') {
+            const missing = uncoveredReviewChecks(source,{...job,artifact:output.artifact,patchSha256:patchHash(patch)});
+            if (missing.length) output.artifact = {...output.artifact,blockers:[...new Set([...output.artifact.blockers,`未覆盖来源审查要求的必要检查：${missing.join('、')}；需逐项提供当前执行证据，不能用无关通过记录替代。`])]};
+          }
           output.result = asAnalysis(output.artifact);
+        }
         if ("tests" in output.artifact)
           output.result = { ...output.result, tests: output.artifact.tests };
       }

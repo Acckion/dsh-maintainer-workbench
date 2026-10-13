@@ -54,3 +54,22 @@ test('preflight worker completes with unknown CI and does not request human inpu
   assert.equal(store.jobs().length,1);
  }finally{await wb.close();}
 });
+
+for (const name of ['Node.js CI', 'Node 20 CI', 'npm CI failed', 'pnpm CI unavailable']) test(`ecosystem CI name remains coverage: ${name}`,()=>{
+ const report=artifactSchemas.preflight.parse({...artifact,blockers:[name],gaps:[{...gap,summary:name}],planDraft:{...artifact.planDraft!,gaps:[{...gap,summary:name}]}});
+ const result=normalizePreflight(report,pr);
+ assert.equal(result.stage,'preflight');if(result.stage!=='preflight')return;
+ assert.equal(result.readiness,'review');assert.deepEqual(result.blockers,[]);assert.deepEqual(result.gaps?.[0].blocks,[]);
+});
+for (const detail of ['CI：本地 Node 版本不满足要求', 'CI：node_modules missing', 'CI：pnpm command not found']) test(`concrete local environment remains blocking: ${detail}`,()=>{
+ const result=normalizePreflight({...artifact,blockers:[detail]},pr);
+ assert.equal(result.stage,'preflight');if(result.stage!=='preflight')return;
+ assert.equal(result.readiness,'blocked');assert.deepEqual(result.blockers,[detail]);
+});
+test('satisfied required gate is resolved for the pinned head, unresolved only gates delivery',()=>{
+ const context={...pr,branchProtection:{required_status_checks:{contexts:['Node.js CI']}},checks:{check_runs:[{name:'Node.js CI',head_sha:pr.headSha,status:'completed',conclusion:'success'}]}};
+ const pass=normalizePreflight(artifact,context);
+ assert.equal(pass.gaps?.find(g=>g.id==='host_required_ci')?.status,'resolved');
+ const pending=normalizePreflight(artifact,{...context,checks:null});
+ assert.equal(pending.gaps?.find(g=>g.id==='host_required_ci')?.status,'pending');assert.deepEqual(pending.gaps?.find(g=>g.id==='host_required_ci')?.blocks,['delivery']);
+});

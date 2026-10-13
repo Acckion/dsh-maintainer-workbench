@@ -365,7 +365,7 @@ export class Orchestration {
         job.artifact.readiness === "review" &&
         (repo.policy?.autoReview ?? this.wb.store.settings().autoReview) &&
         !run &&
-        !planGaps(draft).some(g=>g.status!=="resolved") &&
+        !planGaps(draft).some(g=>g.status!=="resolved" && (g.blocks.includes('review') || g.blocks.includes('preflight') || g.kind==='reporter_information' || g.kind==='maintainer_decision' || g.kind==='unclassified')) &&
         draft.goal &&
         draft.scope &&
         draft.acceptanceCriteria.length
@@ -447,7 +447,7 @@ export class Orchestration {
       const validation = validationState(job.artifact);
       const source = job.sourceJobId ? this.wb.store.get<Job>("jobs",job.sourceJobId) : undefined;
       if (updated.type === "pr" && source?.kind === "review" && reviewValidationNeeds(source).length) {
-        const accepted=prReviewValidation(source,this.wb.store.jobs());
+        const accepted=prReviewValidation(source,this.wb.store.jobs(),updated.processing);
         if (!accepted.passed) {
           this.stop(updated,"blocked",`验收验证未完成：${validation?.reason ?? "缺少当前审查版本的完整验证证据"}。环境问题先准备环境；测试失败由维护者决定修订。`);
           return;
@@ -494,8 +494,8 @@ export class Orchestration {
       });
     } else if (updated.type === "pr" && job.kind === "review" && job.artifact?.stage === "review" &&
       job.artifact.verdict === "no_findings" && job.evidenceGate?.allowed !== false && !job.artifact.blockers.length && reviewValidationNeeds(job).length) {
-      const evidence=prReviewValidation(job,this.wb.store.jobs());
-      if(evidence.passed) this.stop(updated,"review","源码审查与必要验证已完成，请最终审核");
+      const evidence=prReviewValidation(job,this.wb.store.jobs(),updated.processing);
+      if(evidence.passed) this.stop(updated,"review",evidence.manual ? "源码审查已完成；验证按维护者决定处置，请最终审核" : "源码审查与必要验证已完成，请最终审核");
       else if(evidence.latest) this.stop(updated,"blocked","必要验证尚未通过，请检查验证记录后恢复；不会自动重复失败任务");
       else this.schedule(updated,"validate",job.id,`补齐当前 PR 审查的验收证据。仅执行已确认范围内的必要检查，不修改代码。必须逐项覆盖以下缺口，缺少条件时输出 environment 缺口及 not_run，不以隔离探针替代项目测试：\n${reviewValidationNeeds(job).map(g=>`${g.id}：${g.summary}；解除条件：${g.resolution}`).join("\n")}`);
     } else
@@ -594,7 +594,7 @@ export class Orchestration {
     const pendingReview=run?.currentJobId ? this.wb.store.get<Job>('jobs',run.currentJobId) : undefined;
     const pendingValidation=run?.status==='review' && issue.type==='pr' && pendingReview?.artifact?.stage==='review' &&
       pendingReview.artifact.verdict==='no_findings' && !pendingReview.artifact.blockers.length && pendingReview.evidenceGate?.allowed!==false &&
-      reviewValidationNeeds(pendingReview).length && !prReviewValidation(pendingReview,this.wb.store.jobs()).passed;
+      reviewValidationNeeds(pendingReview).length && !prReviewValidation(pendingReview,this.wb.store.jobs(),issue.processing).passed;
     if (!run || (!["paused", "blocked"].includes(run.status) && !pendingValidation))
       throw new Error("当前计划不能恢复");
     const repo = this.wb.store.get<import("../core/types.ts").Repo>(

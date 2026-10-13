@@ -6,7 +6,7 @@ import {
   Square,
 } from "lucide-react";
 import type { PublishAction } from "../core/publish.ts";
-import type { Job } from "../core/types.ts";
+import type { Issue, Job } from "../core/types.ts";
 import { API } from "./api.ts";
 import { Tag } from "./Primitives.tsx";
 import {
@@ -18,6 +18,7 @@ import { AcceptArtifactButton } from "./ReviewSummary.tsx";
 export function ReviewActions({
   job,
   jobs,
+  issue,
   native,
   busy,
   reviewNote,
@@ -28,6 +29,7 @@ export function ReviewActions({
 }: {
   job?: Job;
   jobs: Job[];
+  issue?: Issue;
   native: boolean;
   busy: boolean;
   reviewNote: string;
@@ -41,7 +43,7 @@ export function ReviewActions({
   openPublishPreview: (kind: PublishAction) => Promise<void>;
   openSession?: (id: string) => void;
 }) {
-  const acceptance = job ? acceptanceEligibility(job, jobs) : undefined;
+  const acceptance = job ? acceptanceEligibility(job, jobs, issue?.processing) : undefined;
   return (
     job && (
       <div className="mw-review-bar">

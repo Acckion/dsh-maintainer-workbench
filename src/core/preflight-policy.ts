@@ -4,7 +4,8 @@ import { blockingGaps, type Gap } from '../domain/gaps.ts';
 
 /** CI availability is coverage, never permission to run a local review. */
 const ciText = /\bCI\b|check[-_ ]?runs?|commit status|status checks?|持续集成|分支保护/i;
-const isCICoverage=(text:string)=>ciText.test(text) && !/node_modules|\bpnpm\b|\bnpm\b|\bnode(?:\.js)?\b|依赖安装|运行环境|运行时/i.test(text);
+const localEnvironment = /node_modules.*(?:missing|not found|不存在|缺)|(?:missing|缺少|未安装).*node_modules|(?:local|worktree|checkout|本地|工作区).*(?:dependencies|runtime|依赖|运行时|版本)|(?:node|pnpm|npm).*(?:not found|command not found|不满足|低于|未安装)|依赖安装|运行环境|运行时/i;
+const isCICoverage=(text:string)=>ciText.test(text) && !localEnvironment.test(text);
 function requirements(pr: PRContext): {context:string;appId?:number|null}[] {
   const parsed=z.object({required_status_checks:z.object({contexts:z.array(z.string().min(1)).optional(),checks:z.array(z.object({context:z.string().min(1),app_id:z.number().nullable().optional()})).optional()}).nullable().optional()}).safeParse(pr.branchProtection);
   const protection=parsed.success ? parsed.data : undefined;
@@ -47,7 +48,7 @@ export function normalizePreflight(artifact: NonNullable<Job['artifact']>, pr?: 
           resolution:required.length ? g.resolution : 'CI 与必需门禁覆盖尚未确认；继续本地审查，交付时重新核对实际门禁'}
       : g);
   const gaps=normalize(artifact.gaps);
-  const gate: Gap | undefined=required.length ? {id:'host_required_ci',kind:'external_wait',waitFor:'ci_completion',status:'pending',blocks:unmet.length ? ['delivery'] : [],summary:`已确认必需 CI 门禁：${required.join('、')}；${unmet.length ? '尚未满足：'+unmet.join('、') : '当前结果已满足，交付时仍需复核版本'}`,resolution:'依赖 CI 的交付操作前重新读取必需检查及结果；不阻塞本地审查、补丁导出或更新 PR',sources:[`base:${pr.baseRef}`,`head:${pr.headSha}`]} : undefined;
+  const gate: Gap | undefined=required.length ? {id:'host_required_ci',kind:'external_wait',waitFor:'ci_completion',status:unmet.length ? 'pending' : 'resolved',blocks:unmet.length ? ['delivery'] : [],summary:`已确认必需 CI 门禁：${required.join('、')}；${unmet.length ? '尚未满足：'+unmet.join('、') : '当前结果已满足，交付时仍需复核版本'}`,resolution:'依赖 CI 的交付操作前重新读取必需检查及结果；不阻塞本地审查、补丁导出或更新 PR',sources:[`base:${pr.baseRef}`,`head:${pr.headSha}`]} : undefined;
   const withGate=(items:Gap[] | undefined)=>gate ? [...(items ?? []).filter(g=>g.id!==gate.id),gate] : items;
   const planDraft=artifact.planDraft ? {...artifact.planDraft,gaps:withGate(normalize(artifact.planDraft.gaps))} : undefined;
   const blockers=artifact.blockers.filter(b=>!isCICoverage(b));

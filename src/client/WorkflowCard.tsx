@@ -80,7 +80,7 @@ export function WorkflowCard({
   }, [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id, ready]);
   const active = history.find((j) => ["queued", "running"].includes(j.status));
   const current = history.find((j) => j.id === run?.currentJobId);
-  const pendingValidation=!!current && current.artifact?.stage==='review' && current.artifact.verdict==='no_findings' && !prReviewValidation(current,history).passed;
+  const pendingValidation=!!current && current.artifact?.stage==='review' && current.artifact.verdict==='no_findings' && !prReviewValidation(current,history,issue.processing).passed;
   const edit = (key: keyof IssuePlan, value: string) => {
     if (!plan || !draft) return;
     const next = {

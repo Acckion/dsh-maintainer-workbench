@@ -1,4 +1,5 @@
 import test from "node:test";
+import { prReviewValidation } from "../src/core/pr-review-validation.ts";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -973,7 +974,7 @@ test("snapshot reads task history once for all items and preserves progress", ()
   wb.close();
 });
 
-const validationGap={id:'project_test',kind:'system_check' as const,summary:'范围测试未运行',status:'not_checked' as const,blocks:['validate' as const],resolution:'执行项目范围测试',sources:[]};
+const validationGap={id:'project_test',kind:'system_check' as const,summary:'范围测试未运行',status:'not_checked' as const,blocks:['validate' as const],resolution:'执行项目范围测试',sources:[],checks:['scope-test']};
 function prReviewSetup() {
  const f=setup();
  const pr={...f.issue,type:'pr' as const,headSha:'b'.repeat(40),prBaseSha:f.repo.headSha,orchestration:undefined};
@@ -997,8 +998,8 @@ test('PR review hands off required validation once, then returns to the original
   const queued=f.store.jobs().at(-1)!;assert.equal(queued.sourceJobId,review.id);
   assert.match(queued.instructions!,/project_test/);
   await assert.rejects(()=>f.wb.review(review.id,'approve',''),/必要验证/);
-  const artifact=artifactSchemas.validate.parse({...common,stage:'validate',environment:'fixture',tests:[{command:'scope-test',status:'passed',output:'PASS'}],blockers:[]});
-  const checked={...queued,status:'awaiting_review' as const,prContext:review.prContext,patchSha256:review.patchSha256,artifact,result:asAnalysis(artifact)};
+  const artifact=artifactSchemas.validate.parse({...common,stage:'validate',environment:'fixture',tests:[{command:'scope-test',status:'passed',output:'PASS',executionId:'validation:1'}],blockers:[],gaps:[{...validationGap,status:'resolved',resolution:'范围检查已执行',sources:['validation:1']}]});
+  const checked={...queued,status:'awaiting_review' as const,sessionId:'validation',worktree:'/tmp/validation',executionRecords:[{id:'validation:1',callId:'call',sessionId:'validation',cwd:'/tmp/validation',checkoutSha:queued.baseSha,patchHash:review.patchSha256!,command:'scope-test',exitCode:0,isError:false,output:'PASS',tool:'bash',recordedAt:'',truncated:false}],prContext:review.prContext,patchSha256:review.patchSha256,artifact,result:asAnalysis(artifact)};
   f.store.put('jobs',checked);f.wb.orchestration.completed(checked);f.wb.orchestration.completed(checked);
   assert.equal(f.store.jobs().length,2);
   assert.equal(f.store.issues()[0].orchestration?.run?.status,'review');
@@ -1052,5 +1053,31 @@ test('a saved PR review can explicitly continue its existing confirmed workflow 
   assert.equal(f.store.jobs().at(-1)?.workflowRunId,run.id);assert.equal(f.store.jobs().at(-1)?.sourceJobId,review.id);
   assert.throws(()=>f.wb.orchestration.resume(issue.id),/不能恢复/);
   assert.equal(f.store.jobs().length,2);
+ }finally{await f.wb.close();}
+});
+
+for (const satisfied of [false,true]) test(`delivery-only required CI does not stop configured auto-review: satisfied=${satisfied}`,async()=>{
+ const f=setup();try{
+  f.store.put('repos',{...f.repo,policy:{...f.repo.policy,autoReview:true}});
+  const pr={...f.issue,type:'pr' as const,headSha:'b'.repeat(40),prBaseSha:f.repo.headSha,orchestration:undefined};f.store.put('issues',pr);
+  const id=f.wb.enqueue([pr.id],'preflight').created[0];const job=f.store.get<Job>('jobs',id)!;
+  const artifact=artifactSchemas.preflight.parse({...common,stage:'preflight',intent:'审查',risks:[],readiness:'review',blockers:[],planDraft:{...draft,route:'review',gaps:[]}});
+  f.store.put('jobs',{...job,status:'completed',artifact,result:asAnalysis(artifact),prContext:{headSha:pr.headSha,baseSha:pr.prBaseSha,headRef:'feature',headRepo:pr.repoId,baseRef:'main',draft:false,merged:false,mergeable:true,reviews:[],warnings:[],branchProtection:{required_status_checks:{contexts:['Node.js CI']}},checks:satisfied?{check_runs:[{name:'Node.js CI',head_sha:pr.headSha,status:'completed',conclusion:'success'}]}:null}});
+  f.wb.orchestration.completed(f.store.get<Job>('jobs',id)!);
+  assert.deepEqual(f.store.jobs().map(j=>j.kind),['preflight','review']);
+  assert.equal(f.store.issues()[0].orchestration?.run?.status,'running');
+ }finally{await f.wb.close();}
+});
+
+for(const mode of ['skip','complete'] as const)test(`current manual ${mode} after review completion prevents repeated validation`,async()=>{
+ const f=prReviewSetup();try{
+  const review=completePRReview(f);
+  const current=f.store.issues()[0];
+  f.wb.manualSteps.submit({issueId:current.id,caseId:current.processing!.id,expectedVersion:current.processing!.version,stage:'validate',mode,text:mode==='complete'?'已人工核验范围测试':'本次明确免除项目测试',requestId:crypto.randomUUID()});
+  f.wb.orchestration.completed(review);
+  assert.deepEqual(f.store.jobs().map(j=>j.kind),['review','validate']);
+  assert.equal(f.store.jobs().at(-1)?.status,'cancelled');
+  const state=f.store.issues()[0].processing;
+  assert.equal(prReviewValidation(review,f.store.jobs(),state).passed,true);
  }finally{await f.wb.close();}
 });
