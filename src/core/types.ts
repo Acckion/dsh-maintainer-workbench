@@ -205,6 +205,8 @@ export interface PRContext {
   reviews: unknown;
   reviewComments?: unknown;
   commitStatus?: unknown;
+  branchProtection?: unknown;
+  branchRules?: unknown;
   warnings: string[];
 }
 export interface Issue {
@@ -263,6 +265,10 @@ export interface Job {
   workflowRunId?: string;
   reviewRequiredSources?: string[];
   toolDiagnostics?: ToolDiagnostics;
+  /** Report formatting is not source execution; retain its identity separately. */
+  formatSessionId?: string;
+  formatDiagnostics?: ToolDiagnostics;
+  formatSourceJobId?: string;
   evidenceGate?: { allowed: boolean; reasons: string[] };
   ciEvidence?: {
     snapshot: import("./remote-progress.ts").ActionsSnapshot;
@@ -275,6 +281,7 @@ export interface Job {
   findingFollowups?: FindingFollowup[];
   deliveryReviewId?: string;
   formatRecovery?: { baseSha: string; patchHash: string; reason?: import('./execution-errors.ts').ReportFailureKind; repairAttempts?: number };
+  environmentRecovery?: { sourceJobId: string; baseSha: string; patchHash: string };
   waitingReason?: string;
   artifactState?: string;
   formatOnly?: boolean;

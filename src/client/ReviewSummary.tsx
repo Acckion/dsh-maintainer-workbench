@@ -32,8 +32,8 @@ function TestReport({ job, own = false, role, open }: { job: Job; own?: boolean;
 
 /** Display aggregation with existing guarded controls; authorization stays in the backend. */
 export function ReviewSummary({ job, jobs, audit, native, open, openSession, issue, deliveryActions, openLocation, compact=false }: { job: Job; jobs: Job[]; audit: Audit[]; native: boolean; open: OpenJob; openSession?: (id: string) => void; issue?: Issue; deliveryActions?: React.ReactNode;openLocation?:(path:string,line?:number)=>void;compact?:boolean }) {
-  const evidence = reviewEvidence(job, jobs), execution = executionExplanation(job, native, audit);
-  const acceptance = acceptanceEligibility(job, jobs);
+  const evidence = reviewEvidence(job, jobs, issue?.processing), execution = executionExplanation(job, native, audit);
+  const acceptance = acceptanceEligibility(job, jobs, issue?.processing);
   const artifact = job.artifact, implementation = evidence.implementation, review = evidence.review;
   const risks = [...evidence.warnings];
   for (const source of [job, implementation?.id !== job.id ? implementation : undefined, review?.id !== job.id ? review : undefined]) {

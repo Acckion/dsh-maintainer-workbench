@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
@@ -7,6 +8,7 @@ import { Store } from '../src/core/store.ts';
 import { Workbench } from '../src/core/workbench.ts';
 import { GitHub } from '../src/core/github.ts';
 import { git } from '../src/core/git.ts';
+import { reviewEvidenceGate } from '../src/core/review-evidence.ts';
 import { ArtifactFormatError } from '../src/core/execution-errors.ts';
 import { fixtureAnalysis, seedFixture } from './support/fixtures.ts';
 import { parseReport } from '../src/core/report-finalizer.ts';
@@ -242,4 +244,58 @@ test('format-only PR recovery rejects a changed comparison base without stale lo
   assert.equal(retried.status, 'failed');
   assert.match(retried.error!, /head\/base 已变化/);
   assert.equal(calls, 1);
+});
+
+test('review formatting retry retains original execution identity and evidence, separate from formatter', async t => {
+  const diagnostics = (sessionId: string, executing: boolean) => ({sessionId,provider:'fixture',model:'fixture',preset:'coding',permission:'read-only',mountedTools:executing?['read']:[],requests:[{tools:executing?['read']:[]}],calls:executing?1:0,results:executing?1:0,canonicalResults:executing?1:0,errors:0,finished:true});
+  const f = await fixture(t, async ({job,issue,progress,recordDiagnostics,recordExecution,recordOutput}) => {
+    const session=`session-${job.id}`;
+    progress('running',session);recordDiagnostics?.(diagnostics(session,!job.formatOnly));
+    if(!job.formatOnly) {
+      recordExecution?.({id:session+':1',callId:'read-original',sessionId:session,tool:'read',sourcePath:'value.txt',cwd:job.worktree!,checkoutSha:job.baseSha,patchHash:createHash('sha256').update('').digest('hex'),exitCode:null,isError:false,output:'original',truncated:false,recordedAt:''},'original');
+      recordOutput?.('malformed report');throw new ArtifactFormatError('invalid schema');
+    }
+    return {engine:'fixture',result:fixtureAnalysis(issue,'review'),artifact:{schemaVersion:1,stage:'review',summary:'无缺陷',coverage:'读取原文件',evidence:[],nextSteps:[],responseDraft:'',findings:[],followups:[],verdict:'no_findings',blockers:[],inspectedSources:[{executionId:'read-original',path:'value.txt',line:1,quote:'original'}]}};
+  });
+  const id=f.workbench.enqueue([f.store.issues()[0].id],'validate',{instructions:'Read only fixture source and preserve evidence.'}).created[0];
+  f.store.put('jobs',{...f.store.get<Job>('jobs',id)!,kind:'review'});
+  const failed=await f.run();assert.equal(failed.status,'failed');assert.ok(failed.formatRecovery);
+  f.workbench.retry(id);const recovered=await f.run();
+  assert.equal(recovered.sessionId,failed.sessionId);
+  assert.deepEqual(recovered.toolDiagnostics,failed.toolDiagnostics);
+  assert.deepEqual(recovered.executionRecords,failed.executionRecords);
+  assert.equal(recovered.formatSourceJobId,id);
+  assert.equal(recovered.formatSessionId,`session-${recovered.id}`);
+  assert.deepEqual(recovered.formatDiagnostics?.mountedTools,[]);
+  assert.equal(recovered.evidenceGate?.allowed,true,JSON.stringify(recovered.evidenceGate));
+  assert.equal(recovered.artifact?.stage==='review' && recovered.artifact.verdict,'no_findings');
+  assert.equal((await reviewEvidenceGate({...recovered,sessionId:recovered.formatSessionId})).allowed,false);
+  assert.equal((await reviewEvidenceGate({...recovered,executionRecords:recovered.executionRecords?.map(r=>({...r,checkoutSha:'stale'}))})).allowed,false);
+  await writeFile(join(recovered.worktree!,'value.txt'),'changed after recovery\n');
+  assert.equal((await reviewEvidenceGate(recovered)).allowed,false);
+});
+
+for(const drift of [false,true]) test(`validation environment recovery retains prepared dependencies and rejects code drift: ${drift}`,async t=>{
+ let calls=0;
+ const f=await fixture(t,async({job,issue,progress,recordExecution})=>{
+  calls++;const ready=await readFile(join(job.worktree!,'node_modules','ready'),'utf8').catch(()=>undefined);
+  if(!ready){
+   const artifact={schemaVersion:1 as const,stage:'validate' as const,summary:'缺依赖',coverage:'范围测试',evidence:[],nextSteps:[],responseDraft:'',environment:'缺依赖',tests:[{command:'scope-test',status:'not_run' as const,output:'缺依赖'}],blockers:['缺依赖'],gaps:[{id:'deps',kind:'environment' as const,summary:'缺依赖',status:'pending' as const,blocks:['validate' as const],resolution:'准备验证依赖',sources:[]}]};
+   return {artifact,result:fixtureAnalysis(issue,'validate'),engine:'fixture'};
+  }
+  const session='validation-'+job.id;progress('验证环境已具备',session);
+  recordExecution?.({id:session+':1',callId:'scope-test-call',sessionId:session,tool:'bash',command:'scope-test',cwd:job.worktree!,checkoutSha:job.baseSha,patchHash:createHash('sha256').update('').digest('hex'),exitCode:0,isError:false,output:'PASS',truncated:false,recordedAt:''},'PASS');
+  const artifact={schemaVersion:1 as const,stage:'validate' as const,summary:'通过',coverage:'范围测试',evidence:[],nextSteps:[],responseDraft:'',environment:'已准备',tests:[{command:'scope-test',status:'passed' as const,output:'PASS',executionId:session+':1'}],blockers:[]};
+  return {artifact,result:fixtureAnalysis(issue,'validate'),engine:'fixture'};
+ });
+ await writeFile(join(f.store.repos()[0].localPath,'.git','info','exclude'),'node_modules/\n');
+ f.workbench.enqueue([f.store.issues()[0].id],'validate',{instructions:'Execute scoped validation only.'});
+ const waiting=await f.run();assert.equal(waiting.status,'waiting_environment');assert.ok(waiting.patchSha256);
+ await mkdir(join(waiting.worktree!,'node_modules'));await writeFile(join(waiting.worktree!,'node_modules','ready'),'prepared');
+ if(drift)await writeFile(join(waiting.worktree!,'value.txt'),'changed\n');
+ f.workbench.processing.environmentReady(waiting.repoId);f.workbench.resume(waiting.id);
+ const recovered=await f.run();assert.equal(recovered.worktree,waiting.worktree);
+ assert.equal(calls,drift?1:2);
+ if(drift){assert.equal(recovered.status,'failed');assert.match(recovered.error!,/版本或补丁已变化/);}
+ else {assert.equal(recovered.artifact?.stage==='validate' && recovered.artifact.tests[0].status,'passed');assert.equal(recovered.status,'completed');}
 });

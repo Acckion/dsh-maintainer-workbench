@@ -23,6 +23,7 @@ import {
   type JobKind,
   type Repo,
 } from "../core/types.ts";
+import { prReviewValidation } from '../core/pr-review-validation.ts';
 import { validationAcceptance } from "../core/validation-acceptance.ts";
 import { validationInstructions } from "../core/validation-context.ts";
 import { stageBlocker } from "../workflow/actions.ts";
@@ -243,8 +244,13 @@ export class TaskService extends ServiceBase {
             findings: source.findingDecisions,
           });
         }
+        const environmentSource=options.environmentSourceJobId ? this.job(options.environmentSourceJobId) : undefined;
+        if(environmentSource && (kind!=='validate' || environmentSource.kind!=='validate' || environmentSource.status!=='waiting_environment' ||
+          environmentSource.issueId!==issue.id || environmentSource.revision!==rev || environmentSource.caseId!==this.store.processing.current(issue.id)?.id ||
+          !environmentSource.worktree || !environmentSource.patchSha256)) throw new Error("环境恢复来源已失效，请重新验证");
         const id = randomUUID();
         const job: Job = {
+          ...(environmentSource ? {worktree:environmentSource.worktree,branch:environmentSource.branch,environmentRecovery:{sourceJobId:environmentSource.id,baseSha:environmentSource.baseSha,patchHash:environmentSource.patchSha256!}} : {}),
           workflowRunId: options.workflowRunId,
           goal: options.goal,
           goalId: options.goal ? (options.goalId ?? id) : undefined,
@@ -361,6 +367,9 @@ export class TaskService extends ServiceBase {
         finishedAt: undefined,
         error: undefined,
         waitingReason: undefined,
+        formatSourceJobId: job.formatSourceJobId ?? job.id,
+        formatSessionId: undefined,
+        formatDiagnostics: undefined,
         sessionId: job.sessionId ?? job.toolDiagnostics?.sessionId,
         publications: undefined,
       };
@@ -380,6 +389,7 @@ export class TaskService extends ServiceBase {
       goal: job.goal,
       goalId: job.goalId,
       workflowRunId: job.workflowRunId,
+      forceNew: true,
     });
   }
   resume(id: string): { created: string[]; reused: string[] } {
@@ -395,6 +405,7 @@ export class TaskService extends ServiceBase {
         throw new Error("请先准备仓库环境");
       return this.hooks.enqueue([job.issueId], job.kind, {
         sourceJobId: job.sourceJobId,
+        environmentSourceJobId: job.kind==='validate' && job.worktree && job.patchSha256 ? job.id : undefined,
         forceNew: true,
         instructions: job.instructions,
         goal: job.goal,
@@ -458,6 +469,8 @@ export class TaskService extends ServiceBase {
       }
       const item = this.store.get<Issue>("issues", job.issueId)!;
       if (!stepResolved(item.processing, "review")) await assertReviewEvidence(job);
+      if(job.kind==='review' && !prReviewValidation(job,this.store.jobs(),this.store.processing.current(job.issueId)).passed)
+        throw new Error("源码审查已保存，但当前 PR 的必要验证尚未通过；请完成工作流中的验证后最终接受。");
       const validation = validationAcceptance(
         { ...job, issueSnapshot: { ...job.issueSnapshot, processing: item.processing } },
         this.store.jobs(),
@@ -504,6 +517,8 @@ export class TaskService extends ServiceBase {
     }
     if (JSON.stringify(this.job(id)) !== original)
       throw new Error("审核期间产物状态或发现处置已变化，请重新查看后确认");
+    if(decision==='approve' && job.kind==='review' && !prReviewValidation(job,this.store.jobs(),this.store.processing.current(job.issueId)).passed)
+      throw new Error("审核期间必要验证状态已变化，请重新核对验证记录。");
     this.saveJob({
       ...job,
       status: decision === "approve" ? "approved" : "rejected",

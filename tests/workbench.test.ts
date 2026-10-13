@@ -35,6 +35,60 @@ test('cancelled work never overwrites cancellation with completed; retry keeps o
   assert.equal(store.jobs()[1].attempt, 2); await workbench.close();
 });
 
+for (const status of ['failed', 'cancelled', 'rejected'] as const) test(`PR ${status} retry creates a fresh attempt instead of reusing an older review`, async () => {
+  const { workbench, store, issue } = fixture(false);
+  store.put('issues', { ...issue, type: 'pr', headSha: 'b'.repeat(40), prBaseSha: 'a'.repeat(40) });
+  const firstId = workbench.enqueue([issue.id], 'review', { instructions: '独立审查当前 PR 的分块边界；仅检查代码，不修改或发布' }).created[0];
+  const first = store.get<Job>('jobs', firstId)!;
+  store.put('jobs', { ...first, status: 'awaiting_review' });
+  const failedId = workbench.enqueue([issue.id], 'review', { forceNew: true, instructions: '独立审查当前 PR 的分块边界；仅检查代码，不修改或发布' }).created[0];
+  store.put('jobs', { ...store.get<Job>('jobs', failedId)!, status });
+  const retry = workbench.retry(failedId);
+  assert.equal(retry.created.length, 1); assert.deepEqual(retry.reused, []);
+  const fresh = store.get<Job>('jobs', retry.created[0])!;
+  assert.equal(fresh.status, 'queued'); assert.equal(fresh.kind, 'review'); assert.equal(fresh.attempt, 3);
+  assert.equal(fresh.instructions, first.instructions);
+  assert.equal(fresh.caseId, first.caseId); assert.equal(fresh.revision, first.revision);
+  assert.equal(store.get<Job>('jobs', firstId)?.status, 'awaiting_review');
+  assert.equal(store.get<Job>('jobs', failedId)?.status, status);
+  assert.deepEqual(workbench.retry(failedId), { created: [], reused: [fresh.id] });
+  store.put('jobs', { ...fresh, status: 'running' });
+  assert.deepEqual(workbench.retry(failedId), { created: [], reused: [fresh.id] });
+  const current = store.issues().find(i => i.id === issue.id)!;
+  store.put('issues', { ...current, headSha: 'c'.repeat(40) });
+  assert.throws(() => workbench.retry(failedId), /输入版本已变化/);
+  assert.equal(store.jobs().length, 3);
+  await workbench.close();
+});
+
+test('worker persists a new finding without fabricated history links or passed evidence', async () => {
+  const store = new Store(':memory:'); seedFixture(store);
+  const issue = store.issues()[0]; store.put('issues', { ...issue, type: 'pr', headSha: 'a'.repeat(40), prBaseSha: 'a'.repeat(40) });
+  const common = { schemaVersion: 1 as const, stage: 'review' as const, summary: 'New source defect', coverage: 'Not yet verified', evidence: [], nextSteps: [], responseDraft: '', blockers: [], verdict: 'incomplete' as const };
+  const artifact = { ...common, findings: [{ id: 'new-defect', title: 'Drops an element', severity: 'P1' as const, path: 'chunk.ts', line: 8, trigger: 'size=1', evidence: 'Source bound is incorrect', recommendation: 'Restore bound' }],
+    followups: [{ sourceJobId: 'empty-old-review', findingId: 'new-defect', status: 'still_present' as const, evidence: 'Misattached current discovery' }] };
+  const github = new GitHub('', async () => { throw new Error('No external requests'); });
+  github.pullRequest = async () => ({ headSha: 'a'.repeat(40), baseSha: 'a'.repeat(40), headRef: 'test', baseRef: 'main', headRepo: issue.repoId, draft: false, merged: false, mergeable: null, checks: [], reviews: [], warnings: [] });
+  const workbench = new Workbench(store, '/tmp/maintainer-new-findings', async ({ issue }) => ({ result: fixtureAnalysis(issue, 'review'), artifact, engine: 'unit-test fixture' }), github, false);
+  workbench.prepareRepository = async () => {}; // Isolated runner uses no source checkout; evidence must stay incomplete.
+  const seedId = workbench.enqueue([issue.id], 'review', { instructions: '独立审查当前 PR 的分块边界；仅检查代码，不修改或发布' }).created[0];
+  const seed = store.get<Job>('jobs', seedId)!;
+  store.put('jobs', { ...seed, id: 'empty-old-review', status: 'completed', artifact: { ...common, findings: [] }, result: fixtureAnalysis(issue, 'review') });
+  store.put('jobs', { ...seed, status: 'cancelled' });
+  const id = workbench.enqueue([issue.id], 'review', { forceNew: true, instructions: '独立审查当前 PR 的分块边界；仅检查代码，不修改或发布' }).created[0];
+  workbench.pump(); await workbench.drain();
+  const saved = store.get<Job>('jobs', id)!;
+  assert.equal(saved.status, 'awaiting_review'); assert.equal(saved.error, undefined);
+  assert.equal(saved.artifact?.stage, 'review');
+  if (saved.artifact?.stage !== 'review') throw new Error('Missing review');
+  assert.equal(saved.artifact.findings[0].id, 'new-defect');
+  assert.deepEqual(saved.artifact.followups, []); assert.deepEqual(saved.findingFollowups, []);
+  assert.equal(saved.artifact.verdict, 'incomplete');
+  assert.ok(store.audits().some(a => a.jobId === id && a.action === 'review.new_finding_unlinked'));
+  assert.deepEqual(artifact.followups.map(f => f.sourceJobId), ['empty-old-review']);
+  await workbench.close();
+});
+
 test('terminal and format-retry jobs clear stale approval waits while preserving inspectable evidence', async () => {
   const store = new Store(':memory:'); seedFixture(store); const issue = store.issues()[0];
   let stop!: () => void;

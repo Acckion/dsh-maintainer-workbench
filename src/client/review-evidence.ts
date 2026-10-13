@@ -1,4 +1,6 @@
 import { reportNeedsRecovery } from "../core/report-state.ts";
+import {prReviewValidation,reviewValidationNeeds,sameReviewedTarget} from '../core/pr-review-validation.ts';
+import type { ProcessingCase } from '../domain/processing.ts';
 import type { Analysis, Audit, Issue, Job } from "../core/types.ts";
 import {
   validationAcceptance,
@@ -34,16 +36,21 @@ const statusLabels: Record<Job["status"], string> = {
 export function acceptanceEligibility(
   job: Job,
   jobs: Job[],
+  state?: ProcessingCase,
 ): ValidationAcceptance {
   if (reportNeedsRecovery(job)) return { allowed: false, reason: '报告尚未整理完成' };
+  if(job.kind==='review') {
+    const validation=prReviewValidation(job,jobs,state);
+    if(!validation.passed) return {allowed:false,latest:validation.latest,reason:'源码审查已完成，但必要验证尚未通过；请在当前工作流补齐验证后最终接受。'};
+  }
   return validationAcceptance(job, jobs);
 }
-export function reviewQueue(jobs: Job[]): Job[] {
+export function reviewQueue(jobs: Job[], issues: Issue[] = []): Job[] {
   return jobs.filter(
     (job) =>
       job.status === "awaiting_review" &&
       job.artifactState !== "stale" &&
-      acceptanceEligibility(job, jobs).allowed,
+      acceptanceEligibility(job, jobs, issues.find(i=>i.id===job.issueId)?.processing).allowed,
   );
 }
 export function taskStatus(job: Job): { label: string; tone: string } {
@@ -101,7 +108,7 @@ export interface ReviewEvidence {
 }
 
 /** A display-only projection of explicit job links, never publication authorization. */
-export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
+export function reviewEvidence(selected: Job, jobs: Job[], state?: ProcessingCase): ReviewEvidence {
   const evidence: ReviewEvidence = {
     validations: [],
     reviewSourceValidationIds: [],
@@ -120,6 +127,16 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
     return evidence;
   }
   const byId = new Map(jobs.map((job) => [job.id, job]));
+  const prReview=selected.kind==='review' ? selected : selected.kind==='validate' && selected.sourceJobId ? byId.get(selected.sourceJobId) : undefined;
+  if(prReview && reviewValidationNeeds(prReview).length && (prReview.id===selected.id || sameReviewedTarget(prReview,selected))) {
+    evidence.review=prReview;
+    evidence.validations=jobs.filter(j=>j.kind==='validate' && j.sourceJobId===prReview.id && sameReviewedTarget(prReview,j) && j.artifactState!=='stale' && terminal.has(j.status))
+      .sort((a,b)=>a.createdAt.localeCompare(b.createdAt));
+    evidence.reviewSourceValidationIds=evidence.validations.map(j=>j.id);
+    const status=prReviewValidation(prReview,jobs,state);
+    if(!status.passed) evidence.warnings.push('当前审查的必要验证尚未通过，不能仅凭无缺陷结论最终接受。');
+  }
+
   const isImplementation = (job: Job) =>
     job.kind === "fix" || job.kind === "docs";
   const includeLinkedValidations = (implementation: Job) => {
@@ -177,11 +194,11 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
       );
   };
   if (isImplementation(selected)) evidence.implementation = selected;
-  if (selected.kind === "validate") evidence.validations = [selected];
+  if (selected.kind === "validate" && !evidence.validations.some(j=>j.id===selected.id)) evidence.validations.push(selected);
   if (selected.kind === "review") evidence.review = selected;
   const anchor = selected.deliveryReviewId
     ? byId.get(selected.deliveryReviewId)
-    : selected;
+    : evidence.review ?? selected;
   if (!anchor) {
     evidence.warnings.push("关联审查记录不可用，请重新核对来源");
     return evidence;
@@ -231,7 +248,7 @@ export function reviewEvidence(selected: Job, jobs: Job[]): ReviewEvidence {
     }
     evidence.implementation = cursor;
     evidence.review = anchor.kind === "review" ? anchor : undefined;
-    evidence.validations = chain.filter((job) => job.kind === "validate");
+    evidence.validations = [...new Map([...evidence.validations, ...chain.filter(job=>job.kind==="validate")].map(job=>[job.id,job])).values()];
     evidence.reviewSourceValidationIds = evidence.review
       ? evidence.validations.map((job) => job.id)
       : [];

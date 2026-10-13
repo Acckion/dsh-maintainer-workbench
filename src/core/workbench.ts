@@ -88,6 +88,7 @@ export class Workbench {
     this.reviews = new ReviewService(deps);
     this.publication = new PublicationService(deps);
     this.publication.recoverFollowups();
+    this.orchestration.reconcilePreflightPlans();
     this.worker = new StageWorker(deps, {
       prepareRepository: (id) => this.prepareRepository(id),
       understand: (repo, signal) => this.repositories.understand(repo, signal),

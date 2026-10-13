@@ -1,3 +1,4 @@
+import {requiredCIGates} from './preflight-policy.ts';
 import type { Issue, Repo } from './types.ts';
 
 /** Bounded metadata only; never send stored analysis, workflows or whole GitHub users. */
@@ -28,7 +29,7 @@ export function preflightInput(repo: Repo, issue: Issue, pr: import('./types.ts'
     }) : [];
   }
   return { ...triageInput(repo,issue,[],''), pr:pr ? {headSha:pr.headSha,baseSha:pr.baseSha,draft:pr.draft,merged:pr.merged,mergeable:pr.mergeable,
-    available:{checks:pr.checks!==null,reviews:pr.reviews!==null,statuses:pr.commitStatus!=null},checks:records(pr.checks,'check_runs'),reviews:records(pr.reviews),statuses:records(pr.commitStatus,'statuses'),warnings:pr.warnings,
+    available:{checks:pr.checks!==null,reviews:pr.reviews!==null,statuses:pr.commitStatus!=null},checks:records(pr.checks,'check_runs'),reviews:records(pr.reviews),statuses:records(pr.commitStatus,'statuses'),warnings:pr.warnings,requiredCIGates:requiredCIGates(pr),requiredCICoverage:{protection:pr.branchProtection!=null,rules:pr.branchRules!=null},
     coverage:'Metadata only; no diff, source or inline review threads. At most 30 records per status group; unavailable groups are unknown.'} : undefined };
 }
-export const preflightBudgetPrompt='Quick PR metadata preflight only. No tools or source review. Summarize intent, draft state, visible checks and review decisions; choose review or a concrete blocker. Missing CI permissions mean unknown, not a failed check. Missing diff inspection is the scope, not a blocker. Do not grant merge approval. At most 3 risks, 3 evidence items and 3 next steps. Keep replies brief.';
+export const preflightBudgetPrompt='Quick PR metadata preflight only. No tools or source review. Summarize intent, draft state, visible checks and review decisions; choose review for a non-draft PR with usable head/base metadata unless a concrete local-review blocker exists. Readiness is independent of plan authorization: readiness=review and an unconfirmed planDraft coexist. Plan confirmation never changes readiness to draft. CI unavailable, empty, pending or failed checks are coverage limitations for local review, not review blockers. Only host-confirmed required CI gates can block operations that depend on them at delivery; never infer required gates from check existence, missing permissions or missing records. Do not block exporting patches, updating a PR or posting review findings for CI. Missing diff inspection is the scope, not a blocker. Do not grant merge approval. At most 3 risks, 3 evidence items and 3 next steps. Keep replies brief.';

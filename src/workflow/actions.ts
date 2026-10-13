@@ -6,6 +6,7 @@ import {
   stepDisposition,
 } from "./manual.ts";
 import { planBlocker } from "../core/issue-flow.ts";
+import {prReviewValidation} from '../core/pr-review-validation.ts';
 import type { Issue, Job, JobKind } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { validationState } from "../core/workflow-state.ts";
@@ -160,7 +161,7 @@ export function availableActions(
         : artifact.verdict === "incomplete" ||
             Object.values(job.findingDecisions ?? {}).includes("needs_evidence")
           ? "investigate"
-          : undefined;
+          : !prReviewValidation(job,history,issue.processing).passed ? "validate" : undefined;
   } else if (job.kind === "ci") primary = "investigate";
   else
     primary =
