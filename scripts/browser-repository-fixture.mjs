@@ -53,6 +53,25 @@ try {
    if(width<=760)await page.getByRole('button',{name:'返回仓库文件列表',exact:true}).click();
    await expect(page.getByLabel('仓库检查来源',{exact:true})).toHaveValue(repo.id+'#42');assert.equal(calls,0,'PR handoff only selects context; it must not call the model');
    await page.screenshot({path:join(dir,`repository-pr-${width}.png`),fullPage:true});
+   const category=page.getByLabel('仓库维护分类',{exact:true}),source=page.getByLabel('仓库检查来源',{exact:true});
+   for(const value of ['overview','docs','agents','ci'])assert.equal(await category.locator(`option[value="${value}"]`).isEnabled(),true,'Every category stays selectable from PR context');
+   await page.getByRole('complementary',{name:'仓库文件与问题'}).getByRole('button',{name:/^文档 /}).click();
+   await list();await expect(source).toHaveValue(repo.id+'#42');
+   await category.selectOption('agents');await expect(page.getByRole('button',{name:'更新 Agent 指引',exact:true})).toBeVisible();
+   await expect(page.getByText('已切换到当前仓库；PR 来源目前用于文档影响检查与同步。',{exact:true})).toBeVisible();
+   await list();await expect(source).toHaveValue('');
+   await category.selectOption('ci');await expect(page.getByRole('button',{name:'配置或修复 CI',exact:true})).toBeVisible();
+   await list();await category.selectOption('overview');await expect(page.getByRole('heading',{name:'仓库识别',exact:true})).toBeVisible();
+   await page.getByRole('button',{name:/^Tasks/}).click();await page.getByRole('button',{name:'Repository',exact:true}).click();
+   await expect(category).toHaveValue('overview');await expect(source).toHaveValue('');
+   await source.selectOption(repo.id+'#42');
+   await list();await expect(category).toHaveValue('docs');
+   await page.reload();await page.getByRole('button',{name:'Repository',exact:true}).click();
+   await expect(source).toHaveValue(repo.id+'#42');await category.selectOption('ci');
+   await expect(page.getByRole('button',{name:'配置或修复 CI',exact:true})).toBeVisible();
+   await page.screenshot({path:join(dir,`repository-category-switch-${width}.png`),fullPage:true});
+   assert.equal(calls,0,'Switching categories and restoring PR context never calls a model');
+
    console.log(JSON.stringify({passed:true,width,modelCalls:calls,screenshots:dir}));
   }catch(e){await page.screenshot({path:join(dir,'failure.png'),fullPage:true});console.error('Evidence:',dir);throw e;}
   finally{await page.close();await new Promise(resolve=>server.close(resolve));await w.close();}

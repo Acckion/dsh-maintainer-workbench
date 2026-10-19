@@ -742,6 +742,7 @@ export function App({
               {page === "organize" && (
                 <RepositoryOrganize
                   requestedPR={repositoryRequest}
+                  onPRRequestHandled={()=>setRepositoryRequest(undefined)}
                   state={state}
                   repoId={repoId}
                   busy={!!busy}
