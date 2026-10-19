@@ -1,13 +1,29 @@
-import React, {useEffect, useRef, useState} from 'react';
+import React, {useEffect, useLayoutEffect, useRef, useState} from 'react';
 import {Filter, X} from 'lucide-react';
 import type {Issue} from '../core/types.ts';
 import {categoryOptions, defaultInboxFacets, facetCount, itemLabels, type InboxFacets} from './issue-filters.ts';
 export function InboxFilter({value,onChange,facets=defaultInboxFacets,onFacetsChange,issues=[]}:{value:string;onChange:(value:string)=>void;facets?:InboxFacets;onFacetsChange?:(value:InboxFacets)=>void;issues?:Issue[]}) {
   const [open,setOpen]=useState(false),[labelSearch,setLabelSearch]=useState('');
   const root=useRef<HTMLDivElement>(null), trigger=useRef<HTMLButtonElement>(null);
+  const popup=useRef<HTMLDivElement>(null);
   const update=(change:Partial<InboxFacets>)=>{onChange('all');onFacetsChange?.({...facets,...change});};
   const count=facetCount(facets)+Number(value!=='all');
   const labels=[...new Map([...issues.flatMap(itemLabels).map(label=>label.name),...facets.labels].map(name=>[name.toLowerCase(),name])).values()].sort((a,b)=>a.localeCompare(b));
+  useLayoutEffect(()=>{
+    const element=popup.current;
+    if(!open || !element)return;
+    const place=()=>{
+      const rect=trigger.current!.getBoundingClientRect();
+      const width=Math.min(310,window.innerWidth-32);
+      element.style.left=`${Math.max(16,Math.min(rect.right-width,window.innerWidth-width-16))}px`;
+      element.style.top=`${rect.bottom+6}px`;
+      element.style.maxHeight=`${Math.max(150,Math.min(window.innerHeight*.7,window.innerHeight-rect.bottom-22))}px`;
+    };
+    // React 18 types do not expose popover; the native top layer avoids sidebar clipping.
+    place();element.setAttribute('popover','manual');element.showPopover?.();
+    window.addEventListener('resize',place);
+    return ()=>window.removeEventListener('resize',place);
+  },[open]);
   useEffect(()=>{
     if(!open)return;
     root.current?.querySelector<HTMLSelectElement>('select')?.focus();
@@ -18,7 +34,7 @@ export function InboxFilter({value,onChange,facets=defaultInboxFacets,onFacetsCh
   },[open]);
   return <div ref={root} className="mw-inbox-filter">
     <button ref={trigger} className={`mw-icon-button mw-filter-toggle ${count?'active':''}`} aria-label="展开筛选" aria-expanded={open} aria-haspopup="dialog" title={count?`${count} 项筛选条件`:'筛选类型、标签、优先级'} onClick={()=>setOpen(v=>!v)}><Filter size={16}/>{count>0&&<span className="mw-filter-count">{count}</span>}</button>
-    {open&&<div role="dialog" aria-label="筛选问题" className="mw-filter-popover mw-facet-popover"><header><strong>筛选与排序</strong><button className="mw-icon-button" aria-label="关闭筛选" onClick={()=>{setOpen(false);trigger.current?.focus();}}><X size={15}/></button></header>
+    {open&&<div ref={popup} role="dialog" aria-label="筛选问题" className="mw-filter-popover mw-facet-popover"><header><strong>筛选与排序</strong><button className="mw-icon-button" aria-label="关闭筛选" onClick={()=>{setOpen(false);trigger.current?.focus();}}><X size={15}/></button></header>
       <label>开关状态<select aria-label="筛选开关状态" value={value==='closed'?'closed':facets.state} onChange={e=>update({state:e.target.value as InboxFacets['state']})}><option value="open">开放中</option><option value="closed">已关闭 / 已合并</option><option value="all">全部状态</option></select></label>
       <label>类型<select aria-label="筛选类型" value={facets.category} onChange={e=>update({category:e.target.value})}><option value="all">全部类型</option>{categoryOptions.map(([key,name])=><option key={key} value={key}>{name}</option>)}<option value="unclassified">尚未分类</option></select></label>
       <label>优先级<select aria-label="筛选优先级" value={facets.priority} onChange={e=>update({priority:e.target.value})}><option value="all">全部优先级</option>{['P0','P1','P2','P3'].map(p=><option key={p} value={p}>{p}</option>)}<option value="unset">尚未评估</option></select></label>

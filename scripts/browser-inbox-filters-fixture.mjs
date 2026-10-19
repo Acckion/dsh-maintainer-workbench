@@ -19,11 +19,12 @@ const server=createServer(async(req,res)=>{try{
  }catch{res.statusCode=500;res.end();}});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 let browser;
-try { browser=await chromium.launch({headless:true,executablePath:process.env.PLAYWRIGHT_CHROMIUM_PATH}); } catch(error) { await new Promise(resolve=>server.close(resolve)); throw error; }
+try { browser=await chromium.launch({headless:true,args:['--disable-gpu'],executablePath:process.env.PLAYWRIGHT_CHROMIUM_PATH}); } catch(error) { await new Promise(resolve=>server.close(resolve)); throw error; }
 const dir='/tmp/maintainer-inbox-filters';await mkdir(dir,{recursive:true});
+let activePage;
 try{
  for(const width of [1280,480]){
-  const page=await browser.newPage({viewport:{width,height:900}});page.setDefaultTimeout(10000);
+  const page=activePage=await browser.newPage({viewport:{width,height:900}});page.setDefaultTimeout(10000);
   await page.goto(`http://127.0.0.1:${server.address().port}/`);const rows=page.locator('.mw-issue-row');await expect(rows).toHaveCount(3);
   await page.getByRole('button',{name:'展开筛选',exact:true}).click();
   await page.getByLabel('筛选类型',{exact:true}).selectOption('bug');await page.getByLabel('筛选优先级',{exact:true}).selectOption('P1');
@@ -33,7 +34,7 @@ try{
   await page.getByRole('button',{name:'清除全部筛选',exact:true}).click();await expect(rows).toHaveCount(3);
   await page.getByLabel('筛选优先级',{exact:true}).selectOption('unset');await expect(rows).toHaveCount(1);await expect(rows).toContainText('New report');
   await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'展开筛选'})).toBeFocused();await page.getByRole('button',{name:'重置',exact:true}).click();
-  await page.getByRole('button',{name:'Pull Requests',exact:true}).click();await expect(rows).toHaveCount(3);
+  await page.getByRole('button',{name:/^Pull Requests/}).click();await expect(rows).toHaveCount(3);
   await page.getByRole('button',{name:'展开筛选',exact:true}).click();await page.getByLabel('筛选类型',{exact:true}).selectOption('docs');await expect(rows).toHaveCount(1);
   await expect(rows).toContainText('Document export');await expect(rows.locator('[title="本地建议标签，尚未发布到 GitHub"]')).toContainText('guide');
   await page.getByRole('button',{name:'清除全部筛选',exact:true}).click();await page.getByLabel('列表排序',{exact:true}).selectOption('priority');await expect(rows.first()).toContainText('Fix sync');
@@ -41,4 +42,4 @@ try{
   await page.screenshot({path:`${dir}/stale-pr-${width}.png`,fullPage:true});await page.close();
  }
  assert.equal(mutations,0,'filtering must not enqueue tasks or publish labels');console.log(JSON.stringify({passed:true,widths:[1280,480],modelCalls:0,remoteWrites:0,screenshots:dir}));
-}finally{await browser.close();await new Promise(resolve=>server.close(resolve));}
+}catch(error){if(activePage&&!activePage.isClosed()){await activePage.screenshot({path:`${dir}/failure.png`,fullPage:true});console.log(await activePage.getByRole('button',{name:'展开筛选',exact:true}).evaluate(el=>({rect:el.getBoundingClientRect().toJSON(),display:getComputedStyle(el).display,visibility:getComputedStyle(el).visibility,parents:[el.parentElement,el.parentElement.parentElement,el.parentElement.parentElement.parentElement].map(p=>({class:p.className,display:getComputedStyle(p).display,rect:p.getBoundingClientRect().toJSON()}))})));}throw error;}finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

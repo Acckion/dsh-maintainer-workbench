@@ -77,7 +77,7 @@ export class ProcessingService {
         {
           type: "environment.observed",
           ready: true,
-          reason: "仓库环境已准备，可显式继续原任务",
+          reason: "仓库路径已就绪；继续任务时仍需检查运行时和依赖",
         },
         "system",
         `environment-ready:${issue.processing!.version}`,

@@ -1,6 +1,7 @@
 import { classifyArtifact, classificationRevision } from '../core/classification.ts';
 import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
+import {normalizePreflight} from '../core/preflight-policy.ts';
 import {effectiveOutputTokens} from '../core/output-budget.ts';
 import { withManualContext } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
@@ -20,7 +21,7 @@ import { parseReport } from "../core/report-finalizer.ts";
 import { ZodError } from "zod";
 import { saveExecutionLog } from "../core/execution-evidence.ts";
 import { reconcileTestExecutions } from "../core/execution-links.ts";
-import { reviewFollowups } from "../core/finding-followup.ts";
+import { reconcileReviewFollowups } from "../core/finding-followup.ts";
 import {
   collectPatch,
   fetchPullRequestRevision,
@@ -44,6 +45,8 @@ import {
 } from "../core/types.ts";
 import { stagePolicies } from "../workflow/stages.ts";
 import { EnvironmentUnavailable } from "./environment-error.ts";
+import { uncoveredReviewChecks } from '../core/pr-review-validation.ts';
+import { validationEnvironment } from '../core/validation-environment.ts';
 const patchHash = (patch: string): string =>
   createHash("sha256").update(patch).digest("hex");
 const readOnlyCode = (kind: JobKind): boolean =>
@@ -101,8 +104,13 @@ export class StageWorker extends ServiceBase {
         this.saveJob({ ...this.job(job.id), waitingReason });
       }
       if (sessionId) {
-        job.sessionId = sessionId;
-        this.saveJob({ ...this.job(job.id), sessionId });
+        if (job.formatOnly) {
+          job.formatSessionId = sessionId;
+          this.saveJob({ ...this.job(job.id), formatSessionId: sessionId });
+        } else {
+          job.sessionId = sessionId;
+          this.saveJob({ ...this.job(job.id), sessionId });
+        }
       }
     };
     let inputPatchHash: string | undefined;
@@ -234,7 +242,7 @@ export class StageWorker extends ServiceBase {
         repo.profile = await this.understand(repo, controller.signal);
       if (
         this.nativeRunner &&
-        !job.formatOnly &&
+        !job.formatOnly && !job.environmentRecovery &&
         repo.localPath &&
         !lightweight(job.kind) &&
         !directAudit
@@ -253,7 +261,7 @@ export class StageWorker extends ServiceBase {
         job = { ...job, analysisPath };
         this.saveJob(job);
       }
-      if (!job.formatOnly && job.sourceJobId && job.worktree) {
+      if (!job.formatOnly && !job.environmentRecovery && job.sourceJobId && job.worktree) {
         const source = this.job(job.sourceJobId);
         if (
           source.revision === job.revision &&
@@ -278,6 +286,14 @@ export class StageWorker extends ServiceBase {
         readOnlyCode(job.kind) ||
         (job.issueSnapshot.organizeMode === "audit" &&
           job.kind === "investigate");
+      if(job.environmentRecovery) {
+        const checkpoint=job.environmentRecovery;
+        if(!job.worktree || checkpoint.baseSha!==job.baseSha || await git(job.worktree,['rev-parse','HEAD'])!==job.baseSha ||
+          patchHash(await collectPatch(job.worktree,job.baseSha))!==checkpoint.patchHash)
+          throw new Error("验证环境准备期间代码版本或补丁已变化，请重新派发；旧证据不可复用");
+        await this.deps.workspaces.acquireFormatRecovery(job);
+        progress("复用已准备依赖的原验证工作区，重新采集当前会话验证证据");
+      }
       if (job.formatOnly) {
         await this.deps.workspaces.acquireFormatRecovery(job);
         const checkpoint = job.formatRecovery;
@@ -386,11 +402,11 @@ export class StageWorker extends ServiceBase {
         job,
         settings,
         signal: controller.signal,
-        progress: job.formatOnly ? (message) => progress(message) : progress,
+        progress,
         recordDiagnostics: (diagnostics) => {
-          if (job.formatOnly) return; // The tool-free formatter is not the source of execution evidence.
-          job = { ...job, toolDiagnostics: diagnostics };
-          this.saveJob({ ...this.job(job.id), toolDiagnostics: diagnostics });
+          const field = job.formatOnly ? "formatDiagnostics" : "toolDiagnostics";
+          job = { ...job, [field]: diagnostics };
+          this.saveJob({ ...this.job(job.id), [field]: diagnostics });
         },
         recordExecution: (record, raw) => {
           saveExecutionLog(this.dataDir, job.id, record.id, raw);
@@ -428,6 +444,10 @@ export class StageWorker extends ServiceBase {
         throw new Error(
           "分析或验证修改了代码；差异保留在工作区，不能作为已完成产物交付",
         );
+      if (output.artifact?.stage === 'preflight') {
+        output.artifact = normalizePreflight(output.artifact, job.prContext);
+        output.result = asAnalysis(output.artifact);
+      }
       const requestedInput = output.inputRequest ?? output.artifact?.inputRequest;
       const caseState=this.store.processing.current(job.issueId);
       const inputRequest = unansweredInputRequest(planningInputRequest(output.artifact, requestedInput),
@@ -437,6 +457,7 @@ export class StageWorker extends ServiceBase {
           artifact: output.artifact ? { ...output.artifact, inputRequest } : undefined };
         this.store.audit("workflow.plan_confirmation_routed", "计划确认、系统待办和已有同版本答复不进入人工补充；未授予实施权限", job.id);
       }
+      output.artifact = validationEnvironment(output.artifact, { ...this.job(job.id), patchSha256: patchHash(patch) });
       const stageGaps=blockingGaps(output.artifact?.gaps ?? [],job.kind);
       const ownChecks=stageGaps.filter(g=>g.kind==='system_check');
       if(ownChecks.length && !stageGaps.some(g=>g.kind==="environment")){
@@ -446,7 +467,7 @@ export class StageWorker extends ServiceBase {
       const environmentGap=stageGaps.find(g=>g.kind==='environment');
       if(environmentGap){
         this.saveJob({...this.job(job.id),...output,patch,patchSha256:patchHash(patch)});
-        throw new EnvironmentUnavailable(environmentGap.summary+'；'+environmentGap.resolution);
+        throw new EnvironmentUnavailable(environmentGap.summary+'；'+environmentGap.resolution+(job.worktree ? `；验证工作区：${job.worktree}。仓库克隆不等于依赖与运行时准备，环境恢复后需重新执行检查。` : ''));
       }
       const externalGaps=stageGaps.filter(g=>g.kind==='external_wait');
       if(externalGaps.length){
@@ -522,8 +543,14 @@ export class StageWorker extends ServiceBase {
           ...job,
           patchSha256: patchHash(patch),
         });
-        if (output.artifact.stage === "validate")
+        if (output.artifact.stage === "validate") {
+          const source = job.sourceJobId ? this.store.get<Job>('jobs',job.sourceJobId) : undefined;
+          if (source?.kind === 'review') {
+            const missing = uncoveredReviewChecks(source,{...job,artifact:output.artifact,patchSha256:patchHash(patch)});
+            if (missing.length) output.artifact = {...output.artifact,blockers:[...new Set([...output.artifact.blockers,`未覆盖来源审查要求的必要检查：${missing.join('、')}；需逐项提供当前执行证据，不能用无关通过记录替代。`])]};
+          }
           output.result = asAnalysis(output.artifact);
+        }
         if ("tests" in output.artifact)
           output.result = { ...output.result, tests: output.artifact.tests };
       }
@@ -552,11 +579,17 @@ export class StageWorker extends ServiceBase {
           output.result = asAnalysis(output.artifact);
         }
       }
-      if (output.artifact?.stage === "review")
-        job.findingFollowups = reviewFollowups(
-          job,
-          output.artifact.followups ?? [],
-        );
+      if (output.artifact?.stage === "review") {
+        const reconciled = reconcileReviewFollowups(job, output.artifact);
+        job.findingFollowups = reconciled.followups;
+        output.artifact = { ...output.artifact, followups: reconciled.followups };
+        output.result = asAnalysis(output.artifact);
+        if (reconciled.ignored.length)
+          this.store.audit("review.new_finding_unlinked", JSON.stringify({
+            reason: "新发现不属于被引用的历史报告；仅移除错误关联，保留本次发现与原始输出，未认定任何历史问题已解决",
+            ignored: reconciled.ignored,
+          }), job.id);
+      }
       await this.deps.workspaces.freeze(job, patch);
       controller.signal.throwIfAborted();
       this.store.transaction(() => {

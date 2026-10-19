@@ -387,7 +387,7 @@ export function App({
   const repo = state?.repos.find((r) => r.id === repoId);
   const issues = state?.issues.filter((i) => i.repoId === repoId) ?? [];
   const jobs = state?.jobs.filter((j) => j.repoId === repoId) ?? [];
-  const pending = reviewQueue(jobs).filter((job) => {
+  const pending = reviewQueue(jobs, issues).filter((job) => {
     const run = issues.find((issue) => issue.id === job.issueId)?.orchestration
       ?.run;
     return !run || (run.status === "review" && run.currentJobId === job.id);
@@ -1907,6 +1907,7 @@ export function App({
     const job = selectedJob;
     return (
       <ReviewActions
+        issue={issues.find(i=>i.id===job?.issueId)}
         job={job}
         jobs={jobs}
         native={!!state?.capabilities.harness}

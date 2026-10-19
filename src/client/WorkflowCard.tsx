@@ -1,3 +1,4 @@
+import {prReviewValidation} from '../core/pr-review-validation.ts';
 import {GapSummary} from './GapSummary.tsx';
 import {readOnlyScope} from '../core/issue-flow.ts';
 import React, { useEffect, useState } from "react";
@@ -79,6 +80,7 @@ export function WorkflowCard({
   }, [draft?.inputKey, draft?.sourceJobId, run?.planVersion, issue.id, ready]);
   const active = history.find((j) => ["queued", "running"].includes(j.status));
   const current = history.find((j) => j.id === run?.currentJobId);
+  const pendingValidation=!!current && current.artifact?.stage==='review' && current.artifact.verdict==='no_findings' && !prReviewValidation(current,history,issue.processing).passed;
   const edit = (key: keyof IssuePlan, value: string) => {
     if (!plan || !draft) return;
     const next = {
@@ -468,7 +470,7 @@ export function WorkflowCard({
                 )
               }
             >
-              恢复可继续的步骤
+              {current?.status === "waiting_environment" && current.kind === "validate" ? "重新检查环境并继续验证" : "恢复可继续的步骤"}
             </button>
           )}
           {["paused", "blocked", "cancelled"].includes(run.status) &&
@@ -489,7 +491,11 @@ export function WorkflowCard({
                 确认修订并继续
               </button>
             )}
-          {run.status === "review" && (
+          {run.status === "review" && pendingValidation && <>
+            <p className="mw-callout amber">源码审查已完成，必要验证尚未补齐；完成后再最终审核。</p>
+            <button className="mw-button primary" disabled={busy || !!active || status === "stale"} onClick={()=>void act("/workflow/resume",{issueId:issue.id},"已继续当前计划的必要验证")}>继续工作流，补齐验证</button>
+          </>}
+          {run.status === "review" && !pendingValidation && (
             <>
               <button
                 className="mw-button"
