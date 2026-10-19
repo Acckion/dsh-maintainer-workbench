@@ -508,14 +508,17 @@ export function handler(
         }
         send(res, 200, { created, reused, errors });
         return;
+      } else if (path === "/repository/recheck") {
+        const p=z.object({repoId:z.string().min(1),ids:z.array(z.string().min(1)).min(1).max(60),force:z.boolean().default(false)}).parse(input);
+        send(res,200,await workbench.maintenance.recheck(p.repoId,p.ids,p.force));return;
       } else if (path === "/repository/plan") {
         send(res,200,await workbench.maintenance.plan(input)); return;
       } else if (path === "/repository/start") {
         const p=z.object({id:z.string().min(1),stamp:z.string().min(1)}).parse(input);
         send(res,200,await workbench.maintenance.startPlan(p.id,p.stamp,workbench)); return;
       } else if (path === "/repository/audit") {
-        const p=z.object({repoId:z.string().min(1),scope:z.array(z.string().min(1).max(500)).max(100).default([]),instructions:z.string().max(4000).default(''),force:z.boolean().default(false)}).parse(input);
-        send(res,200,await workbench.maintenance.audit(p.repoId,p.scope,p.instructions,p.force)); return;
+        const p=z.object({repoId:z.string().min(1),scope:z.array(z.string().min(1).max(500)).max(100).default([]),instructions:z.string().max(4000).default(''),force:z.boolean().default(false),prId:z.string().min(1).optional()}).parse(input);
+        send(res,200,await workbench.maintenance.audit(p.repoId,p.scope,p.instructions,p.force,p.prId)); return;
       } else if (path === "/repository/inventory") {
         const p=z.object({repoId:z.string().min(1)}).parse(input);
         send(res,200,await workbench.maintenance.inventory(p.repoId)); return;

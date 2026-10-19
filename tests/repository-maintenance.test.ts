@@ -107,3 +107,53 @@ for(const mode of ['docs','agents'] as const)test(`${mode} maintenance uses the 
   assert.equal(jobs[0].patch,jobs[1].patch);assert.equal(jobs[1].patch,jobs[2].patch);assert.notEqual(jobs[0].worktree,jobs[1].worktree);assert.notEqual(jobs[1].worktree,jobs[2].worktree);assert.equal(store.get<import('../src/core/types.ts').Issue>('issues',plan.issueId)?.orchestration?.run?.status,'review');
  }finally{await w.close();}
 });
+
+test('PR impact checks share the original item, isolate findings, reuse pinned inputs and reject stale plan previews',async()=>{
+ const {GitHub}=await import('../src/core/github.ts');
+ const dir=await mkdtemp(join(tmpdir(),'mw-maintenance-pr-'));await git(dir,['init','-b','main']);await git(dir,['remote','add','origin','https://github.com/fixture/queue.git']);await writeFile(join(dir,'README.md'),'# Repository\n');await writeFile(join(dir,'package.json'),'{}\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','initial']);const base=await git(dir,['rev-parse','HEAD']);
+ await writeFile(join(dir,'README.md'),'# Repository\n\nNew behavior.\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','topic']);const head=await git(dir,['rev-parse','HEAD']);
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],localPath:dir,headSha:base};store.put('repos',repo);const pr={...store.issues()[0],id:'fixture/queue#42',type:'pr' as const,number:42,headSha:head,prBaseSha:base};store.put('issues',pr);
+ const gh=new GitHub('fixture',async()=>{throw Error('Unexpected network');});let currentHead=head,currentBase=base;
+ gh.pullRequest=async()=>({headSha:currentHead,baseSha:currentBase,headRef:'topic',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:true,checks:[],reviews:[],warnings:[]});
+ const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-maintenance-pr-data-')),fixtureRunner,gh,false);
+ try{
+  const result=await w.maintenance.audit(repo.id,['README.md'],'',false,pr.id),job=store.get<Job>('jobs',result.created[0])!;
+  assert.equal(job.issueId,pr.id);assert.equal(store.maintenance.scanByJob(job.id)?.revision,head);assert.equal(store.maintenance.inventory(repo.id),undefined,'PR inventory must not replace the repository inventory');
+  const artifact={schemaVersion:1 as const,stage:'investigate' as const,summary:'Documentation impact',coverage:'README',evidence:[],nextSteps:[],responseDraft:'',facts:[],hypotheses:[],reproduction:'',rootCause:'',impact:'',proposedChanges:[],acceptanceCriteria:[],blockers:[],maintenance:{complete:true,checkedPaths:['README.md'],findings:[input]}};
+  store.put('jobs',{...job,status:'completed',prContext:await gh.pullRequest(repo,42),artifact});
+  const f=store.maintenance.snapshot(repo.id).findings[0];assert.equal(f.pr?.issueId,pr.id);assert.equal(f.stale,false);
+  assert.equal((await w.maintenance.audit(repo.id,['README.md'],'',false,pr.id)).reused[0],job.id);
+  const plan=await w.maintenance.plan({repoId:repo.id,prId:pr.id,mode:'docs',paths:['README.md'],findingIds:[f.id],goal:'Synchronize README',acceptanceCriteria:['Reflect actual public changes']});assert.equal(plan.issueId,pr.id);assert.equal(plan.revision,head);
+  currentBase='b'.repeat(40);await assert.rejects(w.maintenance.startPlan(plan.id,plan.stamp,w),/PR 版本已变化/);assert.equal(store.maintenance.snapshot(repo.id).findings[0].stale,true);
+  currentBase=base;const started=await w.maintenance.startPlan(plan.id,plan.stamp,w);const original=store.get<import('../src/core/types.ts').Issue>('issues',pr.id)!;assert.equal(original.body,pr.body);assert.equal(original.title,pr.title);assert.equal(original.origin,undefined);assert.equal(store.get<Job>('jobs',started.created[0])?.issueId,pr.id);
+  assert.equal((await w.maintenance.startPlan(plan.id,plan.stamp,w)).reused[0],started.created[0]);
+  assert.match(store.get<Job>('jobs',started.created[0])?.instructions??'',/actual base\/head diff/);
+ }finally{await w.close();}
+});
+
+test('a complete PR recheck cannot resolve baseline findings, and incomplete coverage is never accepted as complete',()=>{
+ const store=new Store(':memory:');store.maintenance.saveInventory(inventory('r',{'README.md':'1','docs/setup.md':'2','package.json':'3'}));scanned(store,'baseline');
+ const baseline=store.maintenance.snapshot('r').findings[0];
+ const pr={issueId:'r#1',number:1,headSha:'head',baseSha:'base'};
+ store.put('issues',{id:'r#1',repoId:'r',type:'pr',number:1,title:'PR',body:'',author:'test',labels:[],state:'open',comments:0,updatedAt:'now',url:'',headSha:pr.headSha,prBaseSha:pr.baseSha});
+ const scan={id:'pr',repoId:'r',jobId:'pr',pr,revision:'head',scope:['README.md'],fingerprint:'pr',inventoryFiles:{'README.md':'1'},createdAt:'2026-10-19T20:00:00Z',state:'pending' as const,checkedPaths:[],complete:false};store.maintenance.saveScan(scan);
+ const report={stage:'investigate',summary:'No PR issues',blockers:[],maintenance:{findings:[],checkedPaths:['README.md'],complete:true}};
+ store.put('jobs',{id:'pr',repoId:'r',issueId:'r#1',issueSnapshot:{},kind:'investigate',status:'completed',updatedAt:scan.createdAt,prContext:{headSha:'head',baseSha:'base'},artifact:report} as unknown as Job);
+ assert.equal(store.maintenance.snapshot('r').findings.find(f=>f.id===baseline.id)?.decision,'open');
+ store.maintenance.saveScan({...scan,id:'incomplete',jobId:'incomplete',pr:undefined,scope:[],inventoryFiles:store.maintenance.inventory('r')!.files});
+ store.put('jobs',{id:'incomplete',repoId:'r',issueId:'unused',issueSnapshot:{},kind:'investigate',status:'completed',updatedAt:scan.createdAt,artifact:report} as unknown as Job);
+ assert.equal(store.maintenance.scanByJob('incomplete')?.state,'partial');assert.equal(store.maintenance.snapshot('r').findings.find(f=>f.id===baseline.id)?.decision,'open');store.close();
+});
+
+test('retrying a failed audit retains scan tracking, while dependent source edits invalidate cached checks',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'mw-maintenance-retry-'));await git(dir,['init','-b','main']);await mkdir(join(dir,'src'));await writeFile(join(dir,'README.md'),'# Repository\n');await writeFile(join(dir,'src/api.ts'),'export const version=1;\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','initial']);
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],mode:'local' as const,localKind:'git' as const,localPath:dir,headSha:await git(dir,['rev-parse','HEAD'])};store.put('repos',repo);const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-maintenance-retry-data-')),fixtureRunner,undefined,false);
+ try {
+  const id=(await w.maintenance.audit(repo.id,['README.md'])).created[0];const job=store.get<Job>('jobs',id)!;store.put('jobs',{...job,status:'failed',error:'Controlled interruption'});
+  const retry=w.retry(id).created[0];assert.ok(store.maintenance.scanByJob(retry));assert.equal(store.maintenance.scanByJob(retry)?.state,'pending');
+  store.put('jobs',{...store.get<Job>('jobs',retry)!,status:'completed',artifact:{schemaVersion:1,stage:'investigate',summary:'No drift',coverage:'README + API',evidence:[],nextSteps:[],responseDraft:'',facts:[],hypotheses:[],reproduction:'',rootCause:'',impact:'',proposedChanges:[],acceptanceCriteria:[],blockers:[],maintenance:{complete:true,checkedPaths:['README.md','src/api.ts'],findings:[]}}});
+  assert.equal((await w.maintenance.audit(repo.id,['README.md'])).reused[0],retry);
+  await writeFile(join(dir,'src/api.ts'),'export const version=2;\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','API change']);
+  assert.equal((await w.maintenance.audit(repo.id,['README.md'])).created.length,1,'source dependency change must invalidate even a no-findings report');
+ }finally{await w.close();}
+});

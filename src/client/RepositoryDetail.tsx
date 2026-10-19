@@ -158,6 +158,7 @@ export function RepositoryDetail({
   responseDraft,
   onPreviewReply,
   workflow = false,
+  openRepository,
 }: {
   issue: Issue;
   repository: string;
@@ -180,6 +181,7 @@ export function RepositoryDetail({
   responseDraft?: string;
   onPreviewReply?: () => void;
   workflow?: boolean;
+  openRepository?: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [tab, setTab] = useState<ReaderTab>(initialTab);
@@ -375,6 +377,7 @@ export function RepositoryDetail({
           )}
           {summary?.title ?? issue.title}
         </h2>
+        {issue.type === "pr" && openRepository && <div className="mw-repository-actions"><button className="mw-button" onClick={openRepository}>检查文档影响</button></div>}
         <div className="mw-reader-tabbar">
           <nav
             className="mw-reader-tabs mw-reader-ai-tabs"

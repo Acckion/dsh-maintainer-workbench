@@ -1,3 +1,4 @@
+import {organizeActions} from "../core/organize.ts";
 import {prReviewValidation, reviewValidationNeeds} from '../core/pr-review-validation.ts';
 import {blockingGaps, planGaps} from '../domain/gaps.ts';
 import {normalizePreflight} from '../core/preflight-policy.ts';
@@ -281,7 +282,10 @@ export class Orchestration {
       );
       return { created: [], reused: [] };
     }
-    const instructions = `执行已确认计划，不扩大范围。目标：${run.plan.goal}\n范围：${run.plan.scope}\n验收：${run.plan.acceptanceCriteria.join("\n")}\n${kind === "validate" && run.plan.category === "docs" ? "仅验证当前文档补丁，执行宿主指定的文档检查，不运行未要求的全仓库审计。" : ""}\n${feedback}`;
+    const maintenancePlan=issue.maintenancePlanId?this.wb.store.maintenance.plan(issue.maintenancePlanId):undefined;
+    const maintenanceInstructions=maintenancePlan && run.plan.goal===maintenancePlan.goal && run.plan.scope==='仅修改：'+maintenancePlan.paths.join('、')
+      ? `\nRepository maintenance requirements: ${organizeActions[maintenancePlan.mode].instructions}\nAllowed paths: ${JSON.stringify(maintenancePlan.paths)}. ${maintenancePlan.allowStructural?'Structural changes within scope allowed.':'No file moves or deletions.'}\nMaintainer requirements: ${maintenancePlan.instructions}` : '';
+    const instructions = `执行已确认计划，不扩大范围。目标：${run.plan.goal}\n范围：${run.plan.scope}\n验收：${run.plan.acceptanceCriteria.join("\n")}\n${kind === "validate" && run.plan.category === "docs" ? "仅验证当前文档补丁，执行宿主指定的文档检查，不运行未要求的全仓库审计。" : ""}\n${feedback}${maintenanceInstructions}`;
     this.put(issue, {
       ...issue.orchestration,
       run: {

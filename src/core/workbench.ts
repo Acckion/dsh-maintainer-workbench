@@ -231,21 +231,21 @@ export class Workbench {
     this.orchestration.completed(this.store.get<Job>("jobs", id)!);
   }
   rerun(id: string) {
-    return this.tasks.rerun(id);
+    return this.maintenance.replacement(id,this.tasks.rerun(id));
   }
   retry(id: string) {
     const job = this.store.get<Job>("jobs", id);
     if (job) this.orchestration.assertRecovery(job);
     const result = this.tasks.retry(id);
     this.orchestration.replacement(id, result);
-    return result;
+    return this.maintenance.replacement(id,result);
   }
   resume(id: string) {
     const job = this.store.get<Job>("jobs", id);
     if (job) this.orchestration.assertRecovery(job);
     const result = this.tasks.resume(id);
     this.orchestration.replacement(id, result);
-    return result;
+    return this.maintenance.replacement(id,result);
   }
   async review(id: string, decision: "approve" | "reject", note: string) {
     const result = await this.tasks.review(id, decision, note);

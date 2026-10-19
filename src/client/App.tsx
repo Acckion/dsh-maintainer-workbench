@@ -23,7 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JobKind, Snapshot } from "../core/types.ts";
+import type { Issue, JobKind, Snapshot } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { AssistantActions } from "./AssistantActions.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
@@ -114,6 +114,8 @@ export function App({
   const [inboxFacets, setInboxFacets] = useState<InboxFacets>({...defaultInboxFacets});
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [repositoryRequest,setRepositoryRequest]=useState<{id:string;sequence:number}>();
+  const inspectPRDocuments=(issue:Issue)=>{setRepositoryRequest({id:issue.id,sequence:Date.now()});setDetailOpen(false);navigate('organize',issue.repoId,true);};
   const [readerRequest, setReaderRequest] = useState<{
     sequence: number;
     issueId: string;
@@ -739,6 +741,7 @@ export function App({
               )}
               {page === "organize" && (
                 <RepositoryOrganize
+                  requestedPR={repositoryRequest}
                   state={state}
                   repoId={repoId}
                   busy={!!busy}
@@ -1320,6 +1323,7 @@ export function App({
         <RepositoryDetail
           key={`${displayedIssue.id}:${displayedIssue.updatedAt}`}
           issue={displayedIssue}
+          openRepository={displayedIssue.type==='pr'?()=>inspectPRDocuments(displayedIssue):undefined}
           repository={
             state?.repos.find((r) => r.id === displayedIssue.repoId)
               ?.fullName ?? ""
@@ -1575,6 +1579,7 @@ export function App({
         }
         initialTab="overview"
         issue={displayedIssue}
+        openRepository={displayedIssue.type==='pr'?()=>inspectPRDocuments(displayedIssue):undefined}
         repository={
           state?.repos.find((r) => r.id === displayedIssue.repoId)?.fullName ??
           ""
