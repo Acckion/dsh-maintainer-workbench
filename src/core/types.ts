@@ -225,6 +225,7 @@ export interface Issue {
   plan?: IssuePlan;
   informationRequests?: InformationRequest[];
   origin?: "repository";
+  maintenancePlanId?: string;
   organizeMode?: import("./organize.ts").OrganizeMode;
   merged?: boolean;
   linkedPullRequests?: string[];

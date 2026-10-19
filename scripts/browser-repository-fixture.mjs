@@ -37,7 +37,16 @@ try {
    await page.reload();await page.getByRole('button',{name:'Repository',exact:true}).click();
    if(width<=760)await page.getByRole('navigation',{name:'仓库文件',exact:true}).getByRole('button',{name:/README.md/}).click();
    await expect(page.getByText('Old setup instructions.',{exact:true})).toBeVisible();
-   assert.equal(calls,0,'opening, browsing and reloading must not call a model');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   assert.equal(calls,0,'opening, browsing and reloading must not call a model');
+   await page.getByRole('button',{name:'准备文档修改',exact:true}).click();
+   await page.getByLabel('维护目标',{exact:true}).fill('补齐 README 使用说明');
+   await page.getByLabel('维护补充要求',{exact:true}).fill('保留原有说明');
+   await page.getByRole('region',{name:'仓库修改计划'}).getByRole('button',{name:'返回',exact:true}).click();
+   await page.getByRole('button',{name:'准备文档修改',exact:true}).click();await expect(page.getByLabel('维护补充要求',{exact:true})).toHaveValue('保留原有说明');
+   await page.getByRole('button',{name:'准备计划预览',exact:true}).click();await page.getByRole('button',{name:'确认范围并连续执行',exact:true}).waitFor();
+   await page.screenshot({path:join(dir,`repository-plan-${width}.png`),fullPage:true});
+   await page.getByRole('button',{name:'确认范围并连续执行',exact:true}).click();await page.getByRole('button',{name:'取消任务',exact:true}).click();
+   await expect(page.getByText('已取消',{exact:true})).toBeVisible();assert.equal(calls,0,'queuing and cancellation do not run a model in this manual fixture');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    console.log(JSON.stringify({passed:true,width,modelCalls:calls,screenshots:dir}));
   }catch(e){await page.screenshot({path:join(dir,'failure.png'),fullPage:true});console.error('Evidence:',dir);throw e;}
   finally{await page.close();await new Promise(resolve=>server.close(resolve));await w.close();}

@@ -1,13 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Job } from '../../core/types.ts';
 import { digest, findingFingerprint } from '../../core/maintenance.ts';
-import { maintenanceReportSchema, inScope, safeRepoPath, type MaintenanceFinding, type MaintenanceInventory, type MaintenanceScan, type MaintenanceSnapshot, type MaintenanceDecision } from '../../domain/maintenance.ts';
+import { maintenanceReportSchema, inScope, safeRepoPath, type MaintenanceFinding, type MaintenanceInventory, type MaintenanceScan, type MaintenanceSnapshot, type MaintenanceDecision, type MaintenancePlan } from '../../domain/maintenance.ts';
 /** Durable evidence and decisions. Execution state always comes from jobs. */
 export class MaintenanceRepository {
   constructor(private db: DatabaseSync) {
     db.exec(`CREATE TABLE IF NOT EXISTS maintenance_inventory (id TEXT PRIMARY KEY,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS maintenance_scans (id TEXT PRIMARY KEY,repoId TEXT NOT NULL,data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS maintenance_findings (id TEXT PRIMARY KEY,repoId TEXT NOT NULL,data TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS maintenance_plans (id TEXT PRIMARY KEY,repoId TEXT NOT NULL,data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS maintenance_scans_repo ON maintenance_scans(repoId);
       CREATE INDEX IF NOT EXISTS maintenance_findings_repo ON maintenance_findings(repoId);`);
   }
@@ -28,6 +29,8 @@ export class MaintenanceRepository {
     if(decision!=='open'&&!reason.trim())throw Error('暂缓或忽略需要说明原因');
     const at=new Date().toISOString();this.saveFinding({...finding,decision,reason,updatedAt:at,history:[...finding.history,{at,action:decision,reason}].slice(-100)});
   }
+  savePlan(value:MaintenancePlan) {this.db.prepare('INSERT INTO maintenance_plans(id,repoId,data) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING').run(value.id,value.repoId,JSON.stringify(value));}
+  plan(id:string):MaintenancePlan|undefined {const r=this.db.prepare('SELECT data FROM maintenance_plans WHERE id=?').get(id);return r?JSON.parse(String(r.data)):undefined;}
   observeJob(job:Job) {
     const scan=this.scanByJob(job.id);if(!scan || scan.state!=='pending')return;
     if(['failed','cancelled'].includes(job.status)){this.saveScan({...scan,state:job.status as 'failed'|'cancelled',summary:job.error,complete:false});return;}

@@ -75,10 +75,11 @@ export async function resolveDelivery(store: Store, repo: Repo, reviewId: string
     const live = await github.pullRequest(repo, issue.number);
     const permittedHead = live.headSha === review.prContext.headSha || (options.allowPublishedHead && implementation.publishedCommit && live.headSha === implementation.publishedCommit);
     if (live.merged || !permittedHead || ['baseSha', 'headRef', 'headRepo', 'baseRef'].some(key => Reflect.get(live, key) !== Reflect.get(review.prContext!, key))) throw new Error('PR head/base 或目标分支已变化');
-  } else {
-    const live = await github.request(`/repos/${repo.fullName}/commits/${encodeURIComponent(repo.defaultBranch)}`) as { sha?: string };
+  } else if (repo.mode === "github" || repo.githubName) {
+    const live = await github.request(`/repos/${repo.githubName ?? repo.fullName}/commits/${encodeURIComponent(repo.defaultBranch)}`) as { sha?: string };
     if (live.sha !== implementation.baseSha) throw new Error('远端代码基线已变化或无法核对，请同步后重新验证');
   }
+  if (repo.mode === 'local' && !repo.githubName && repo.localPath && await git(repo.localPath,['rev-parse','HEAD']) !== implementation.baseSha) throw new Error('本地仓库基线已变化，请重新验证');
   for (const job of chain) if (fingerprint(read(job.id)) !== originals.get(job.id)) throw new Error('核验期间产物状态已变化，请重试');
   const currentIssue = store.get<Issue>('issues', review.issueId);
   const currentRepo = store.get<Repo>('repos', review.repoId);

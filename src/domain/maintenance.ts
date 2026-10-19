@@ -42,3 +42,17 @@ export interface MaintenanceSnapshot {
 }
 export const safeRepoPath = (path: string) => !!path && !path.startsWith('/') && !path.includes('\\') && !path.split('/').some(s => s === '..' || s === '.' || !s) && !/[\x00-\x1f]/.test(path);
 export const inScope = (path: string, scope: string[]) => !scope.length || scope.some(p => path === p || path.startsWith(p + '/'));
+export const maintenancePlanInputSchema = z.object({
+  repoId:z.string().min(1), mode:z.enum(['docs','agents','ci']),
+  paths:z.array(z.string().min(1).max(500)).min(1).max(60),
+  findingIds:z.array(z.string().min(1).max(100)).max(60).default([]),
+  goal:z.string().trim().min(1).max(2000),
+  acceptanceCriteria:z.array(z.string().trim().min(1).max(1000)).min(1).max(20),
+  instructions:z.string().max(4000).default(''),
+  allowStructural:z.boolean().default(false),
+});
+export type MaintenancePlanInput=z.infer<typeof maintenancePlanInputSchema>;
+export interface MaintenancePlan extends MaintenancePlanInput {
+  id:string; revision:string; stamp:string; createdAt:string; issueId:string;
+  evidence:{source:string;detail:string}[];
+}

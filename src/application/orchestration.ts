@@ -439,7 +439,7 @@ export class Orchestration {
     if (job.kind === "docs" || job.kind === "fix") {
       if (stepResolved(updated.processing, "validate")) { this.schedule(updated, "review", job.id); return; }
       if (!job.patch) {
-        this.stop(updated, "blocked", "没有可验证补丁，请检查执行结果");
+        this.stop(updated, updated.origin === "repository" && job.status === "completed" ? "review" : "blocked", updated.origin === "repository" && job.status === "completed" ? "执行结束，无需文件修改；可查看结论，不会生成空补丁或自动解决检查问题" : "没有可验证补丁，请检查执行结果");
         return;
       }
       this.schedule(updated, "validate", job.id);

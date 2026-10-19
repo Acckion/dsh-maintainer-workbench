@@ -174,3 +174,12 @@ test('manual skip of failed validation allows delivery of the exact real patch w
   assert.equal(f.store.get<Job>('jobs', f.fix.id)!.status, 'approved');
   assert.equal(f.writes(), 0);
 });
+
+test('a local-only repository can hand off its verified patch without a GitHub request',async t=>{
+ const f=await setup(t);const review=await f.run('review',f.check.id);
+ f.store.put('repos',{...f.repo,mode:'local',githubName:undefined});
+ f.gh.request=async()=>{throw Error('Local delivery must not contact GitHub');};
+ const result=await f.w.review(review.id,'approve','Local patch reviewed');
+ assert.equal(result.delivery?.implementationJobId,f.fix.id,result.deliveryBlockedReason);
+ assert.equal(f.writes(),0);
+});

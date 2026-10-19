@@ -47,3 +47,63 @@ test('local inventory pins committed content, skips symlinks and does not execut
   const forced=await w.maintenance.audit(repo.id,['README.md'],'',true);assert.equal(forced.created.length,1);
  }finally{await w.close();}
 });
+
+test('confirmed maintenance plans execute once, enforce path bounds, and retain dirty developer files',async()=>{
+ const {artifactSchemas,asAnalysis}=await import('../src/core/artifacts.ts');
+ const dir=await mkdtemp(join(tmpdir(),'mw-maintenance-plan-'));await git(dir,['init','-b','main']);await writeFile(join(dir,'README.md'),'# Before\n');await writeFile(join(dir,'other.txt'),'original\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','initial']);
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],mode:'local' as const,localKind:'git' as const,localPath:dir,headSha:await git(dir,['rev-parse','HEAD'])};store.put('repos',repo);
+ const common={schemaVersion:1 as const,summary:'Controlled change',coverage:'README',evidence:[],nextSteps:[],responseDraft:''};
+ const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-maintenance-plan-data-')),async({job})=>{if(job.kind==='docs'){await writeFile(join(job.worktree!,'README.md'),'# Updated\n');await writeFile(join(job.worktree!,'other.txt'),'out of scope\n');}const artifact=artifactSchemas.docs.parse({...common,stage:'docs',changes:['README'],acceptanceCriteria:[],limitations:[],tests:[]});return {artifact,result:asAnalysis(artifact),engine:'fixture'};},undefined,false);
+ try {
+  await writeFile(join(dir,'README.md'),'# Developer edits\n');
+  const plan=await w.maintenance.plan({repoId:repo.id,mode:'docs',paths:['README.md'],goal:'Update README',acceptanceCriteria:['README matches the implementation']});
+  const first=await w.maintenance.startPlan(plan.id,plan.stamp,w),again=await w.maintenance.startPlan(plan.id,plan.stamp,w);assert.equal(again.reused[0],first.created[0]);
+  w.pump();await w.drain();const done=store.get<Job>('jobs',first.created[0])!;assert.equal(done.status,'failed');assert.match(done.error??'',/超出已确认范围/);assert.ok(done.patch);assert.equal(store.jobs().filter(j=>j.kind==='validate').length,0);
+  assert.equal(await readFile(join(dir,'README.md'),'utf8'),'# Developer edits\n');
+  await writeFile(join(dir,'other.txt'),'new baseline\n');await git(dir,['add','other.txt']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','baseline']);
+  await assert.rejects(w.maintenance.startPlan(plan.id,plan.stamp,w),/版本已变化/);
+  await assert.rejects(w.maintenance.plan({repoId:repo.id,mode:'ci',paths:['../outside'],goal:'CI',acceptanceCriteria:['check']}),/仓库内/);
+ }finally{await w.close();}
+});
+
+test('CI maintenance proceeds through real isolated implementation, validation and review without publishing',async()=>{
+ const {artifactSchemas,asAnalysis}=await import('../src/core/artifacts.ts');
+ const dir=await mkdtemp(join(tmpdir(),'mw-maintenance-ci-'));await git(dir,['init','-b','main']);await writeFile(join(dir,'README.md'),'# Repository\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','initial']);
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],mode:'local' as const,localKind:'git' as const,localPath:dir,headSha:await git(dir,['rev-parse','HEAD']),githubName:undefined};store.put('repos',repo);
+ const common={schemaVersion:1 as const,summary:'Controlled result',coverage:'Workflow',evidence:[],nextSteps:[],responseDraft:''};
+ const kinds:string[]=[];
+ const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-maintenance-ci-data-')),async({job})=>{kinds.push(job.kind);let artifact;
+  if(job.kind==='fix'){await mkdir(join(job.worktree!,'.github/workflows'),{recursive:true});await writeFile(join(job.worktree!,'.github/workflows/check.yml'),'name: Checks\non: push\npermissions:\n  contents: read\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo fixture\n');artifact=artifactSchemas.fix.parse({...common,stage:'fix',changes:['Workflow'],acceptanceCriteria:[],limitations:[],tests:[]});}
+  else if(job.kind==='validate')artifact=artifactSchemas.validate.parse({...common,stage:'validate',environment:'fixture',tests:[{command:'fixture-check',status:'passed',output:'Controlled test only'}],blockers:[]});
+  else artifact=artifactSchemas.review.parse({...common,stage:'review',findings:[],verdict:'no_findings',blockers:[]});
+  return {artifact,result:asAnalysis(artifact),engine:'fixture'};
+ },undefined,false);
+ try{
+  const plan=await w.maintenance.plan({repoId:repo.id,mode:'ci',paths:['.github/workflows/check.yml'],goal:'Add checks',acceptanceCriteria:['Minimal read-only workflow']});
+  await w.maintenance.startPlan(plan.id,plan.stamp,w);w.pump();await w.drain();assert.deepEqual(kinds,['fix','validate','review']);
+  const issue=store.get<import('../src/core/types.ts').Issue>('issues',plan.issueId)!;assert.equal(issue.orchestration?.run?.status,'review');assert.equal(store.jobs().filter(j=>j.publications).length,0);assert.equal(await readFile(join(dir,'README.md'),'utf8'),'# Repository\n');
+  assert.equal(store.maintenance.snapshot(repo.id).findings.length,0,'implementation must not fabricate or resolve audit findings');
+ }finally{await w.close();}
+});
+
+for(const mode of ['docs','agents'] as const)test(`${mode} maintenance uses the real document checker and hands the same patch to independent review`,async()=>{
+ const {artifactSchemas,asAnalysis}=await import('../src/core/artifacts.ts');const {collectPatch}=await import('../src/core/git.ts');const {documentCheckCommand}=await import('../src/core/document-acceptance.ts');const {createHash}=await import('node:crypto');const {promisify}=await import('node:util');const {execFile}=await import('node:child_process');const {resolve}=await import('node:path');
+ const dir=await mkdtemp(join(tmpdir(),'mw-maintenance-docs-'));await git(dir,['init','-b','main']);await writeFile(join(dir,'README.md'),'# Repository\n\nExisting instructions.\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','initial']);
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],mode:'local' as const,localKind:'git' as const,localPath:dir,headSha:await git(dir,['rev-parse','HEAD'])};store.put('repos',repo);
+ const common={schemaVersion:1 as const,summary:'Controlled result',coverage:'Current patch',evidence:[],nextSteps:[],responseDraft:''};
+ const target=mode==='docs'?'README.md':'AGENTS.md';
+ const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-maintenance-doc-data-')),async({job,progress,recordExecution})=>{let artifact;
+  if(job.kind==='docs'){await writeFile(join(job.worktree!,target),mode==='docs'?'# Repository\n\nExisting instructions.\n\nRead the actual package manifest before running commands.\n':'# Development\n\nRead [README](README.md) for repository instructions.\n');artifact=artifactSchemas.docs.parse({...common,stage:'docs',changes:[target],acceptanceCriteria:[],limitations:[],tests:[]});}
+  else if(job.kind==='validate'){
+   const session='document-fixture-'+job.id;progress('run real document checks',session);const {stdout}=await promisify(execFile)(process.execPath,[resolve('scripts/verify-document-patch.mjs'),job.worktree!,job.baseSha],{cwd:job.worktree});const patch=await collectPatch(job.worktree!,job.baseSha);
+   recordExecution?.({id:session+':1',sessionId:session,callId:'1',tool:'bash',command:documentCheckCommand(job),cwd:job.worktree!,checkoutSha:job.baseSha,patchHash:createHash('sha256').update(patch).digest('hex'),exitCode:0,isError:false,recordedAt:new Date().toISOString(),output:stdout,truncated:false},stdout);
+   artifact=artifactSchemas.validate.parse({...common,stage:'validate',environment:'real local checker',tests:[],blockers:[]});
+  }else artifact=artifactSchemas.review.parse({...common,stage:'review',findings:[],verdict:'no_findings',blockers:[]});
+  return {artifact,result:asAnalysis(artifact),engine:'scripted fixture, no model'};
+ },undefined,false);
+ try{
+  const plan=await w.maintenance.plan({repoId:repo.id,mode,paths:[target],goal:'Update '+target,acceptanceCriteria:['Accurate text and valid references']});await w.maintenance.startPlan(plan.id,plan.stamp,w);w.pump();await w.drain();
+  const jobs=store.jobs();assert.deepEqual(jobs.map(j=>j.kind),['docs','validate','review']);const validation=jobs[1];assert.equal(validation.artifact?.stage,'validate');if(validation.artifact?.stage==='validate'){assert.deepEqual(validation.artifact.blockers,[]);assert.equal(validation.artifact.tests[0].status,'passed');}
+  assert.equal(jobs[0].patch,jobs[1].patch);assert.equal(jobs[1].patch,jobs[2].patch);assert.notEqual(jobs[0].worktree,jobs[1].worktree);assert.notEqual(jobs[1].worktree,jobs[2].worktree);assert.equal(store.get<import('../src/core/types.ts').Issue>('issues',plan.issueId)?.orchestration?.run?.status,'review');
+ }finally{await w.close();}
+});

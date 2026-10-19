@@ -70,6 +70,7 @@ export class Workbench {
       enqueue: (...args) => this.tasks.enqueue(...args),
       execute: async (job, controller) => {
         await this.worker.execute(job, controller);
+        await this.maintenance.enforceScope(this.store.get<Job>("jobs",job.id)!);
         if (!this.scheduler.closed)
           this.orchestration.completed(this.store.get<Job>("jobs", job.id)!);
       },
