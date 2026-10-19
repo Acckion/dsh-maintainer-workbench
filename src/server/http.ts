@@ -53,6 +53,14 @@ export function handler(
     const url = new URL(req.url ?? "/", "http://localhost");
     const path = url.pathname.slice(API.length);
     try {
+      if (req.method === "GET" && path === "/repository/maintenance") {
+        const repoId = z.string().min(1).max(400).parse(url.searchParams.get("repoId"));
+        if (!workbench.store.get("repos", repoId)) throw Error("仓库不存在");
+        send(res, 200, workbench.store.maintenance.snapshot(repoId)); return;
+      }
+      if (req.method === "GET" && path === "/repository/asset") {
+        send(res, 200, await workbench.maintenance.asset(z.string().min(1).parse(url.searchParams.get("repoId")), z.string().min(1).max(500).parse(url.searchParams.get("path")))); return;
+      }
       if (req.method === "GET" && path === "/models") {
         send(res, 200, await workbench.models());
         return;
@@ -500,6 +508,16 @@ export function handler(
         }
         send(res, 200, { created, reused, errors });
         return;
+      } else if (path === "/repository/audit") {
+        const p=z.object({repoId:z.string().min(1),scope:z.array(z.string().min(1).max(500)).max(100).default([]),instructions:z.string().max(4000).default(''),force:z.boolean().default(false)}).parse(input);
+        send(res,200,await workbench.maintenance.audit(p.repoId,p.scope,p.instructions,p.force)); return;
+      } else if (path === "/repository/inventory") {
+        const p=z.object({repoId:z.string().min(1)}).parse(input);
+        send(res,200,await workbench.maintenance.inventory(p.repoId)); return;
+      } else if (path === "/repository/decision") {
+        const p=z.object({repoId:z.string().min(1),id:z.string().min(1),decision:z.enum(['open','deferred','ignored']),reason:z.string().max(2000),fingerprint:z.string().min(1)}).parse(input);
+        workbench.store.maintenance.decide(p.repoId,p.id,p.decision,p.reason,p.fingerprint);
+        send(res,200,{ok:true}); return;
       } else if (path === "/organize") {
         const p = z
           .object({

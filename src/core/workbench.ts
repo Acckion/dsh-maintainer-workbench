@@ -1,3 +1,4 @@
+import { MaintenanceService } from "../application/maintenance.ts";
 import { classificationRevision } from './classification.ts';
 import { ManualStepService } from "../application/manual-steps.ts";
 import packageInfo from "../../package.json" with { type: "json" };
@@ -38,6 +39,7 @@ export class Workbench {
   private scheduler: Scheduler;
   readonly processing: ProcessingService;
   readonly manualSteps: ManualStepService;
+  readonly maintenance: MaintenanceService;
   readonly workspaces: WorkspaceService;
   readonly orchestration: Orchestration;
   constructor(
@@ -63,6 +65,7 @@ export class Workbench {
       workspaces: new WorkspaceManager(store, dataDir),
     };
     this.workspaces = new WorkspaceService(deps);
+    this.maintenance = new MaintenanceService(deps, (...args) => this.tasks.enqueue(...args));
     this.scheduler = new Scheduler(deps, {
       enqueue: (...args) => this.tasks.enqueue(...args),
       execute: async (job, controller) => {

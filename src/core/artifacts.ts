@@ -1,3 +1,4 @@
+import { maintenanceReportSchema } from "../domain/maintenance.ts";
 import {gapsSchema, gapsGuidance} from '../domain/gaps.ts';
 import { z } from "zod";
 import { inputRequestSchema } from "../domain/input.ts";
@@ -83,6 +84,7 @@ export const artifactSchemas = {
   investigate: z.object({
     ...common,
     stage: z.literal("investigate"),
+    maintenance: maintenanceReportSchema.optional(),
     planDraft: draftSchema.optional(),
     facts: list,
     hypotheses: list,

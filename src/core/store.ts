@@ -1,3 +1,4 @@
+import { MaintenanceRepository } from "../infrastructure/persistence/maintenance.ts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -10,6 +11,7 @@ import {defaultTriageMaxTokens} from './output-budget.ts';
 export class Store {
   db: DatabaseSync;
   readonly processing: ProcessingRepository;
+  readonly maintenance: MaintenanceRepository;
   private transactionDepth = 0;
   constructor(path: string) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
@@ -23,6 +25,7 @@ export class Store {
       CREATE INDEX IF NOT EXISTS jobs_issue_kind_revision ON jobs(json_extract(data,'$.issueId'),json_extract(data,'$.kind'),json_extract(data,'$.revision'));
       CREATE TABLE IF NOT EXISTS settings (id TEXT PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS audit (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, jobId TEXT, action TEXT NOT NULL, detail TEXT NOT NULL);`);
+    this.maintenance = new MaintenanceRepository(this.db);
     // Idempotent migration: retain prior completed classifications across upgrades/restarts.
     this.db
       .exec(`INSERT OR IGNORE INTO triage_cache(issueId,revision,jobId,data)
@@ -165,6 +168,7 @@ export class Store {
           `INSERT INTO ${table}(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data`,
         )
         .run(item.id, JSON.stringify(stored));
+      if (table === "jobs") this.maintenance.observeJob(item as unknown as Job);
     });
   }
   transaction<T>(fn: () => T): T {

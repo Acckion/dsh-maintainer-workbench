@@ -1042,3 +1042,12 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-filter-summary{display:flex;align-items:center;justify-content:space-between;padding:0 15px 9px;font-size:11px;color:var(--muted)}
 .mw-suggested-label{border-style:dashed!important}
 .mw-filter-toggle.active{width:auto;min-width:48px;padding:0 8px;gap:4px}.mw-filter-toggle svg{flex-shrink:0}
+
+/* Repository assets, persisted findings and evidence share the existing split layout. */
+.mw .mw-maintenance-meta{font-size:12px;color:var(--muted);padding-bottom:16px;margin-bottom:20px;border-bottom:1px solid var(--mw-border)}
+.mw .mw-maintenance-meta details{margin:8px 0 0}
+.mw .mw-maintenance-source{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7;background:var(--mw-control-bg);padding:16px;border-radius:8px}
+.mw .mw-maintenance-legacy{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.mw .mw-repository-field input{width:100%;box-sizing:border-box;margin-top:8px;padding:10px;border:1px solid var(--mw-border);border-radius:8px;background:var(--mw-canvas);color:var(--ink);font:inherit}
+.mw .mw-repository-browser .mw-reader-header>.mw-repository-actions{margin:12px 0 16px}
+.mw .mw-repository-browser .mw-toolbar>.mw-repository-field{width:100%;margin:0}
