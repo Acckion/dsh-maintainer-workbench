@@ -3,7 +3,7 @@ import { join, relative } from 'node:path';
 import { z } from 'zod';
 import { ServiceBase, type ServiceDependencies, type Enqueue } from './service.ts';
 import { organizeActions } from '../core/organize.ts';
-import type { Issue } from '../core/types.ts';
+import type { Issue, Repo } from '../core/types.ts';
 import { planInputKey } from '../core/change-plan.ts';
 import type { Workbench } from '../core/workbench.ts';
 import { maintenancePlanInputSchema, inScope, type MaintenancePlan, type MaintenancePR } from '../domain/maintenance.ts';
@@ -115,53 +115,111 @@ Maintainer scope: `+instructions;
     const active=this.inventories.get(repoId);if(active)return active;
     const task=this.readInventory(repoId).finally(()=>this.inventories.delete(repoId));this.inventories.set(repoId,task);return task;
   }
-  private async readInventory(repoId:string,pinnedRevision?:string):Promise<MaintenanceInventory> {
-    const repo=this.repo(repoId);let revision=pinnedRevision??repo.headSha,source:MaintenanceInventory['source']='remote',dirty=false,complete=true;
-    const files:Record<string,string>={};const warnings:string[]=[];
-    if(repo.localPath && repo.localKind!=='folder' && (!pinnedRevision || await git(repo.localPath,['cat-file','-e',pinnedRevision+'^{commit}']).then(()=>true,()=>false))) {
-      source='commit';
-      if(repo.mode==='local'&&!pinnedRevision)revision=await git(repo.localPath,['rev-parse','HEAD']);
-      if(!revision)throw Error('仓库尚无可读取的提交');
-      const tree=await git(repo.localPath,['ls-tree','-rz',revision]);
-      for(const entry of tree.split('\0')) {const match=/^100(?:644|755) blob ([0-9a-f]+)\t(.+)$/s.exec(entry);if(match && safeRepoPath(match[2]))files[match[2]]=match[1];}
-      dirty=!!(await git(repo.localPath,['status','--porcelain','--untracked-files=no']));
-      if(dirty)warnings.push('清单及后续修改基于已提交版本，未提交文件保留，不会混入执行。');
-    } else if(repo.localPath&&!pinnedRevision) {
-      source='folder';complete=false;revision='';warnings.push('普通文件夹：仅识别文件清单；修改执行需要至少一个 Git 提交。');
-      let visited=0;const root=await realpath(repo.localPath);
-      const walk=async(dir:string,depth:number):Promise<void>=>{if(depth>8 || visited>20000){return;}
-        for(const entry of await readdir(dir,{withFileTypes:true})){if(skipped.has(entry.name)||entry.name.startsWith('.env'))continue;visited++;
-          const path=join(dir,entry.name),rel=relative(root,path).split('\\').join('/');
-          if(entry.isSymbolicLink()||!safeRepoPath(rel))continue;
-          if(entry.isDirectory())await walk(path,depth+1);
-          else if(entry.isFile()){const stat=await lstat(path);files[rel]=`${stat.size}:${stat.mtimeMs}`;}
-          if(visited>20000)break;
-        }};
-      await walk(root,0);warnings.push('文件夹识别最多 8 层、20,000 项；不读取凭据目录或跟随符号链接。');
-    } else {
-      if(!revision)throw Error('请先同步仓库，读取当前版本');
-      const tree=z.object({truncated:z.boolean().optional(),tree:z.array(z.object({path:z.string(),type:z.string(),mode:z.string().optional(),sha:z.string()}))}).parse(await this.github.request(`/repos/${repo.githubName??repo.fullName}/git/trees/${revision}?recursive=1`,{signal:AbortSignal.timeout(30000)}));
-      complete=!tree.truncated;
-      for(const entry of tree.tree)if(entry.type==='blob' && entry.mode!=='120000' && safeRepoPath(entry.path))files[entry.path]=entry.sha;
-      if(!complete)warnings.push('GitHub 返回的文件树不完整，未覆盖部分不能视为已检查。');
-    }
-    const assets=Object.entries(files).map(([p,oid])=>assetFor(p,oid)).filter((a):a is NonNullable<typeof a>=>!!a).sort((a,b)=>a.path.localeCompare(b.path));
-    const inventory:MaintenanceInventory={repoId,revision,fingerprint:fingerprint(files),files,assets,source,dirty,complete,warnings,scannedAt:new Date().toISOString()};
-    const current=this.repo(repoId);
-    if(current.localPath!==repo.localPath || current.headSha!==repo.headSha)throw Error('仓库来源已变化，请重新读取');
-    if(!pinnedRevision&&repo.mode==='local' && revision!==repo.headSha)this.store.put('repos',{...current,headSha:revision,dirty});
-    if(!pinnedRevision)this.store.maintenance.saveInventory(inventory);return inventory;
+  private githubName(repo: Repo): string | undefined {
+    const name = repo.githubName ?? (repo.mode === 'github' ? repo.fullName : undefined);
+    return name && /^[a-zA-Z0-9][a-zA-Z0-9_.-]*\/[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(name) ? name : undefined;
   }
-  async asset(repoId:string,path:string) {
-    if(!safeRepoPath(path))throw Error('无效仓库路径');
-    const inv=this.store.maintenance.inventory(repoId);if(!inv?.assets.some(a=>a.path===path))throw Error('文件不在已识别清单中，请刷新清单');
-    const repo=this.repo(repoId);let content:string;
-    if(inv.source==='folder') {
-      // Folder inventory remains metadata-only; avoid races and accidental credential reads.
-      return {path,revision:'',content:'普通文件夹目前仅显示清单；创建 Git 提交后可以预览固定版本内容。',truncated:false};
+  private async readInventory(repoId: string, pinnedRevision?: string): Promise<MaintenanceInventory> {
+    const repo = this.repo(repoId);
+    let revision = pinnedRevision ?? repo.headSha;
+    let source: MaintenanceInventory['source'] = 'remote', dirty = false, complete = true;
+    const files: Record<string, string> = {}, warnings: string[] = [];
+    const remote = this.githubName(repo);
+    if (repo.localPath && repo.localKind === 'folder' && !pinnedRevision) {
+      source = 'folder'; complete = false; revision = '';
+      warnings.push('普通文件夹：仅识别文件清单；修改执行需要至少一个 Git 提交。');
+      let visited = 0;
+      const root = await realpath(repo.localPath);
+      const walk = async (dir: string, depth: number): Promise<void> => {
+        if (depth > 8 || visited > 20000) return;
+        for (const entry of await readdir(dir, { withFileTypes: true })) {
+          if (skipped.has(entry.name) || entry.name.startsWith('.env')) continue;
+          visited++;
+          const path = join(dir, entry.name), rel = relative(root, path).split('\\').join('/');
+          if (entry.isSymbolicLink() || !safeRepoPath(rel)) continue;
+          if (entry.isDirectory()) await walk(path, depth + 1);
+          else if (entry.isFile()) { const stat = await lstat(path); files[rel] = `${stat.size}:${stat.mtimeMs}`; }
+          if (visited > 20000) break;
+        }
+      };
+      await walk(root, 0);
+      warnings.push('文件夹识别最多 8 层、20,000 项；不读取凭据目录或跟随符号链接。');
+    } else {
+      let localFailure: unknown;
+      if (repo.localPath && repo.localKind !== 'folder') {
+        if (repo.mode === 'local' && !pinnedRevision) {
+          try { revision = await git(repo.localPath, ['rev-parse', '--verify', 'HEAD^{commit}']); }
+          catch (cause) { throw new Error('本地仓库尚无可读取的提交，请先创建 Git 提交或重新检测工作区。', { cause }); }
+        }
+        if (!revision) throw Error('仓库版本尚未读取，请先同步仓库或重新检测工作区。');
+        try {
+          // A local checkout can lag behind the synchronized GitHub revision. Never substitute HEAD.
+          const tree = await git(repo.localPath, ['ls-tree', '-rz', revision]);
+          for (const entry of tree.split('\0')) {
+            const match = /^100(?:644|755) blob ([0-9a-f]+)\t(.+)$/s.exec(entry);
+            if (match && safeRepoPath(match[2])) files[match[2]] = match[1];
+          }
+          source = 'commit';
+        } catch (error) { localFailure = error; }
+        // Status is supplementary; inability to inspect it must not discard a readable pinned tree.
+        try { dirty = !!(await git(repo.localPath, ['status', '--porcelain', '--untracked-files=no'])); }
+        catch { warnings.push('未能读取本地修改状态；文件清单仍只使用固定提交。'); }
+        if (dirty) warnings.push('清单及后续修改基于已提交版本，未提交文件保留，不会混入执行。');
+      }
+      if (source !== 'commit') {
+        if (!revision) throw Error('请先同步仓库，读取当前版本。');
+        if (!remote) throw new Error(`本地无法读取提交 ${revision.slice(0, 12)}，且没有可用的 GitHub 来源。请重新检测工作区或恢复本地 Git 对象；不会改用其他版本。`, { cause: localFailure });
+        if (!/^[0-9a-f]{40,64}$/i.test(revision)) throw Error('仓库提交标识无效，请重新同步仓库。');
+        try {
+          const tree = z.object({ truncated: z.boolean().optional(), tree: z.array(z.object({ path: z.string(), type: z.string(), mode: z.string(), sha: z.string() })) })
+            .parse(await this.github.request(`/repos/${remote}/git/trees/${revision}?recursive=1`, { signal: AbortSignal.timeout(30000) }));
+          complete = !tree.truncated;
+          for (const entry of tree.tree) if (entry.type === 'blob' && /^100(?:644|755)$/.test(entry.mode) && safeRepoPath(entry.path)) files[entry.path] = entry.sha;
+          if (localFailure) warnings.push(`本地工作副本暂不能读取 ${revision.slice(0, 12)}；已从 GitHub 读取同一提交的文件清单。本地文件保留，执行任务时另行准备该提交。`);
+          if (!complete) warnings.push('GitHub 返回的文件树不完整，未覆盖部分不能视为已检查。');
+        } catch (cause) {
+          const detail = cause instanceof Error ? cause.message : '读取失败';
+          throw new Error(`${localFailure ? '本地无法读取目标提交，' : ''}GitHub 同版本文件清单也未读取成功：${detail}`, { cause });
+        }
+      }
     }
-    if(repo.localPath) {const oid=inv.files[path];if(!/^[0-9a-f]{40,64}$/.test(oid))throw Error('无效文件版本');const size=Number(await git(repo.localPath,['cat-file','-s',oid]));if(size>128000)return {path,revision:inv.revision,content:'文件超过 128 KB，未自动读取；可缩小检查范围。',truncated:true};content=await git(repo.localPath,['cat-file','blob',oid],false,undefined,30000,true);}
-    else {const blob=z.object({encoding:z.literal('base64'),content:z.string(),size:z.number().optional()}).parse(await this.github.request(`/repos/${repo.githubName??repo.fullName}/git/blobs/${inv.files[path]}`,{signal:AbortSignal.timeout(30000)}));content=Buffer.from(blob.content,'base64').toString('utf8');}
-    return {path,revision:inv.revision,content:content.slice(0,128000),truncated:content.length>128000};
+    const assets = Object.entries(files).map(([p, oid]) => assetFor(p, oid)).filter((a): a is NonNullable<typeof a> => !!a).sort((a, b) => a.path.localeCompare(b.path));
+    const inventory: MaintenanceInventory = { repoId, revision, fingerprint: fingerprint(files), files, assets, source, dirty, complete, warnings, scannedAt: new Date().toISOString() };
+    const current = this.repo(repoId);
+    if (current.localPath !== repo.localPath || current.headSha !== repo.headSha) throw Error('仓库来源已变化，请重新读取');
+    if (!pinnedRevision && repo.mode === 'local' && revision !== repo.headSha) this.store.put('repos', { ...current, headSha: revision, dirty });
+    if (!pinnedRevision) this.store.maintenance.saveInventory(inventory);
+    return inventory;
+  }
+  private async remoteAsset(repo: Repo, oid: string): Promise<{ content: string; truncated: boolean }> {
+    const remote = this.githubName(repo);
+    if (!remote) throw Error('本地文件对象不可用，且未关联可读取同版本内容的 GitHub 仓库。请刷新清单或恢复本地 Git 对象。');
+    const blob = z.object({ sha: z.string().optional(), encoding: z.literal('base64'), content: z.string(), size: z.number().optional() })
+      .parse(await this.github.request(`/repos/${remote}/git/blobs/${oid}`, { signal: AbortSignal.timeout(30000) }));
+    if (blob.sha && blob.sha !== oid) throw Error('文件内容与清单版本不一致，请刷新清单。');
+    if (blob.size !== undefined && blob.size > 128000) return { content: '文件超过 128 KB，未自动展示；可缩小检查范围。', truncated: true };
+    const content = Buffer.from(blob.content, 'base64').toString('utf8');
+    return { content: content.slice(0, 128000), truncated: content.length > 128000 };
+  }
+  async asset(repoId: string, path: string) {
+    if (!safeRepoPath(path)) throw Error('无效仓库路径');
+    const inv = this.store.maintenance.inventory(repoId);
+    if (!inv?.assets.some(a => a.path === path)) throw Error('文件不在已识别清单中，请刷新清单');
+    const repo = this.repo(repoId);
+    if (inv.source === 'folder') return { path, revision: '', source: 'folder', content: '普通文件夹目前仅显示清单；创建 Git 提交后可以预览固定版本内容。', truncated: false };
+    const oid = inv.files[path];
+    if (!/^[0-9a-f]{40,64}$/i.test(oid)) throw Error('无效文件版本');
+    if (inv.source === 'commit' && repo.localPath) {
+      try {
+        const size = Number(await git(repo.localPath, ['cat-file', '-s', oid]));
+        if (size > 128000) return { path, revision: inv.revision, source: 'commit', content: '文件超过 128 KB，未自动读取；可缩小检查范围。', truncated: true };
+        const content = await git(repo.localPath, ['cat-file', 'blob', oid], false, undefined, 30000, true);
+        return { path, revision: inv.revision, source: 'commit', content: content.slice(0, 128000), truncated: content.length > 128000 };
+      } catch (cause) {
+        if (!this.githubName(repo)) throw new Error('本地文件对象已不可读取，请刷新清单或恢复本地 Git 对象；不会读取未提交文件代替。', { cause });
+      }
+    }
+    // Remote inventories and missing local blobs are read by immutable blob ID, never a branch tip.
+    return { path, revision: inv.revision, source: 'remote', ...await this.remoteAsset(repo, oid) };
   }
 }

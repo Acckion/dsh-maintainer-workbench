@@ -18,7 +18,8 @@ try {
   await git(dir,['init','-b','main']);await writeFile(join(dir,'README.md'),'# Repository\nOld setup instructions.\n');await writeFile(join(dir,'package.json'),JSON.stringify({scripts:{test:'echo fixture'}}));await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','initial']);
   const repo={...store.repos()[0],mode:'local',localKind:'git',localPath:dir,headSha:await git(dir,['rev-parse','HEAD'])};store.put('repos',repo);
   store.put('issues',{...store.issues()[0],id:repo.id+'#42',number:42,type:'pr',title:'Expose export API',headSha:repo.headSha,prBaseSha:repo.headSha});
-  let calls=0;const w=new Workbench(store,dir,async input=>{calls++;return fixtureRunner(input);},new GitHub('',async()=>{throw Error('Unexpected network');}),false);
+  const gh=new GitHub('',async()=>{throw Error('Unexpected network');});
+  let calls=0;const w=new Workbench(store,dir,async input=>{calls++;return fixtureRunner(input);},gh,false);
   const auditId=(await w.maintenance.audit(repo.id,['README.md'])).created[0];
   const original=store.get('jobs',auditId);store.put('jobs',{...original,status:'completed',finishedAt:new Date().toISOString(),artifact:{schemaVersion:1,stage:'investigate',summary:'README commands need updating',coverage:'README.md',evidence:[{source:'package.json',detail:'test is declared'}],nextSteps:[],responseDraft:'',facts:[],hypotheses:[],reproduction:'',rootCause:'',impact:'',proposedChanges:[],acceptanceCriteria:[],blockers:[],maintenance:{complete:true,checkedPaths:['README.md'],documents:[{path:'README.md',role:'安装与使用入口',audience:'用户与贡献者',authority:'current',relatedPaths:['package.json']}],findings:[{key:'setup-command',domain:'docs',kind:'contradiction',title:'README 启动命令与实际脚本不一致',paths:['README.md'],dependencies:['package.json'],impact:'新用户无法按文档启动',evidence:[{source:'package.json',detail:'test is declared'}],recommendation:'核对并更新 README 命令'}]}}});
   const api=handler(w,localRejection);const server=createServer(async(req,res)=>{if(req.url.startsWith('/maintainer/api'))return api(req,res);const map={'/':['preview.html','text/html'],'/app.js':['app.js','application/javascript'],'/app.css':['app.css','text/css']};const file=map[new URL(req.url,'http://localhost').pathname];if(!file){res.writeHead(404);res.end();return;}res.setHeader('Content-Type',file[1]);res.end(await readFile(join(process.cwd(),'dist',file[0])));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -71,6 +72,20 @@ try {
    await expect(page.getByRole('button',{name:'配置或修复 CI',exact:true})).toBeVisible();
    await page.screenshot({path:join(dir,`repository-category-switch-${width}.png`),fullPage:true});
    assert.equal(calls,0,'Switching categories and restoring PR context never calls a model');
+   const remoteHead='d'.repeat(40),remoteBlob='e'.repeat(40);store.put('repos',{...repo,mode:'github',headSha:remoteHead});
+   gh.request=async(path)=>{
+    if(path===`/repos/${repo.fullName}/git/trees/${remoteHead}?recursive=1`)return {truncated:false,tree:[{path:'README.md',type:'blob',mode:'100644',sha:remoteBlob}]};
+    if(path===`/repos/${repo.fullName}/git/blobs/${remoteBlob}`)return {sha:remoteBlob,encoding:'base64',content:Buffer.from('# Updated remote snapshot\n\nThis content comes from the synchronized commit.\n').toString('base64')};
+    throw Error('Unexpected remote snapshot request: '+path);
+   };
+   await list();await category.selectOption('docs');await page.getByRole('button',{name:'刷新清单',exact:true}).click();
+   await list();await page.getByRole('navigation',{name:'仓库文件',exact:true}).getByRole('button',{name:/README.md/}).click();
+   await expect(page.getByText('This content comes from the synchronized commit.',{exact:true})).toBeVisible();
+   await expect(page.getByText('GitHub 固定版本内容',{exact:true})).toBeVisible();
+   await expect(page.getByText(/not a tree object/)).toHaveCount(0);
+   await page.screenshot({path:join(dir,`repository-remote-snapshot-${width}.png`),fullPage:true});
+   assert.equal(calls,0,'Recovering the file browser from a missing local commit does not call a model');
+
 
    console.log(JSON.stringify({passed:true,width,modelCalls:calls,screenshots:dir}));
   }catch(e){await page.screenshot({path:join(dir,'failure.png'),fullPage:true});console.error('Evidence:',dir);throw e;}

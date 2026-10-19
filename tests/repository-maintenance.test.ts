@@ -157,3 +157,42 @@ test('retrying a failed audit retains scan tracking, while dependent source edit
   assert.equal((await w.maintenance.audit(repo.id,['README.md'])).created.length,1,'source dependency change must invalidate even a no-findings report');
  }finally{await w.close();}
 });
+
+async function oldCheckout() {
+ const dir=await mkdtemp(join(tmpdir(),'mw-missing-revision-'));await git(dir,['init','-b','main']);await writeFile(join(dir,'README.md'),'# Old committed version\n');await git(dir,['add','.']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','old snapshot']);return {dir,sha:await git(dir,['rev-parse','HEAD'])};
+}
+test('a synchronized GitHub revision absent locally uses the same remote tree and blobs, including PR checks',async()=>{
+ const {GitHub}=await import('../src/core/github.ts');const {dir,sha}=await oldCheckout(),head='a'.repeat(40),oid='b'.repeat(40);await writeFile(join(dir,'README.md'),'# Developer changes\n');
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],localPath:dir,headSha:head};store.put('repos',repo);const requests:string[]=[];
+ const gh=new GitHub('fixture',async(input,init)=>{const path=new URL(String(input)).pathname+new URL(String(input)).search;requests.push(path);assert.equal(init?.method??'GET','GET');
+  if(path===`/repos/${repo.fullName}/git/trees/${head}?recursive=1`)return Response.json({tree:[{path:'README.md',type:'blob',mode:'100644',sha:oid},{path:'linked.md',type:'blob',mode:'120000',sha:'c'.repeat(40)}],truncated:false});
+  if(path===`/repos/${repo.fullName}/git/blobs/${oid}`)return Response.json({sha:oid,encoding:'base64',content:Buffer.from('# New remote version\n').toString('base64'),size:21});throw Error('Unexpected request: '+path);
+ });
+ const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-missing-revision-data-')),fixtureRunner,gh,false);
+ try {
+  const inv=await w.maintenance.inventory(repo.id);assert.equal(inv.source,'remote');assert.equal(inv.revision,head);assert.ok(inv.warnings.some(w=>w.includes('同一提交')));assert.equal(inv.files['linked.md'],undefined);
+  const asset=await w.maintenance.asset(repo.id,'README.md');assert.equal(asset.source,'remote');assert.equal(asset.revision,head);assert.match(asset.content,/New remote version/);assert.doesNotMatch(asset.content,/Old committed|Developer changes/);
+  assert.equal(await git(dir,['rev-parse','HEAD']),sha);assert.equal(await readFile(join(dir,'README.md'),'utf8'),'# Developer changes\n');
+  const pr={...store.issues()[0],id:repo.id+'#7',number:7,type:'pr' as const,headSha:head,prBaseSha:sha};store.put('issues',pr);gh.pullRequest=async()=>({headSha:head,baseSha:sha,headRef:'topic',headRepo:repo.fullName,baseRef:'main',draft:false,merged:false,mergeable:true,checks:[],reviews:[],warnings:[]});
+  const audit=await w.maintenance.audit(repo.id,['README.md'],'',false,pr.id);assert.equal(store.maintenance.scanByJob(audit.created[0])?.revision,head);assert.equal(store.maintenance.inventory(repo.id)?.revision,head);
+  assert.ok(requests.every(p=>!p.includes(sha)),'never request the older checkout revision');
+ }finally{await w.close();}
+});
+
+test('an unavailable remote snapshot reports both sources and never turns the Git checkout into a folder inventory',async()=>{
+ const {GitHub}=await import('../src/core/github.ts');const {dir,sha}=await oldCheckout();const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],localPath:dir,headSha:'a'.repeat(40)};store.put('repos',repo);
+ const gh=new GitHub();gh.request=async()=>{throw Error('Connection unavailable');};const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-remote-tree-error-')),fixtureRunner,gh,false);
+ try {await assert.rejects(w.maintenance.inventory(repo.id),/本地无法读取目标提交，GitHub 同版本文件清单也未读取成功：Connection unavailable/);assert.equal(store.maintenance.inventory(repo.id),undefined);assert.equal(await git(dir,['rev-parse','HEAD']),sha);}finally{await w.close();}
+});
+
+test('a local-only damaged tree gives a recoverable error without contacting GitHub or substituting working files',async()=>{
+ const {GitHub}=await import('../src/core/github.ts');const {unlink}=await import('node:fs/promises');const {dir,sha}=await oldCheckout();const tree=await git(dir,['rev-parse','HEAD^{tree}']);await unlink(join(dir,'.git/objects',tree.slice(0,2),tree.slice(2)));
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],mode:'local' as const,localKind:'git' as const,githubName:undefined,localPath:dir,headSha:sha};store.put('repos',repo);let requests=0;const gh=new GitHub();gh.request=async()=>{requests++;throw Error('Unexpected network');};const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-local-tree-error-')),fixtureRunner,gh,false);
+ try {await assert.rejects(w.maintenance.inventory(repo.id),/没有可用的 GitHub 来源/);assert.equal(requests,0);assert.equal(store.maintenance.inventory(repo.id),undefined);assert.equal(await readFile(join(dir,'README.md'),'utf8'),'# Old committed version\n');}finally{await w.close();}
+});
+
+test('a local blob disappearing after inventory falls back to its exact remote object',async()=>{
+ const {GitHub}=await import('../src/core/github.ts');const {unlink}=await import('node:fs/promises');const {dir,sha}=await oldCheckout();const oid=await git(dir,['rev-parse','HEAD:README.md']);
+ const store=new Store(':memory:');seedFixture(store);const repo={...store.repos()[0],localPath:dir,headSha:sha};store.put('repos',repo);const paths:string[]=[];const gh=new GitHub();gh.request=async(path)=>{paths.push(path);return {sha:oid,encoding:'base64',content:Buffer.from('# Old committed version\n').toString('base64')};};const w=new Workbench(store,await mkdtemp(join(tmpdir(),'mw-local-blob-error-')),fixtureRunner,gh,false);
+ try {assert.equal((await w.maintenance.inventory(repo.id)).source,'commit');await unlink(join(dir,'.git/objects',oid.slice(0,2),oid.slice(2)));await writeFile(join(dir,'README.md'),'# Developer changes\n');const asset=await w.maintenance.asset(repo.id,'README.md');assert.equal(asset.source,'remote');assert.equal(asset.revision,sha);assert.match(asset.content,/Old committed version/);assert.deepEqual(paths,[`/repos/${repo.fullName}/git/blobs/${oid}`]);assert.equal(await readFile(join(dir,'README.md'),'utf8'),'# Developer changes\n');}finally{await w.close();}
+});
