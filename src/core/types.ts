@@ -242,6 +242,8 @@ export interface Issue {
   headSha?: string;
   analysis?: Analysis;
   analysisRevision?: string;
+  /** Local routing suggestions; never implicitly applied as GitHub labels. */
+  classification?: { category: IssueCategory; priority: Analysis["priority"]; labels: string[]; revision: string; jobId: string; updatedAt: string; stale?: boolean };
 }
 export type JobStatus =
   | "waiting_environment"

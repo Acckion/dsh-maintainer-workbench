@@ -1,3 +1,4 @@
+import { filterItems, itemClassification, itemCategory, itemPriority, itemLabels, facetCount, categoryLabel, defaultInboxFacets, type InboxFacets } from './issue-filters.ts';
 import {
   Check,
   CheckCheck,
@@ -110,6 +111,7 @@ export function App({
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
   const [type, setType] = useState("issue");
+  const [inboxFacets, setInboxFacets] = useState<InboxFacets>({...defaultInboxFacets});
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
   const [readerRequest, setReaderRequest] = useState<{
@@ -152,7 +154,7 @@ export function App({
   const search = pageSearch[searchKey] ?? "";
   useEffect(() => {
     setListLimit(50);
-  }, [page, repoId, search, filter, type]);
+  }, [page, repoId, search, filter, type, inboxFacets]);
 
   const setSearchValue = (value: string) =>
     setPageSearch((values) => ({ ...values, [searchKey]: value }));
@@ -186,6 +188,7 @@ export function App({
     setFocused(undefined);
     setJobFocus(undefined);
     setFilter("all");
+    setInboxFacets({...defaultInboxFacets});
     setType("issue");
     setPublishAction(undefined);
     setReviewNote("");
@@ -247,6 +250,7 @@ export function App({
       page: page as NavigationOrigin["page"],
       search,
       filter,
+      inboxFacets: {...inboxFacets,labels:[...inboxFacets.labels]},
       type,
       selected,
       focused: focus,
@@ -285,6 +289,7 @@ export function App({
     if (origin.showQuickTasks !== undefined)
       setShowQuickTasks(origin.showQuickTasks);
     setFilter(origin.filter);
+    setInboxFacets(origin.inboxFacets ?? {...defaultInboxFacets});
     setType(origin.type);
     setSelected(origin.selected);
     const narrow = (mainRef.current?.clientWidth ?? window.innerWidth) <= 560;
@@ -390,18 +395,7 @@ export function App({
   const running = jobs.filter((j) => ["running", "queued"].includes(j.status));
   const open = issues.filter((i) => i.state === "open" && !i.origin);
   const triaged = open.filter((i) => i.type === "issue" && i.analysis);
-  const filtered = issues.filter(
-    (i) =>
-      (filter === "closed" ? i.state === "closed" : i.state === "open") &&
-      (type === "all" || i.type === type) &&
-      (filter !== "untriaged" || !i.analysis) &&
-      (filter !== "priority" ||
-        ["P0", "P1"].includes(i.analysis?.priority ?? "")) &&
-      (filter !== "duplicates" || i.analysis?.duplicateOf) &&
-      `${i.title} ${i.number} ${i.labels.join(" ")}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
+  const filtered = filterItems(issues, inboxFacets, type, search, filter);
   const issue = issues.find((i) => i.id === focused);
   const job =
     jobs.find((j) => j.id === jobFocus) ??
@@ -796,8 +790,9 @@ export function App({
                           onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
-                      <InboxFilter value={filter} onChange={setFilter} />
+                      <InboxFilter value={filter} onChange={setFilter} facets={inboxFacets} onFacetsChange={setInboxFacets} issues={issues.filter(i=>!i.origin && (type==='all'||i.type===type))} />
                     </div>
+                    <div className="mw-filter-summary" aria-live="polite"><span>{filtered.length} 条结果{facetCount(inboxFacets)>0 ? ` · ${facetCount(inboxFacets)} 项筛选` : ''}</span>{(facetCount(inboxFacets)>0 || filter!=='all' || search) && <button className="mw-text-button" onClick={()=>{setInboxFacets({...defaultInboxFacets});setFilter('all');setSearchValue('');}}>重置</button>}</div>
                     <div className="mw-batch">
                       <div>
                         <BatchWorkflow
@@ -814,6 +809,8 @@ export function App({
                     </div>
                     <div className="mw-issues" id="mw-inbox-items">
                       {filtered.slice(0, listLimit).map((i) => {
+                        const classification = itemClassification(i);
+                        const category = itemCategory(i), priority = itemPriority(i);
                         const current = jobs.find(
                           (j) =>
                             j.issueId === i.id &&
@@ -868,12 +865,7 @@ export function App({
                                   className="mw-issue-labels"
                                   aria-label="标签"
                                 >
-                                  {i.labels
-                                    .filter((l) => !/^p[0-3]$/i.test(l))
-                                    .slice(0, 2)
-                                    .map((l) => (
-                                      <Tag key={l}>{l}</Tag>
-                                    ))}
+                                  {itemLabels(i).filter(label=>!/^p[0-3]$/i.test(label.name)).slice(0, 2).map(label=><span key={label.name} className={`mw-tag ${label.source==='suggested'?'mw-suggested-label':''}`} title={label.source==='suggested'?'本地建议标签，尚未发布到 GitHub':'GitHub 标签'}>{label.source==='suggested'?'建议 · ':''}{label.name}</span>)}
                                 </span>
                                 <span className="mw-issue-comments">
                                   {i.comments} 条讨论
@@ -881,30 +873,20 @@ export function App({
                               </div>
                             </button>
                             <div className="mw-row-status">
-                              {i.type === "issue" &&
-                                (i.plan?.category ?? i.analysis?.category) && (
-                                  <Tag>
-                                    {i.plan?.category ?? i.analysis?.category}
-                                  </Tag>
-                                )}
+                              {category && <Tag>{categoryLabel(category)}</Tag>}
+                              {i.classification?.stale && <Tag tone="amber">分类已过期</Tag>}
+                              {priority && <Tag tone={["P0","P1"].includes(priority)?"red":""}>{priority}</Tag>}
                               {current ? (
                                 <Tag tone="violet">
                                   <Loader2 size={11} className="mw-spin" />{" "}
                                   {current.waitingReason ||
                                     taskStatus(current).label}
                                 </Tag>
-                              ) : i.analysis ? (
+                              ) : classification ? (
                                 <>
-                                  <Tag
-                                    tone={
-                                      i.analysis.priority === "P1" ? "red" : ""
-                                    }
-                                  >
-                                    {i.analysis.priority}
-                                  </Tag>
                                   <span className="mw-triaged">
                                     <CheckCheck size={13} />
-                                    已分诊
+                                    {i.type === "pr" ? "已预检" : "已分诊"}
                                   </span>
                                 </>
                               ) : (

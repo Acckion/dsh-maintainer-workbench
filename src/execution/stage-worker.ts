@@ -1,3 +1,4 @@
+import { classifyArtifact, classificationRevision } from '../core/classification.ts';
 import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
 import {effectiveOutputTokens} from '../core/output-budget.ts';
@@ -578,6 +579,10 @@ export class StageWorker extends ServiceBase {
             analysis: output.result,
             analysisRevision: job.revision,
           });
+        const classification = classifyArtifact(output.artifact, job.issueSnapshot, job.id);
+        if (classification && classification.revision === classificationRevision(currentIssue) && (!job.caseId || job.caseId === currentIssue.processing?.id)) {
+          this.store.put("issues", { ...this.store.get<Issue>("issues", job.issueId)!, classification });
+        }
         this.saveJob({
           ...job,
           ...output,

@@ -331,6 +331,7 @@ export class RepositoryService extends ServiceBase {
       for (const issue of issues) {
         const old = this.store.get<Issue>("issues", issue.id);
         issue.plan = old?.plan;
+        issue.classification = old?.classification;
         const cached = this.store.triage(issue.id, revision(issue, repo));
         if (cached) {
           issue.analysis = cached.analysis;

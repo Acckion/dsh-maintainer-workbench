@@ -1,4 +1,5 @@
-export type NavigationOrigin = { repoId: string; page: 'inbox' | 'reviews' | 'tasks'; search: string; filter: string; type: string; selected: string[]; focused?: string; scrollTop: number; listScrollTop?: number; areaScrollTop?: number; taskFilter?: string; showQuickTasks?: boolean; focusId: string };
+import type { InboxFacets } from './issue-filters.ts';
+export type NavigationOrigin = { repoId: string; page: 'inbox' | 'reviews' | 'tasks'; search: string; filter: string; inboxFacets?: InboxFacets; type: string; selected: string[]; focused?: string; scrollTop: number; listScrollTop?: number; areaScrollTop?: number; taskFilter?: string; showQuickTasks?: boolean; focusId: string };
 export type NavigationDom = { frame: (cb: () => void) => void; scrollTo: (top: number) => void; focus: (id: string) => boolean };
 
 /** First list origin wins until consumed; detail-to-detail navigation must not replace it. */

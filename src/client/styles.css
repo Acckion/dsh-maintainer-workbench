@@ -1026,3 +1026,18 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-processing-run-events{list-style:none;padding:10px 0 0;margin:10px 0 0;border-top:1px solid var(--mw-border)}
 .mw-processing-run-events>li{display:flex;gap:12px;padding:4px 0;line-height:1.7}.mw-processing-run-events time{flex-shrink:0;color:var(--muted);font-size:11px}.mw-processing-run-events span{white-space:pre-wrap}
 @media(max-width:760px){.mw-processing-record{padding:12px}.mw-processing-record>header>time{width:100%;margin-left:0}.mw-processing-run-events>li{flex-direction:column;gap:2px}.mw-processing-record-path{align-items:flex-start}.mw-processing-record-path code{flex-basis:75%}}
+
+/* Composable inbox facets: independent status, purpose, priority and label matching. */
+.mw-facet-popover{width:310px;max-width:calc(100vw - 32px);max-height:70dvh;overflow:auto;padding:14px;color:var(--ink)}
+.mw-facet-popover>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mw-facet-popover>label{display:flex;flex-direction:column;gap:5px;margin-bottom:11px;font-size:12px}
+.mw-facet-popover select,.mw-facet-popover .mw-label-search{width:100%;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--mw-surface,white);color:var(--ink);padding:7px 9px;font-size:12px;box-sizing:border-box}
+.mw-facet-popover fieldset{margin:0 0 12px;padding:10px;border:1px solid var(--line);border-radius:7px;min-width:0}
+.mw-facet-popover legend{font-size:11px;color:var(--muted);padding:0 4px}
+.mw-label-options{max-height:150px;overflow:auto;padding:6px 0;margin-bottom:5px}
+.mw-label-options>label{display:flex;align-items:center;gap:7px;padding:5px 0;font-size:12px;overflow-wrap:anywhere}
+.mw-label-options>p{font-size:12px;color:var(--muted)}
+.mw-facet-popover>footer{display:flex;flex-direction:column;gap:7px;align-items:flex-start;font-size:11px;color:var(--muted)}
+.mw-filter-count{border-radius:9px;padding:0 5px;background:var(--mw-surface-soft,#eaf5ef);font-size:10px}
+.mw-filter-summary{display:flex;align-items:center;justify-content:space-between;padding:0 15px 9px;font-size:11px;color:var(--muted)}
+.mw-suggested-label{border-style:dashed!important}

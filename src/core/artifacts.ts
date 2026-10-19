@@ -70,6 +70,10 @@ export const artifactSchemas = {
   preflight: z.object({
     ...common,
     stage: z.literal("preflight"),
+    // Optional for reports saved before PR classification was introduced.
+    category: z.enum(["bug", "feature", "docs", "question", "maintenance"]).optional(),
+    priority: z.enum(["P0", "P1", "P2", "P3"]).optional(),
+    labels: z.array(z.string().max(80)).max(8).optional(),
     planDraft: draftSchema.optional(),
     intent: text,
     risks: list,
@@ -231,7 +235,7 @@ export function artifactPrompt(kind: JobKind, compact = true): string {
     triage:
       "category:bug|feature|docs|question|maintenance, priority:P0|P1|P2|P3, labels:string[], module:string, impact:string, missingInfo:string[], duplicateOf:number|null, duplicateReason:string, route:needs_info|decision|investigate|implement|answer|track, routeReason:string",
     preflight:
-      "intent:string, risks:string[], readiness:draft|review|blocked, blockers:string[]",
+      "category:bug|feature|docs|question|maintenance, priority:P0|P1|P2|P3, labels:string[], intent:string, risks:string[], readiness:draft|review|blocked, blockers:string[]",
     investigate:
       "facts:string[], hypotheses:string[], reproduction:string, rootCause:string, impact:string, proposedChanges:string[], acceptanceCriteria:string[], blockers:string[]",
     fix: "changes:string[], acceptanceCriteria:string[], limitations:string[], tests:[{command:string,status:passed|failed|not_run,output:string,executionId?:string}]",
@@ -260,10 +264,10 @@ export function artifactPrompt(kind: JobKind, compact = true): string {
 export function asAnalysis(a: Artifact): Analysis {
   return {
     summary: a.summary,
-    category: "category" in a ? a.category : "maintenance",
-    priority: "priority" in a ? a.priority : "P2",
+    category: "category" in a ? a.category ?? "maintenance" : "maintenance",
+    priority: "priority" in a ? a.priority ?? "P2" : "P2",
     confidence: 0,
-    labels: "labels" in a ? a.labels : [],
+    labels: "labels" in a ? a.labels ?? [] : [],
     missingInfo:
       "missingInfo" in a ? a.missingInfo : "blockers" in a ? a.blockers : [],
     duplicateOf: "duplicateOf" in a ? a.duplicateOf : null,
