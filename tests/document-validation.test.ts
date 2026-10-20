@@ -9,7 +9,7 @@ test('document inspection follows changed paragraphs and added link headings, re
  await writeFile(join(root,'docs/install.md'),'intro\n'.repeat(149)+'### From source\n');
  const patch='+++ b/README.md\n@@ -35,6 +35,10 @@\n+[Setup](docs/install.md#from-source)\n';
  const ranges=await documentValidationRanges(root,patch);
- assert.ok(ranges.some(r=>r.path==='docs/install.md' && r.start===145));
+ assert.ok(ranges.some(r=>r.path.replaceAll('\\','/')==='docs/install.md' && r.start===145));
  const policy=documentInspectionPolicy(root,ranges);
  assert.equal(policy.guard('read',{filePath:'README.md',offset:35,limit:10}),undefined);
  assert.match(policy.guard('read',{filePath:'README.md',offset:35,limit:10})!,/已读取/);

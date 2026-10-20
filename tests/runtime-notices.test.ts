@@ -40,13 +40,15 @@ test("bundled runtime notices retain exact installed license texts and versions"
       item.version,
       `${item.name}: update inventory after dependency changes`,
     );
+    const lf = (value: Buffer) =>
+      Buffer.from(value.toString("utf8").replace(/\r\n/g, "\n"));
     assert.deepEqual(
-      retained,
-      original,
-      `${item.name}: preserve the complete notice`,
+      lf(retained),
+      lf(original),
+      `${item.name}: preserve the complete notice (checkout line endings normalized)`,
     );
     assert.equal(
-      createHash("sha256").update(retained).digest("hex"),
+      createHash("sha256").update(lf(retained)).digest("hex"),
       item.sha256,
     );
   }
