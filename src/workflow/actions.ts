@@ -1,6 +1,7 @@
 import { reportNeedsRecovery } from "../core/report-state.ts";
 import {
   manualSource,
+  nextManualStage,
   scopeResolved,
   stepResolved,
   stepDisposition,
@@ -195,13 +196,22 @@ export function availableActions(
   )
     primary = undefined;
   const cursor = issue.processing?.manualCursor;
-  if (cursor)
-    primary =
-      stepDisposition(issue.processing, cursor)?.mode === "takeover"
+  if (cursor) {
+    let next: JobKind | undefined =
+      stepDisposition(issue.processing, cursor)?.mode === "takeover" ||
+      ["decision", "track"].includes(cursor)
         ? undefined
-        : ["decision", "track"].includes(cursor)
-          ? undefined
-          : (cursor as JobKind);
+        : (cursor as JobKind);
+    // D4: an explicitly skipped/completed stage must not wedge the flow; advance to the next actionable stage.
+    while (next && stepResolved(issue.processing, next)) {
+      const following = nextManualStage(issue, next);
+      next =
+        following && !["decision", "track"].includes(following)
+          ? (following as JobKind)
+          : undefined;
+    }
+    primary = next;
+  }
   const revoked = !!job && !!issue.processing?.revokedRunIds?.includes(job.id);
   const validSource =
     !revoked &&

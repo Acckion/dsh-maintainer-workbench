@@ -15,6 +15,7 @@ import { stepResolved } from "../src/workflow/manual.ts";
 import { validationAcceptance } from "../src/core/validation-acceptance.ts";
 import { seedFixture, fixtureAnalysis } from "./support/fixtures.ts";
 import type { Issue, Job } from "../src/core/types.ts";
+import { availableActions } from "../src/workflow/actions.ts";
 
 async function setup(t: TestContext) {
   const root = await mkdtemp(join(tmpdir(), "mw-manual-")),
@@ -344,4 +345,32 @@ test("a concurrent source update preserves both the user decision and the origin
   );
   assert.equal(f.item().processing!.manualCursor, "fix");
   assert.match(result.cleanupWarnings![0], /决定仍生效/);
+});
+
+
+test("skipped validation advances the primary action to patch review", () => {
+  const issue = {
+    id: "i1", type: "issue", state: "open",
+    plan: { decision: "accepted", category: "bug", goal: "g", acceptanceCriteria: ["a"], reproductionMode: "optional" },
+    analysis: { category: "bug" },
+    processing: {
+      id: "c1", workItemId: "i1", version: 3, phase: "review", lifecycle: "waiting",
+      sourceFingerprint: "fp", manualCursor: "validate",
+      manualSteps: [
+        { id: "s3", stage: "fix", mode: "complete", actor: "user", at: "t", runIds: [] },
+        { id: "s4", stage: "validate", mode: "skip", actor: "user", at: "t", runIds: [] },
+      ],
+      revokedRunIds: [], activeRunIds: [], currentRunId: undefined, waits: [],
+    },
+  } as unknown as Issue;
+  const fix = {
+    id: "impl", issueId: "i1", caseId: "c1", kind: "fix", status: "awaiting_review",
+    patch: "diff", result: { stage: "fix" }, artifactState: "fresh",
+    attempt: 1, createdAt: "2026-10-11", updatedAt: "2026-10-11",
+  } as unknown as Job;
+  const actions = availableActions(issue, fix, [fix]);
+  assert.equal(actions.primary?.kind, "review");
+  assert.equal(actions.primary?.enabled, true);
+  assert.equal(actions.stages.find((s) => s.kind === "review")?.enabled, true);
+  assert.match(String(actions.stages.find((s) => s.kind === "validate")?.blockedReasons[0]), /已跳过/);
 });

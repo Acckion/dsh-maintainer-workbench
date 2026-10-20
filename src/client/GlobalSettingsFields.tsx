@@ -21,7 +21,7 @@ export function GlobalSettingsFields({settings,update,panel,native,hostPreset}: 
   return <>
     {panel !== "automation" && <>
       {!native && <>{text('provider','模型提供方')}{text('model','模型名称')}</>}
-      {number('timeoutMs','任务最长执行时间（分钟）',1/60,1440,'超时后停止任务并保留记录',60000)}
+      {number('timeoutMs','任务最长执行时间（分钟）',1/60,1440,'超时后停止任务并保留记录；fix / 文档任务默认不低于 20 分钟，仓库策略可覆盖',60000)}
       {number('concurrency','并发任务',1,4,'同时运行的任务数量')}
       {number('maxJobsPerBatch','每批任务上限',1,50,'单次批量派发的任务数量')}
     </>}
