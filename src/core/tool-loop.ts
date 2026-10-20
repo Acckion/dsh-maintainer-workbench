@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isShellToolName } from './shell-tools.ts';
 function stable(value: unknown): string {
   if(Array.isArray(value))return JSON.stringify(value.map(stable));
   if(value&&typeof value==='object')return JSON.stringify(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,stable(v)]));
@@ -9,7 +10,7 @@ function argumentsOf(args:unknown):Record<string,unknown> {
   return args&&typeof args==='object'?args as Record<string,unknown>:{};
 }
 function fingerprint(name:string,args:unknown):string {
-  const a=argumentsOf(args),effective=name==='bash'?{command:a.command??a.cmd??args,cwd:a.cwd??a.workdir}:a;
+  const a=argumentsOf(args),effective=isShellToolName(name)?{command:a.command??a.cmd??args,cwd:a.cwd??a.workdir}:a;
   return createHash('sha256').update(name+':'+stable(effective)).digest('hex');
 }
 export function automaticToolLimit(kind:string,scope?:string[]):number {
@@ -27,7 +28,7 @@ export function toolLoopPolicy(documentTask=false,investigation=false,options:{l
       // The report tool passes two host guards; it must neither count nor be blocked here.
       if(name==='submit_stage_report')return;
       if(reason)return reason;
-      if(!['read','grep','glob','bash','job_output','job_list','subagent','edit','write'].includes(name))return;
+      if(!['read','grep','glob','job_output','job_list','subagent','edit','write'].includes(name)&&!isShellToolName(name))return;
       const key=fingerprint(name,args),count=(seen.get(key)??0)+1;seen.set(key,count);
       if(used>=limit){reason=`查阅预算已达上限（${used}/${limit}）：停止新增工具调用，使用 submit_stage_report 整理已获得证据和未完成项。预算耗尽不代表阶段成功，maintenance.complete 必须为 false。`;return reason;}
       used++;

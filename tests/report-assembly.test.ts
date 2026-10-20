@@ -45,12 +45,26 @@ test('host supplies commands and original output; failed, cancelled and unexecut
   assert.throws(() => assembleReport('validate', compact('validate', { tests: [{ command: 'pnpm test', status: 'passed' }] })));
 });
 
-test('evidence references reject foreign sessions, revisions, worktrees, patches, missing or ambiguous IDs', () => {
+test('foreign, missing or ambiguous test references degrade to not_run; records without commands still fail', () => {
   const value = compact('validate', { tests: [{ executionId: record.id }] });
-  for (const replacement of [{ sessionId: 'old' }, { checkoutSha: 'old' }, { cwd: '/other' }, { patchHash: 'old' }, { command: undefined }])
-    assert.throws(() => assembleReport('validate', value, { ...context, executionRecords: [{ ...record, ...replacement }] }));
-  assert.throws(() => assembleReport('validate', value));
-  assert.throws(() => assembleReport('validate', value, { ...context, executionRecords: [record, record] }));
+  for (const replacement of [{ sessionId: 'old' }, { checkoutSha: 'old' }, { cwd: '/other' }, { patchHash: 'old' }]) {
+    const artifact = assembleReport('validate', value, { ...context, executionRecords: [{ ...record, ...replacement }] });
+    const result = 'tests' in artifact && artifact.tests[0];
+    assert.equal(result && result.status, 'not_run');
+    assert.equal(result && 'executionId' in result, false);
+  }
+  assert.throws(() => assembleReport('validate', value, { ...context, executionRecords: [{ ...record, command: undefined }] }));
+  for (const custom of [undefined, { ...context, executionRecords: [record, record] }]) {
+    const artifact = assembleReport('validate', value, custom);
+    assert.equal('tests' in artifact && artifact.tests[0].status, 'not_run');
+  }
+});
+
+test('unmatched evidenceRefs are dropped with a host warning instead of failing the report', () => {
+  const artifact = assembleReport('validate', compact('validate', { tests: [], evidenceRefs: ['ghost', record.id] }), context);
+  assert.ok(artifact.evidence.some(entry => entry.detail.includes(record.output)));
+  assert.ok(artifact.evidence.some(entry => entry.source === 'Host report validation warning' && entry.detail.includes('ghost')));
+  assert.ok(!artifact.evidence.some(entry => entry.source.startsWith('Host report validation warning') && entry.detail.includes(record.id)));
 });
 
 test('source quotes can be extracted only from a cited numbered read, with existing review checks still required', () => {
@@ -77,11 +91,29 @@ for (const kind of ['triage', 'preflight'] as const) test(`${kind} retains bound
 
 for (const kind of ['fix', 'docs'] as const) test(`${kind} only accepts checks bound to its final patch`, () => {
   const value = compact(kind, { tests: [{ executionId: record.id }] });
-  assert.throws(() => assembleReport(kind, value, { ...context, executionRecords: [{ ...record, patchHash: 'baseline' }] }));
-  assert.throws(() => assembleReport(kind, value, { ...context, executionRecords: [{ ...record, patchHash: undefined }] }));
-  assert.throws(() => assembleReport(kind, value, { ...context, patchSha256: undefined }));
+  for (const change of [{ patchHash: 'baseline' }, { patchHash: undefined }]) {
+    const artifact = assembleReport(kind, value, { ...context, executionRecords: [{ ...record, ...change }] });
+    assert.equal('tests' in artifact && artifact.tests[0].status, 'not_run');
+  }
+  const noPatch = assembleReport(kind, value, { ...context, patchSha256: undefined });
+  assert.equal('tests' in noPatch && noPatch.tests[0].status, 'not_run');
   const artifact = assembleReport(kind, value, { ...context, executionRecords: [{ ...record, exitCode: 0 }] });
   assert.equal('tests' in artifact && artifact.tests[0].status, 'passed');
+});
+
+test('review drops dangling source refs while verified quote extraction stays strict', () => {
+  const source = { ...record, tool: 'read', command: undefined, sourcePath: 'source.ts', exitCode: null, output: '12 | const text = "quoted";\n13 | next();' };
+  const finding = { id: 'F1', title: '标题', severity: 'P1', path: 'source.ts', line: 12, trigger: '触发', evidence: '证据', recommendation: '建议' };
+  const value = compact('review', {
+    inspectedSources: [{ executionId: 'ghost', path: 'source.ts', line: 12 }, { executionId: record.id, path: 'source.ts', line: 12 }],
+    findings: [{ ...finding, sourceEvidence: { executionId: 'ghost', path: 'source.ts', line: 12, quote: '伪造引用' } }, { ...finding, id: 'F2', sourceEvidence: { executionId: record.id, path: 'source.ts', line: 12, quote: 'const text = "quoted";' } }],
+    verdict: 'incomplete', blockers: ['源码覆盖不足'],
+  });
+  const artifact = assembleReport('review', value, { ...context, executionRecords: [source] });
+  assert.ok(artifact.stage === 'review');
+  assert.deepEqual(artifact.inspectedSources?.map(ref => ref.executionId), [record.id]);
+  assert.equal(artifact.findings.find(item => item.id === 'F1')?.sourceEvidence, undefined);
+  assert.equal(artifact.findings.find(item => item.id === 'F2')?.sourceEvidence?.quote, 'const text = "quoted";');
 });
 
 for (const [command, output] of [
