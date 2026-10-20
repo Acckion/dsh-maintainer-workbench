@@ -1,3 +1,4 @@
+import {useListContextMenu,type ListMenuAction} from './ListContextMenu.tsx';
 import { useEffect, useId, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, FileSearch, GitBranch, Search, Workflow } from 'lucide-react';
 import type { Snapshot } from '../core/types.ts';
@@ -20,6 +21,7 @@ export function RepositoryOrganize(props:{onPRRequestHandled?:()=>void;requested
   const {state,repoId,busy,open,act}=props;
   const scopeId=useId();
   const [data,setData]=useState<MaintenanceSnapshot>(empty),[view,setView]=useState<View>({domain:'overview',selection:'',tab:'problems',prId:''});
+  const listMenu=useListContextMenu(`${repoId}:${view.domain}:${view.prId}:${view.tab}`);
   const [query,setQuery]=useState(''),[status,setStatus]=useState('active'),[detail,setDetail]=useState(false),[editing,setEditing]=useState(false),[selectedFindings,setSelectedFindings]=useState<string[]>([]),[resultJob,setResultJob]=useState('');
   const [auditInstructions,setAuditInstructions]=useState(''),[auditPaths,setAuditPaths]=useState('');
   const [scopeNotice,setScopeNotice]=useState('');
@@ -83,8 +85,14 @@ export function RepositoryOrganize(props:{onPRRequestHandled?:()=>void;requested
   const selectDomain=(domain:View['domain'])=>{const leavePR=!!view.prId&&domain!=='docs';update({domain,prId:leavePR?'':view.prId,selection:'',tab:'problems',jobId:undefined});setScopeNotice(leavePR?'已切换到当前仓库；PR 来源目前用于文档影响检查与同步。':'');setAuditPaths('');setAuditInstructions('');setSelectedFindings([]);setResultJob('');setEditing(false);setDetail(true);};
   const selectSource=(prId:string)=>{update({prId,domain:prId?'docs':view.domain,selection:'',tab:'problems',jobId:undefined});setScopeNotice('');setAuditPaths('');setAuditInstructions('');setResultJob('');setEditing(false);setSelectedFindings([]);};
   const sourceName=view.prId?`PR #${selectedPR?.number??'不可用'}`:'当前仓库';
+  const resetList=()=>{setQuery('');if(view.prId)selectSource('');};
+  const menuActions=(path?:string):ListMenuAction[]=>[
+    ...(path?[{label:'查看文件内容',run:()=>{update({selection:path,tab:'content',jobId:undefined});setEditing(false);setSelectedFindings([]);setAuditPaths('');setAuditInstructions('');setResultJob('');setDetail(true);}},{label:'查看检查结果',run:()=>{update({selection:path,tab:'problems',jobId:undefined});setEditing(false);setSelectedFindings([]);setResultJob('');setDetail(true);}}]:[]),
+    {label:'刷新文件清单',disabled:working||loading||busy,run:()=>void perform(()=>refresh(true))},
+    {label:'清除搜索与筛选',run:resetList},
+  ];
   return <div className={`mw-organize-workspace mw-repository-browser ${detail?'detail-open':''}`}>
-    <aside className="mw-organize-sidebar mw-list-panel" aria-label="仓库文件与问题">
+    <aside className="mw-organize-sidebar mw-list-panel" aria-label="仓库文件与问题" tabIndex={-1} onContextMenu={e=>listMenu.show(e,menuActions(),"仓库列表操作")} onKeyDown={e=>listMenu.show(e,menuActions(),"仓库列表操作")}>
     <div className="mw-repository-scopes" role="tablist" aria-label="查看范围">
       {Object.entries(domains).map(([key,name])=><button key={key} type="button" role="tab" id={`${scopeId}-${key}`} aria-controls={`${scopeId}-panel`} aria-selected={view.domain===key} tabIndex={view.domain===key?0:-1} onClick={()=>selectDomain(key as View['domain'])} onKeyDown={e=>{
         const keys=Object.keys(domains) as View['domain'][];
@@ -98,16 +106,15 @@ export function RepositoryOrganize(props:{onPRRequestHandled?:()=>void;requested
         <FilterPopover key={repoId+view.domain} count={Number(!!view.prId)} title={view.prId?`来源：${sourceName}`:'筛选检查来源'} label="筛选仓库文件与问题" heading="筛选来源">
           <label>检查来源<select aria-label="仓库检查来源" value={view.prId} onChange={e=>selectSource(e.target.value)}><option value="">当前仓库</option>{view.prId&&!selectedPR&&<option value={view.prId}>已关闭或不可用的 PR</option>}{prs.map(pr=><option key={pr.id} value={pr.id}>PR #{pr.number} · {pr.title}</option>)}</select></label>
           <p className="mw-filter-hint">PR 来源用于文档影响检查；文件预览显示当前仓库版本。</p>
-          <footer><button className="mw-text-button" onClick={()=>selectSource('')}>清除来源筛选</button></footer>
+          <footer><button className="mw-text-button" onClick={resetList}>清除搜索与筛选</button></footer>
         </FilterPopover>
       </div>
-      <div className="mw-filter-summary mw-repository-filter-summary" aria-live="polite"><span>{view.tab==='history'?`${jobs.length} 条记录`:`${filtered.length} 个文件`} · <span title={selectedPR?.title}>{sourceName}</span>{inventoryUnavailable&&' · 缓存'}</span>{(query||view.prId)&&<button className="mw-text-button" onClick={()=>{setQuery('');if(view.prId)selectSource('');}}>重置</button>}</div>
       <button className={`mw-task-row ${!view.selection?'focused':''}`} onClick={()=>{update({selection:'',tab:'problems'});setDetail(true);}}><span className="mw-task-icon"><FileSearch size={16}/></span><div><strong>{domains[view.domain]}</strong><p>{relevant.some(f=>f.decision==='open'||f.stale&&f.decision!=='resolved')?`${relevant.filter(f=>f.decision==='open'||f.stale&&f.decision!=='resolved').length} 个待处理问题`:'查看检查结果'}</p></div></button>
-      <nav aria-label="仓库文件" hidden={view.tab==='history'}>{filtered.slice(0,300).map(a=>{const Icon=a.domain==='ci'?Workflow:a.domain==='agents'?GitBranch:BookOpen;return <button className={`mw-task-row ${view.selection===a.path?'focused':''}`} key={a.path} onClick={()=>{update({selection:a.path,tab:'content',jobId:undefined});setEditing(false);setSelectedFindings([]);setAuditPaths('');setAuditInstructions('');setResultJob('');setDetail(true);}}><span className="mw-task-icon"><Icon size={15}/></span><div><strong>{a.path}</strong><p>{documentRole(data,a.path)?.role??(/(^|\/)readme\./i.test(a.path)?'README 文档':a.role)}</p></div></button>;})}</nav>
+      <nav aria-label="仓库文件" hidden={view.tab==='history'}>{filtered.slice(0,300).map(a=>{const Icon=a.domain==='ci'?Workflow:a.domain==='agents'?GitBranch:BookOpen;return <button className={`mw-task-row ${view.selection===a.path?'focused':''}`} key={a.path} onContextMenu={e=>listMenu.show(e,menuActions(a.path),"文件操作")} onKeyDown={e=>listMenu.show(e,menuActions(a.path),"文件操作")} onClick={()=>{update({selection:a.path,tab:'content',jobId:undefined});setEditing(false);setSelectedFindings([]);setAuditPaths('');setAuditInstructions('');setResultJob('');setDetail(true);}}><span className="mw-task-icon"><Icon size={15}/></span><div><strong>{a.path}</strong><p>{documentRole(data,a.path)?.role??(/(^|\/)readme\./i.test(a.path)?'README 文档':a.role)}</p></div></button>;})}</nav>
       {view.tab==='history'&&<nav aria-label="维护执行列表">{jobs.map(j=><button key={j.id} className={`mw-task-row ${resultJob===j.id?'focused':''}`} onClick={()=>{setResultJob(j.id);update({jobId:j.id});setDetail(true);}}><span className="mw-task-icon"><FileSearch size={15}/></span><div><strong>{j.issueSnapshot.title}</strong><p>{j.kind} · {j.status}</p></div></button>)}</nav>}
-      {filtered.length>300&&view.tab!=='history'&&<p className="mw-repository-list-footer">共 {filtered.length} 个匹配文件，显示前 300 个；可搜索缩小范围。</p>}
+      {filtered.length>300&&view.tab!=='history'&&<p className="mw-repository-list-footer">仅显示前 300 个文件；可搜索缩小范围。</p>}
       {!filtered.length&&view.tab!=='history'&&<p className="mw-repository-list-footer">{loading?'正在读取文件清单…':!data.inventory?'尚未读取文件清单':inventoryUnavailable?'缓存清单中没有匹配文件；更新后可确认当前版本。':'当前范围没有匹配文件'}</p>}
-      <div className="mw-repository-list-footer">{activeJobs.length} 个运行中 · {jobs.filter(j=>j.status==='awaiting_review').length} 个待审阅</div>
+      {listMenu.content}
     </aside>
     <section className="mw-organize-main" role="tabpanel" id={`${scopeId}-panel`} aria-labelledby={`${scopeId}-${view.domain}`}>
       <header className="mw-reader-header"><h2><button className="mw-icon-button mw-repository-back" aria-label="返回仓库文件列表" onClick={()=>setDetail(false)}><ArrowLeft size={16}/></button>{view.selection||domains[view.domain]}{view.prId&&<small> · PR #{selectedPR?.number??'不可用'}</small>}</h2>

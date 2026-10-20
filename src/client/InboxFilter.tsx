@@ -2,7 +2,7 @@ import React, {useState} from 'react';
 import {FilterPopover} from './FilterPopover.tsx';
 import type {Issue} from '../core/types.ts';
 import {categoryOptions, defaultInboxFacets, facetCount, itemLabels, type InboxFacets} from './issue-filters.ts';
-export function InboxFilter({value,onChange,facets=defaultInboxFacets,onFacetsChange,issues=[]}:{value:string;onChange:(value:string)=>void;facets?:InboxFacets;onFacetsChange?:(value:InboxFacets)=>void;issues?:Issue[]}) {
+export function InboxFilter({onReset,value,onChange,facets=defaultInboxFacets,onFacetsChange,issues=[]}:{onReset?:()=>void;value:string;onChange:(value:string)=>void;facets?:InboxFacets;onFacetsChange?:(value:InboxFacets)=>void;issues?:Issue[]}) {
   const [labelSearch,setLabelSearch]=useState('');
   const update=(change:Partial<InboxFacets>)=>{onChange('all');onFacetsChange?.({...facets,...change});};
   const count=facetCount(facets)+Number(value!=='all');
@@ -14,6 +14,6 @@ export function InboxFilter({value,onChange,facets=defaultInboxFacets,onFacetsCh
       <label>分析状态<select aria-label="筛选分析状态" value={['untriaged','duplicates'].includes(value)?value:facets.analysis} onChange={e=>update({analysis:e.target.value as InboxFacets['analysis']})}><option value="all">全部分析状态</option><option value="untriaged">尚未分诊 / 预检</option><option value="triaged">已有有效分类</option><option value="stale">分类已过期</option><option value="duplicates">疑似重复 Issue</option></select></label>
       <fieldset><legend>标签 · GitHub 与本地建议</legend><input className="mw-label-search" aria-label="查找筛选标签" placeholder="查找标签…" value={labelSearch} onChange={e=>setLabelSearch(e.target.value)}/><div className="mw-label-options">{labels.filter(label=>label.toLowerCase().includes(labelSearch.toLowerCase())).map(label=><label key={label.toLowerCase()}><input type="checkbox" checked={facets.labels.some(item=>item.toLowerCase()===label.toLowerCase())} onChange={e=>update({labels:e.target.checked?[...facets.labels,label]:facets.labels.filter(item=>item.toLowerCase()!==label.toLowerCase())})}/><span>{label}</span></label>)}{labels.length===0&&<p>当前仓库尚无标签</p>}</div><select aria-label="标签匹配方式" value={facets.labelMode} onChange={e=>update({labelMode:e.target.value as 'any'|'all'})}><option value="all">同时包含所选标签</option><option value="any">包含任一所选标签</option></select></fieldset>
       <label>排序<select aria-label="列表排序" value={facets.sort} onChange={e=>update({sort:e.target.value as InboxFacets['sort']})}><option value="updated">最近更新</option><option value="priority">优先级从高到低</option><option value="number">编号从新到旧</option></select></label>
-      <footer><button className="mw-text-button" onClick={()=>{onChange('all');onFacetsChange?.({...defaultInboxFacets,labels:[]});setLabelSearch('');}}>清除全部筛选</button><span>条件可组合，结果即时更新</span></footer>
+      <footer><button className="mw-text-button" onClick={()=>{if(onReset)onReset();else {onChange('all');onFacetsChange?.({...defaultInboxFacets,labels:[]});}setLabelSearch('');}}>清除搜索与筛选</button><span>条件可组合，结果即时更新</span></footer>
   </FilterPopover>;
 }

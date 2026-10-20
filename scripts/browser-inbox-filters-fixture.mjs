@@ -31,13 +31,13 @@ try{
   await page.getByRole('checkbox',{name:'Platform:Mac',exact:true}).check();await expect(rows).toHaveCount(1);await expect(rows).toContainText('Broken sync');
   const dialog=page.getByRole('dialog',{name:'筛选问题'});const bounds=await dialog.boundingBox();assert.ok(bounds.x>=0&&bounds.x+bounds.width<=width+1,'filter dialog stays inside viewport');
   await page.screenshot({path:`${dir}/combined-${width}.png`,fullPage:true});
-  await page.getByRole('button',{name:'清除全部筛选',exact:true}).click();await expect(rows).toHaveCount(3);
+  await page.getByRole('button',{name:'清除搜索与筛选',exact:true}).click();await expect(rows).toHaveCount(3);
   await page.getByLabel('筛选优先级',{exact:true}).selectOption('unset');await expect(rows).toHaveCount(1);await expect(rows).toContainText('New report');
-  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'展开筛选'})).toBeFocused();await page.getByRole('button',{name:'重置',exact:true}).click();
+  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'展开筛选'})).toBeFocused();await page.getByRole('button',{name:'展开筛选',exact:true}).click();await page.getByRole('button',{name:'清除搜索与筛选',exact:true}).click();await page.keyboard.press('Escape');
   await page.getByRole('button',{name:/^Pull Requests/}).click();await expect(rows).toHaveCount(3);
   await page.getByRole('button',{name:'展开筛选',exact:true}).click();await page.getByLabel('筛选类型',{exact:true}).selectOption('docs');await expect(rows).toHaveCount(1);
   await expect(rows).toContainText('Document export');await expect(rows.locator('[title="本地建议标签，尚未发布到 GitHub"]')).toContainText('guide');
-  await page.getByRole('button',{name:'清除全部筛选',exact:true}).click();await page.getByLabel('列表排序',{exact:true}).selectOption('priority');await expect(rows.first()).toContainText('Fix sync');
+  await page.getByRole('button',{name:'清除搜索与筛选',exact:true}).click();await page.getByLabel('列表排序',{exact:true}).selectOption('priority');await expect(rows.first()).toContainText('Fix sync');
   await page.getByLabel('筛选分析状态',{exact:true}).selectOption('stale');await expect(rows).toHaveCount(1);await expect(rows).toContainText('Changed PR');await expect(rows).toContainText('分类已过期');
   await page.screenshot({path:`${dir}/stale-pr-${width}.png`,fullPage:true});await page.close();
  }

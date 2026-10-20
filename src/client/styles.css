@@ -953,8 +953,8 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-processing-input label{display:flex;flex-direction:column;gap:6px;margin:12px 0}
 .mw-processing-input textarea,.mw-processing-input select{width:100%;padding:10px;font:inherit}
 .mw-gap-summary p{overflow-wrap:anywhere}
-/* Search and primary bulk actions share one uninterrupted sidebar toolbar. */
-.mw.mw-layout-tabs #mw-list-inbox>.mw-toolbar{border-bottom:0}
+/* Separate search controls from list rows across all sidebar lists. */
+.mw .mw-list-panel>.mw-toolbar{border-bottom:1px solid var(--mw-border,#dfe5e7);flex-shrink:0}
 
 /* Repository uses the same split workspace, list rows and detail tabs as Issues/PRs. */
 .mw.mw-layout-tabs .mw-repository-browser{display:grid;grid-template-columns:280px minmax(0,1fr);gap:0;align-items:stretch;flex:1;min-height:0;height:100%;overflow:hidden}
@@ -1087,3 +1087,17 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-inventory-notice>div{min-width:0}.mw-inventory-notice p{margin-top:6px;overflow-wrap:anywhere}.mw-inventory-notice details{margin-top:8px;color:var(--muted)}.mw-inventory-notice summary,.mw-previous-check summary{cursor:pointer}.mw-inventory-notice>button{flex-shrink:0}
 .mw-previous-check{margin-top:10px;color:var(--muted);font-size:12px}.mw-previous-check p{margin-top:6px}
 @media(max-width:760px){.mw-inventory-notice{flex-direction:column;gap:10px}.mw-check-summary>.mw-repository-actions{width:100%}}
+
+/* Tasks read the selected execution directly instead of mounting the Issue/PR workflow reader. */
+.mw .mw-task-detail{display:flex;flex-direction:column;padding:0;min-width:0;overflow:hidden;height:100%;max-height:none;outline:none}
+.mw-task-detail>.mw-reader-header{flex-shrink:0;padding:16px 24px 0}.mw-task-detail-heading{display:flex;align-items:flex-start;gap:10px}.mw-task-detail-heading>div{flex:1;min-width:0}.mw-task-detail-heading p{font-size:12px;color:var(--muted);margin-bottom:4px}.mw-task-detail-heading h2{font-size:20px;line-height:1.5;overflow-wrap:anywhere}.mw-task-detail-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--muted)}.mw-task-detail-meta>.mw-text-button{margin-left:auto}.mw-task-detail-content{padding:20px 24px;overflow:auto;min-height:0;flex:1}.mw-task-detail .mw-reader-tabs{margin-top:12px}.mw-task-step-picker{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12px;color:var(--muted)}.mw-task-step-picker select{min-width:0;max-width:100%;padding:6px 8px;border:1px solid var(--mw-border);border-radius:6px;background:var(--mw-control-bg);color:var(--ink)}.mw-task-diff-location{font-size:12px;margin-bottom:12px!important;overflow-wrap:anywhere}.mw-task-detail .mw-task-back{display:none}
+@media(max-width:760px){.mw-task-detail>.mw-reader-header{padding:14px 16px 0}.mw-task-detail-content{padding:16px}.mw-task-detail .mw-task-back{display:inline-flex}.mw-task-detail .mw-reader-tabs{gap:18px}.mw-task-step-picker{flex-wrap:wrap}}
+
+.mw.mw-layout-tabs .mw-workarea>.mw-task-detail{min-height:0;overflow:hidden;flex:1;background:var(--mw-canvas);border:0;border-radius:0}.mw .mw-task-detail .mw-task-detail-heading h2{margin:0}.mw-task-detail .mw-task-back.has-source{display:inline-flex}
+
+.mw .mw-task-detail .mw-task-detail-heading h2{padding:0}.mw-task-detail-meta>span{max-width:100%;overflow-wrap:anywhere}
+
+.mw-list-context-menu{position:fixed;inset:auto;margin:0;min-width:180px;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);overflow:auto;padding:5px;border:1px solid var(--mw-border,#dfe5e7);border-radius:9px;background:var(--mw-surface,#fff);color:var(--ink);box-shadow:0 8px 32px #0003;z-index:1000}
+.mw-list-context-menu button{display:flex;width:100%;justify-content:flex-start;border:0;border-radius:5px;padding:7px 12px;background:transparent;color:inherit;font-size:12px;text-align:left;white-space:normal}
+.mw-list-context-menu button:not(:disabled):hover,.mw-list-context-menu button:focus-visible{background:var(--mw-control-bg,#eef1f5);outline:none}
+.mw-list-context-menu button:disabled{opacity:.4}

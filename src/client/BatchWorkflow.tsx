@@ -1,65 +1,11 @@
 import {GapSummary} from './GapSummary.tsx';
-import React, { useState } from "react";
 import { kindNames } from "../core/types.ts";
 import type { Issue } from "../core/types.ts";
-import type { WorkflowAction } from "./IssuePlanning.tsx";
-export function BatchWorkflow({
-  issues,
-  busy,
-  act,
-}: {
-  issues: Issue[];
-  busy: boolean;
-  act: WorkflowAction;
-}) {
-  const [results, setResults] = useState<
-    {
-      id: string;
-      error?: string;
-      skipped?: string;
-      created?: string[];
-      reused?: string[];
-    }[]
-  >([]);
-  const run = async (path: string, data: unknown) => {
-    const response = await act(path, data, "已逐项处理，请检查下面的结果");
-    if (response && typeof response === "object" && "results" in response)
-      setResults((response as { results: typeof results }).results);
-  };
-  const ready = issues.filter(
-    (i) =>
-      i.orchestration?.draft &&
-      !i.orchestration.run &&
-      ["fix", "docs", "investigate", "review"].includes(i.orchestration.draft.route) &&
-      i.orchestrationView?.status === "plan",
-  );
+export const batchReady = (issues:Issue[]) => issues.filter(i => i.orchestration?.draft && !i.orchestration.run && ["fix", "docs", "investigate", "review"].includes(i.orchestration.draft.route) && i.orchestrationView?.status === "plan");
+export type BatchResult = {id:string;error?:string;skipped?:string;created?:string[];reused?:string[]};
+export function BatchWorkflow({issues,report=[]}:{issues:Issue[];report?:BatchResult[]}) {
   return (
     <section aria-label="批量处理建议">
-      <div className="mw-workflow-actions">
-        <button
-          disabled={busy || !issues.length}
-          onClick={() =>
-            void run("/workflow/analyze", { issueIds: issues.map((i) => i.id) })
-          }
-        >
-          分析
-        </button>
-        <button
-          disabled={busy || !ready.length}
-          onClick={() =>
-            void run("/workflow/start-batch", {
-              items: ready.map((i) => ({
-                issueId: i.id,
-                expectedVersion: i.processing?.version,
-                inputKey: i.orchestration!.draft!.inputKey,
-                plan: { ...i.orchestration!.draft, decision: "accepted" },
-              })),
-            })
-          }
-        >
-          开始处理{ready.length ? ` · ${ready.length}` : ""}
-        </button>
-      </div>
       {issues.length > 0 && (
         <details>
           <summary>逐项建议与范围 · {issues.length} 项</summary>
@@ -95,7 +41,7 @@ export function BatchWorkflow({
           ))}
         </details>
       )}
-      {results.map((r, n) => (
+      {report.map((r, n) => (
         <p key={`${r.id}:${n}`} role={r.error ? "alert" : undefined}>
           {issues.find((i) => i.id === r.id)?.title ?? r.id}：
           {r.error ||

@@ -42,15 +42,20 @@ try {
    assert.ok(bounds.x>=0&&bounds.x+bounds.width<=width+1,'Repository filter fits the viewport');
    await page.screenshot({path:join(dir,`repository-filter-${width}.png`),fullPage:true});
    await page.keyboard.press('Escape');await expect(filterButton).toBeFocused();
-   await search.fill('README');await expect(sidebar.locator('.mw-filter-summary')).toContainText('1 个文件');
-   await sidebar.getByRole('button',{name:'重置',exact:true}).click();await expect(search).toHaveValue('');
-   await expect(sidebar.locator('.mw-filter-summary')).toContainText('4 个文件');
+   await search.fill('README');await expect(sidebar.locator('.mw-filter-summary')).toHaveCount(0);
+   await filterButton.click();await page.getByRole('button',{name:'清除搜索与筛选',exact:true}).click();await page.keyboard.press('Escape');await expect(search).toHaveValue('');
+   await expect(sidebar.locator('.mw-filter-summary')).toHaveCount(0);
    await filterButton.click();await search.click();await expect(popup).toHaveCount(0);
 
    assert.equal(await sidebar.getByRole('tablist',{name:'查看范围',exact:true}).count(),1,'Scope tabs belong inside the sidebar');
    assert.ok((await initialScopes.boundingBox()).width<=(await sidebar.boundingBox()).width,'Scope bar must not extend past the sidebar');
    await initialScopes.getByRole('tab',{name:'文档',exact:true}).click();
    await expect(page.getByRole('heading',{name:'README 启动命令与实际脚本不一致',exact:true})).toBeVisible();
+   if(width<=760)await page.getByRole('button',{name:'返回仓库文件列表',exact:true}).click();
+   const fileRow=page.getByRole('navigation',{name:'仓库文件',exact:true}).getByRole('button').filter({hasText:'README.md'}).first();
+   await fileRow.click({button:'right'});await expect(page.getByRole('menu',{name:'文件操作'})).toBeVisible();
+   await expect(page.getByRole('menuitem',{name:'查看文件内容',exact:true})).toBeVisible();await page.keyboard.press('Escape');await expect(fileRow).toBeFocused();
+   if(width<=760)await sidebar.getByRole('button',{name:/^文档 /}).click();
    const rowText=page.getByRole('navigation',{name:'仓库文件',exact:true}).locator('.mw-task-row>div').first();
    if(width>760)assert.ok((await rowText.boundingBox()).width>180,'file label retains readable width');
    await page.screenshot({path:join(dir,`repository-findings-${width}.png`),fullPage:true});
@@ -87,7 +92,7 @@ try {
    await page.getByRole('button',{name:/^Pull Requests/}).click();await page.locator('.mw-issue-row').filter({hasText:'Expose export API'}).click();
    await page.getByRole('button',{name:'检查文档影响',exact:true}).click();
    if(width<=760)await page.getByRole('button',{name:'返回仓库文件列表',exact:true}).click();
-   await expectSource(repo.id+'#42');await expect(filterButton).toHaveText('1');await expect(sidebar.locator('.mw-filter-summary')).toContainText('PR #42');assert.equal(calls,0,'PR handoff only selects context; it must not call the model');
+   await expectSource(repo.id+'#42');await expect(filterButton).toHaveText('1');await expect(sidebar.locator('.mw-filter-summary')).toHaveCount(0);assert.equal(calls,0,'PR handoff only selects context; it must not call the model');
    await page.screenshot({path:join(dir,`repository-pr-${width}.png`),fullPage:true});
    const category=page.getByRole('tablist',{name:'查看范围',exact:true}),scopeNames={overview:'概览',docs:'文档',agents:'Agent 指引',ci:'CI'};
    for(const value of ['overview','docs','agents','ci'])assert.equal(await category.getByRole('tab',{name:scopeNames[value],exact:true}).isEnabled(),true,'Every category stays selectable from PR context');
@@ -108,7 +113,7 @@ try {
    await list();await filterButton.click();await source.selectOption(repo.id+'#42');
    await list();if(await popup.count())await page.keyboard.press('Escape');
    await expect(filterButton).toHaveText('1');
-   await sidebar.getByRole('button',{name:'重置',exact:true}).click();await expectSource('');
+   await filterButton.click();await page.getByRole('button',{name:'清除搜索与筛选',exact:true}).click();await page.keyboard.press('Escape');await expectSource('');
    await expect(filterButton).not.toHaveClass(/active/);
    await category.getByRole('tab',{name:'CI',exact:true}).click();
    await page.screenshot({path:join(dir,`repository-category-switch-${width}.png`),fullPage:true});

@@ -859,3 +859,5 @@ export function RepositoryDetail({
     </dialog>
   );
 }
+
+export {Diff as RepositoryPatch};

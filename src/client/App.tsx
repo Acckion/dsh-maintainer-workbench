@@ -1,5 +1,7 @@
-import { filterItems, itemClassification, itemCategory, itemPriority, itemLabels, facetCount, categoryLabel, defaultInboxFacets, type InboxFacets } from './issue-filters.ts';
+import {useListContextMenu,type ListMenuAction} from './ListContextMenu.tsx';
+import { filterItems, itemClassification, itemCategory, itemPriority, itemLabels, categoryLabel, defaultInboxFacets, type InboxFacets } from './issue-filters.ts';
 import {
+  ArrowLeft,
   Check,
   CheckCheck,
   ChevronDown,
@@ -27,7 +29,7 @@ import type { Issue, JobKind, Snapshot } from "../core/types.ts";
 import { kindNames } from "../core/types.ts";
 import { AssistantActions } from "./AssistantActions.tsx";
 import { Attention, RepositoryPolicy } from "./Attention.tsx";
-import { BatchWorkflow } from "./BatchWorkflow.tsx";
+import { BatchWorkflow, batchReady, type BatchResult } from "./BatchWorkflow.tsx";
 import { WorkflowCard } from "./WorkflowCard.tsx";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
 import { Empty, Modal, Tag } from "./Primitives.tsx";
@@ -80,6 +82,7 @@ import { StageExecutionDetails } from "./StageExecutionDetails.tsx";
 import { StageResult } from "./StageResult.tsx";
 import { taskGroups, type TaskFilter } from "./task-presentation.ts";
 import {TaskFilter as TaskFilters,taskFilterLabels} from "./TaskFilter.tsx";
+import {TaskDetail} from "./TaskDetail.tsx";
 export function App({
   openSession,
   host = false,
@@ -102,8 +105,10 @@ export function App({
     { fullName: string; repoId?: string; error?: string }[]
   >([]);
   const [selected, setSelected] = useState<string[]>([]);
+  const [batchReport,setBatchReport]=useState<{issues:Issue[];results:BatchResult[]}>();
   const [focused, setFocused] = useState<string>();
   const [jobFocus, setJobFocus] = useState<string>();
+  const [decisionFocus, setDecisionFocus] = useState<string>();
   const [taskFilter, setTaskFilter] = useState<TaskFilter>("attention");
   const [assistantInstructions, setAssistantInstructions] = useState<
     Record<string, string>
@@ -112,6 +117,7 @@ export function App({
   const [pageSearch, setPageSearch] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState("all");
   const [type, setType] = useState("issue");
+  const listMenu=useListContextMenu(`${repoId}:${page}:${type}`);
   const [inboxFacets, setInboxFacets] = useState<InboxFacets>({...defaultInboxFacets});
   const [listLimit, setListLimit] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -190,6 +196,7 @@ export function App({
     setSelected([]);
     setFocused(undefined);
     setJobFocus(undefined);
+    setDecisionFocus(undefined);
     setFilter("all");
     setInboxFacets({...defaultInboxFacets});
     setType("issue");
@@ -226,6 +233,7 @@ export function App({
     preserveOrigin = false,
   ) => {
     const previous = currentContext.current;
+    if (previous.page !== nextPage || previous.repoId !== nextRepoId) setDecisionFocus(undefined);
     if (previous.page !== nextPage || previous.repoId !== nextRepoId)
       navigationGeneration.current += 1;
     if (
@@ -298,7 +306,7 @@ export function App({
     const narrow = (mainRef.current?.clientWidth ?? window.innerWidth) <= 560;
     if (origin.page === "inbox")
       setFocused(narrow ? undefined : origin.focused);
-    else setJobFocus(narrow ? undefined : origin.focused);
+    else {setFocused(undefined);setJobFocus(narrow ? undefined : origin.focused);}
     restoreOrigin(origin, repoId, {
       frame: (callback) =>
         requestAnimationFrame(() => requestAnimationFrame(callback)),
@@ -350,6 +358,7 @@ export function App({
         rememberOrigin();
         navigate("tasks", actionRepoId, true);
         setFocused(undefined);
+        setDecisionFocus(undefined);
         setJobFocus(result.delivery.implementationJobId);
         setReaderRequest({
           sequence: Date.now(),
@@ -404,10 +413,11 @@ export function App({
     jobs.find((j) => j.id === jobFocus) ??
     (issue ? jobs.find((j) => j.issueId === issue.id) : undefined);
   const previewJob = jobs.find((item) => item.id === publishPreview?.id);
+  const decisionIssue = (page === "tasks" || page === "reviews") ? issues.find(i => i.id === decisionFocus) : undefined;
   const displayedIssue =
-    page === "inbox"
+    decisionIssue ?? (page === "inbox"
       ? issue
-      : (issues.find((i) => i.id === job?.issueId) ?? job?.issueSnapshot);
+      : (issues.find((i) => i.id === job?.issueId) ?? job?.issueSnapshot));
   const result = selectedAnalysis(page === "inbox" ? issue : undefined, job);
   useEffect(() => {
     const id = displayedIssue?.id;
@@ -440,13 +450,13 @@ export function App({
     navigationGeneration.current += 1;
     rememberOrigin();
     navigate("tasks", repoId, true);
-    setTaskFilter("all");
+    if(page!=="tasks"&&page!=="reviews")setTaskFilter("all");
     setFocused(undefined);
-    setJobFocus(id);
+    setDecisionFocus(undefined);setJobFocus(id);
     setReaderRequest({
       sequence: Date.now(),
       issueId: job!.issueId,
-      tab: tab === "diff" ? "files" : tab === "overview" ? "review" : "work",
+      tab: tab === "diff" ? "files" : tab === "overview" ? "overview" : tab === "evidence" ? "review" : "work",
     });
     setPublishAction(undefined);
     if (id !== job?.id) setReviewNote("");
@@ -632,6 +642,7 @@ export function App({
                   }
                   setFocused(undefined);
                   setJobFocus(undefined);
+                  setDecisionFocus(undefined);
                   if (page !== "tasks" && page !== "reviews") setSearchValue("");
                   setDetailOpen(false);
                 }}
@@ -736,7 +747,7 @@ export function App({
                     navigate("tasks", repoId, true);
                     setTaskFilter("all");
                     setFocused(undefined);
-                    setJobFocus(id);
+                    setDecisionFocus(undefined);setJobFocus(id);
                     setReaderRequest(undefined);
                     setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
                     moveFocusToDetail();
@@ -760,7 +771,7 @@ export function App({
                     navigate("tasks", repoId, true);
                     setTaskFilter("all");
                     setFocused(undefined);
-                    setJobFocus(id);
+                    setDecisionFocus(undefined);setJobFocus(id);
                     setReaderRequest(undefined);
                     moveFocusToDetail();
                   }}
@@ -785,6 +796,8 @@ export function App({
                 <div className="mw-workarea">
                   <section
                     id="mw-list-inbox"
+                    onContextMenu={e=>listMenu.show(e,inboxMenuActions(),"事项操作")}
+                    onKeyDown={e=>listMenu.show(e,inboxMenuActions(),"事项操作")}
                     tabIndex={-1}
                     className="mw-list-panel"
                   >
@@ -798,22 +811,7 @@ export function App({
                           onChange={(e) => setSearchValue(e.target.value)}
                         />
                       </label>
-                      <InboxFilter value={filter} onChange={setFilter} facets={inboxFacets} onFacetsChange={setInboxFacets} issues={issues.filter(i=>!i.origin && (type==='all'||i.type===type))} />
-                    </div>
-                    <div className="mw-filter-summary" aria-live="polite"><span>{filtered.length} 条结果{facetCount(inboxFacets)>0 ? ` · ${facetCount(inboxFacets)} 项筛选` : ''}</span>{(facetCount(inboxFacets)>0 || filter!=='all' || search) && <button className="mw-text-button" onClick={()=>{setInboxFacets({...defaultInboxFacets});setFilter('all');setSearchValue('');}}>重置</button>}</div>
-                    <div className="mw-batch">
-                      <div>
-                        <BatchWorkflow
-                          issues={issues.filter((issue) =>
-                            selected.includes(issue.id),
-                          )}
-                          busy={!!busy}
-                          act={(path, data, message) =>
-                            action("workflow-batch", path, data, message)
-                          }
-                        />
-
-                      </div>
+                      <InboxFilter onReset={resetInboxList} value={filter} onChange={setFilter} facets={inboxFacets} onFacetsChange={setInboxFacets} issues={issues.filter(i=>!i.origin && (type==='all'||i.type===type))} />
                     </div>
                     <div className="mw-issues" id="mw-inbox-items">
                       {filtered.slice(0, listLimit).map((i) => {
@@ -828,6 +826,8 @@ export function App({
                           <div
                             className={`mw-issue-row ${focused === i.id ? "focused" : ""}`}
                             key={i.id}
+                            onContextMenu={e=>listMenu.show(e,inboxMenuActions(i),"事项操作")}
+                            onKeyDown={e=>listMenu.show(e,inboxMenuActions(i),"事项操作")}
                           >
                             <input
                               aria-label={`选择 #${i.number}`}
@@ -954,23 +954,24 @@ export function App({
                 <div className="mw-workarea">
                   <section
                     id={`mw-list-${page}`}
+                    onContextMenu={e=>listMenu.show(e,taskMenuActions(),"任务操作")}
+                    onKeyDown={e=>listMenu.show(e,taskMenuActions(),"任务操作")}
                     tabIndex={-1}
                     className="mw-list-panel"
                   >
                     <div className="mw-toolbar">
                       <label className="mw-search"><Search size={16}/><input aria-label="搜索任务" placeholder="搜索任务…" value={search} onChange={e=>setSearchValue(e.target.value)}/></label>
-                      <TaskFilters value={activeTaskFilter} counts={taskCounts} onChange={value=>{setTaskFilter(value);if(page==='reviews')setPage('tasks');}} includeQuick={showQuickTasks} onIncludeQuickChange={setShowQuickTasks}/>
+                      <TaskFilters onReset={resetTaskList} value={activeTaskFilter} counts={taskCounts} onChange={value=>{setTaskFilter(value);if(page==='reviews')setPage('tasks');}} includeQuick={showQuickTasks} onIncludeQuickChange={setShowQuickTasks}/>
                     </div>
-                    <div className="mw-filter-summary mw-task-filter-summary" aria-live="polite"><span>{listJobs.length} 个任务{decisionIssues.length>0&&` · ${decisionIssues.length} 个待确认事项`}{activeTaskFilter!=='all'&&` · ${taskFilterLabels[activeTaskFilter]}`}{showQuickTasks&&' · 含快速任务'}</span>{(search||activeTaskFilter!=='all'||showQuickTasks)&&<button className="mw-text-button" onClick={()=>{setSearchValue('');setTaskFilter('all');setShowQuickTasks(false);if(page==='reviews')setPage('tasks');}}>重置</button>}</div>
                     {decisionIssues
                         .map((i) => (
                           <button
-                            className="mw-task-row mw-decision-row"
+                            id={`mw-decision-${i.id}`}
+                            className={`mw-task-row mw-decision-row ${decisionFocus === i.id ? "focused" : ""}`}
                             key={`decision-${i.id}`}
-                            onClick={() => {
-                              navigate("inbox", repoId);
-                              setFocused(i.id);
-                            }}
+                            onContextMenu={e=>listMenu.show(e,[{label:"查看待确认事项",run:()=>selectDecision(i.id)},{label:"清除搜索与筛选",run:resetTaskList}],"待确认事项操作")}
+                            onKeyDown={e=>listMenu.show(e,[{label:"查看待确认事项",run:()=>selectDecision(i.id)},{label:"清除搜索与筛选",run:resetTaskList}],"待确认事项操作")}
+                            onClick={() => selectDecision(i.id)}
                           >
                             <div>
                               <strong>{i.title}</strong>
@@ -988,10 +989,14 @@ export function App({
                         <button
                           key={j.id}
                           id={`mw-item-${j.id}`}
+                          onContextMenu={e=>listMenu.show(e,taskMenuActions(j.id),"任务操作")}
+                          onKeyDown={e=>listMenu.show(e,taskMenuActions(j.id),"任务操作")}
                           className={`mw-task-row ${visibleGroups.find((g) => g.latest.id === j.id)?.members.some((m) => m.id === jobFocus) ? "focused" : ""}`}
                           onClick={() => {
+                            originRef.current=undefined;
                             rememberOrigin(j.id);
                             navigationGeneration.current += 1;
+                            setDecisionFocus(undefined);
                             setJobFocus(j.id);
                             setFocused(undefined);
                             setReaderRequest(undefined);
@@ -1049,8 +1054,8 @@ export function App({
                       </button>
                     )}
                   </section>
-                  {displayedIssue && job ? (
-                    renderReader()
+                  {decisionIssue ? renderDecisionDetail() : displayedIssue && job ? (
+                    renderTaskDetail()
                   ) : (
                     <aside
                       className={`mw-detail mw-detail-placeholder${originRef.current ? " mw-return-available" : ""}`}
@@ -1372,6 +1377,8 @@ export function App({
           </div>
         </Modal>
       )}
+      {listMenu.content}
+      {batchReport&&<Modal title="逐项处理结果与范围" busy={!!busy} close={()=>setBatchReport(undefined)}><BatchWorkflow issues={batchReport.issues} report={batchReport.results}/></Modal>}
       {connect && (
         <Modal
           title="连接 GitHub 仓库"
@@ -1489,6 +1496,66 @@ export function App({
       )}
     </div>
   );
+
+  function selectDecision(id:string) {
+    navigationGeneration.current += 1;originRef.current=undefined;setJobFocus(undefined);setFocused(undefined);setReaderRequest(undefined);setDecisionFocus(id);moveFocusToDetail();
+  }
+  function resetInboxList() {setInboxFacets({...defaultInboxFacets});setFilter('all');setSearchValue('');}
+  function resetTaskList() {setSearchValue('');setTaskFilter('all');setShowQuickTasks(false);if(page==='reviews')setPage('tasks');}
+  function inboxMenuActions(target?:Issue):ListMenuAction[] {
+    const targets=target&&!selected.includes(target.id)?[target]:issues.filter(i=>selected.includes(i.id));
+    const ready=batchReady(targets),suffix=targets.length>1?`（${targets.length} 项）`:'';
+    const run=async(start:boolean)=>{
+      const origin=currentContext.current,generation=navigationGeneration.current;
+      const result=await action('workflow-batch',start?'/workflow/start-batch':'/workflow/analyze',start?{items:ready.map(i=>({issueId:i.id,expectedVersion:i.processing?.version,inputKey:i.orchestration!.draft!.inputKey,plan:{...i.orchestration!.draft,decision:'accepted'}}))}:{issueIds:targets.map(i=>i.id)},'已逐项处理');
+      if(result?.results&&origin.repoId===currentContext.current.repoId&&origin.page===currentContext.current.page&&generation===navigationGeneration.current)setBatchReport({issues:targets,results:result.results});
+    };
+    return [
+      {label:`分析${suffix}`,disabled:!!busy||!targets.length,run:()=>void run(false)},
+      {label:`开始处理${ready.length>1?`（${ready.length} 项）`:''}`,disabled:!!busy||!ready.length,hint:'仅处理已有可执行计划且等待确认的事项',run:()=>void run(true)},
+      {label:'查看逐项建议与范围',disabled:!targets.length,run:()=>setBatchReport({issues:targets,results:[]})},
+      {label:'全选筛选结果',disabled:!filtered.length,run:()=>setSelected(filtered.map(i=>i.id))},
+      {label:'取消选择',disabled:!selected.length,run:()=>setSelected([])},
+      {label:'清除搜索与筛选',run:resetInboxList},
+    ];
+  }
+  function taskMenuActions(id?:string):ListMenuAction[] {
+    const selectedId=id??jobFocus;
+    const open=(tab:DetailTab)=>{if(!selectedId)return;originRef.current=undefined;setFocused(undefined);setDecisionFocus(undefined);setJobFocus(selectedId);setReaderRequest({sequence:Date.now(),issueId:jobs.find(j=>j.id===selectedId)?.issueId??'',tab:tab==='log'?'work':tab==='diff'?'files':tab==='evidence'?'review':'overview'});moveFocusToDetail();};
+    return [{label:'查看任务详情',disabled:!selectedId,run:()=>open('overview')},{label:'查看执行记录',disabled:!selectedId,run:()=>open('log')},{label:'清除搜索与筛选',run:resetTaskList}];
+  }
+
+  function renderDecisionDetail() {
+    if (!decisionIssue) return null;
+    const close = () => {
+      setDecisionFocus(undefined);
+      requestAnimationFrame(() => document.getElementById(`mw-list-${page}`)?.focus({preventScroll:true}));
+    };
+    return <aside key={decisionIssue.id} id="mw-detail" tabIndex={-1} className="mw-detail mw-reader-embedded mw-task-detail" aria-label="待确认事项详情" data-issue-id={decisionIssue.id}>
+      <header className="mw-reader-header">
+        <div className="mw-task-detail-heading">
+          <button className="mw-icon-button mw-task-back" aria-label="返回任务列表" onClick={close}><ArrowLeft size={16}/></button>
+          <div><p>{decisionIssue.type === 'pr' ? 'PR' : 'Issue'} #{decisionIssue.number} · 待确认事项</p><h2>{decisionIssue.title}</h2></div>
+          <button className="mw-icon-button" aria-label="关闭待确认事项详情" onClick={close}><X size={16}/></button>
+        </div>
+        <div className="mw-task-detail-meta"><span>{repo?.fullName}</span><Tag tone="warn">{decisionIssue.processing?.phase === 'needs_info' ? '需要补充信息' : '需要确认目标'}</Tag></div>
+      </header>
+      <div className="mw-task-detail-content">{renderStage('plan')}<ProcessingHistory issue={decisionIssue} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/></div>
+    </aside>;
+  }
+
+  function renderTaskDetail() {
+    if(!job||!displayedIssue)return null;
+    const liveIssue=issues.find(i=>i.id===job.issueId),members=groups.find(group=>group.members.some(step=>step.id===job.id))?.members??[job];
+    const requested=readerRequest?.issueId===job.issueId?{...readerRequest,tab:readerRequest.tab==='files'?'diff' as const:readerRequest.tab==='review'?'evidence' as const:readerRequest.tab==='work'?'log' as const:'overview' as const}:undefined;
+    const returnToTasks=()=>{setJobFocus(undefined);setReaderRequest(undefined);originRef.current=undefined;requestAnimationFrame(()=>document.getElementById(`mw-list-${page}`)?.focus({preventScroll:true}));};
+    return <TaskDetail key={job.id} job={job} issue={liveIssue} members={members} jobs={jobs} audit={state?.audit??[]} repository={repo?.fullName??''} native={!!state?.capabilities.harness} requested={requested}
+      source={liveIssue&&!liveIssue.origin?()=>{originRef.current=undefined;rememberOrigin(job.id);navigationGeneration.current++;navigate('inbox',repoId,true);setType(liveIssue.type);setFocused(liveIssue.id);setJobFocus(undefined);setReaderRequest(undefined);moveFocusToDetail();}:undefined}
+      backLabel={originRef.current?.repoId===repoId&&originRef.current.page!==page?'返回来源列表':'返回任务列表'} back={()=>{if(originRef.current?.repoId===repoId)returnToOrigin();else returnToTasks();}} close={returnToTasks} open={openEvidenceJob} openSession={openSession}
+      input={<ProcessingInput issue={displayedIssue} runId={job.id} embedded busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>}
+      actions={renderReviewActions(job)} reviewControls={job.kind==='review'?<ReviewFindingControls job={job} history={jobs.filter(j=>j.issueId===job.issueId)} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>:undefined}
+      tools={<OperationTracker record={operationRecords[repoId]} jobs={jobs} close={()=>setOperationRecords(records=>{const next={...records};delete next[repoId];return next;})} open={id=>{navigationGeneration.current++;rememberOrigin(id);setDecisionFocus(undefined);setJobFocus(id);setReaderRequest(undefined);setReviewNote(reviewNoteForTask(jobFocus,id,reviewNote));moveFocusToDetail();}}/>}/>
+  }
 
   function renderReader() {
     if (!displayedIssue) return null;
@@ -1716,7 +1783,7 @@ export function App({
                   navigate("tasks", repoId, true);
                   setTaskFilter("all");
                   setFocused(undefined);
-                  setJobFocus(id);
+                  setDecisionFocus(undefined);setJobFocus(id);
                   setReaderRequest(undefined);
                   setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
                   moveFocusToDetail();

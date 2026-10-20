@@ -8,12 +8,14 @@ export function StageExecutionDetails({
   tools,
   openEvidence,
   openSession,
+  showOpenEvidence = true,
 }: {
   job?: Job;
   audit: Audit[];
   tools: ReactNode;
   openEvidence: (id: string) => void;
   openSession?: (id: string) => void;
+  showOpenEvidence?: boolean;
 }) {
   if (!job) return <p>暂无执行记录。</p>;
   const logs = audit
@@ -22,9 +24,9 @@ export function StageExecutionDetails({
   return (
     <section className="mw-stage-execution" aria-label="执行详情">
       <div className="mw-stage-execution-toolbar">
-        <button className="mw-text-button" onClick={() => openEvidence(job.id)}>
+        {showOpenEvidence && <button className="mw-text-button" onClick={() => openEvidence(job.id)}>
           查看完整执行记录
-        </button>
+        </button>}
         {job.sessionId && openSession && (
           <button
             className="mw-text-button"
