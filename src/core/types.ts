@@ -120,6 +120,7 @@ export interface ExecutionRecord {
   truncated: boolean;
 }
 export interface ToolDiagnostics {
+  toolBudget?: {limit:number;used:number;searches:number;reason?:string;phase:"explore"|"report";reportRequests:number};
   protocolRecovery?: { attempts: number; lastAction: "retry" | "exhausted"; error: string };
   contextRecovery?: { attempts: number; lastAction: string; error?: string };
   validationRepair?: { attempts: number; reason: string };
@@ -260,6 +261,8 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 export interface Job {
+  maintenanceScope?: string[];
+  budgetStopped?: boolean;
   caseId?: string;
   actionsAvailable?: import("../workflow/actions.ts").WorkflowActions;
   goal?: "resolve";
@@ -353,6 +356,7 @@ export interface Audit {
   detail: string;
 }
 export interface Settings {
+  toolCallLimit?: number;
   autoReview?: boolean;
   nativeDefaultModel?: ModelChoice;
   stageModels?: Partial<Record<JobKind, ModelChoice>>;

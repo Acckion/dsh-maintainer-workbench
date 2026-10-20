@@ -44,7 +44,14 @@ test('local inventory pins committed content, skips symlinks and does not execut
   await assert.rejects(w.maintenance.audit(repo.id,['../outside']),/不存在/);await assert.rejects(w.maintenance.asset(repo.id,'unsafe.md'),/清单/);
   const old=store.get<Job>('jobs',first.created[0])!;store.put('jobs',{...old,status:'completed',artifact:{schemaVersion:1,stage:'investigate',summary:'No findings',coverage:'README',evidence:[],nextSteps:[],responseDraft:'',facts:[],hypotheses:[],reproduction:'',rootCause:'',impact:'',proposedChanges:[],acceptanceCriteria:[],blockers:[],maintenance:{complete:true,checkedPaths:['README.md'],findings:[]}}});
   assert.equal((await w.maintenance.audit(repo.id,['README.md'])).reused[0],old.id);
+  await mkdir(join(dir,'unrelated'));await writeFile(join(dir,'unrelated','README.md'),'Other module');await git(dir,['add','unrelated']);await git(dir,['-c','user.name=Fixture','-c','user.email=fixture@example.test','commit','-m','other docs']);
+  assert.equal((await w.maintenance.audit(repo.id,['README.md'])).reused[0],old.id,'Unrelated module documentation does not invalidate a scoped complete check');
+  assert.equal(store.maintenance.snapshot(repo.id).scans.find(s=>s.id===old.id)?.current,true,'Unchanged scope and explicit dependencies remain current across revisions');
   const forced=await w.maintenance.audit(repo.id,['README.md'],'',true);assert.equal(forced.created.length,1);
+  store.put('jobs',{...store.get<Job>('jobs',forced.created[0])!,status:'completed',artifact:{...old.artifact!,stage:'investigate',maintenance:{complete:false,checkedPaths:['README.md'],findings:[]}}} as Job);
+  const fresh=await w.maintenance.audit(repo.id,['README.md'],'different scope instructions');assert.equal(fresh.created.length,1);
+  store.put('jobs',{...store.get<Job>('jobs',fresh.created[0])!,status:'completed',artifact:{...old.artifact!,stage:'investigate',maintenance:{complete:false,checkedPaths:['README.md'],findings:[]}}} as Job);
+  assert.equal((await w.maintenance.audit(repo.id,['README.md'],'different scope instructions')).created.length,1,'Partial results must not reuse a completed task through the general queue cache');
  }finally{await w.close();}
 });
 

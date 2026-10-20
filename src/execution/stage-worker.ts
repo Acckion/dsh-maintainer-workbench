@@ -1,3 +1,4 @@
+import {BudgetStopError,budgetStopArtifact,budgetStopOutput} from '../core/budget-stop.ts';
 import { classifyArtifact, classificationRevision } from '../core/classification.ts';
 import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
@@ -73,6 +74,7 @@ export class StageWorker extends ServiceBase {
     const issue = this.store.get<Issue>("issues", initial.issueId);
     let job = {
       ...initial,
+      maintenanceScope:initial.maintenanceScope??this.store.maintenance.scanByJob(initial.id)?.scope,
       issueSnapshot: { ...initial.issueSnapshot, processing: issue?.processing },
       instructions: issue ? withManualContext(initial.instructions, issue) : initial.instructions,
       status: "running" as const,
@@ -88,9 +90,7 @@ export class StageWorker extends ServiceBase {
     };
     const timer = setTimeout(
       () => controller.abort(new Error("任务超出配置的执行时间")),
-      lightweight(job.kind)
-        ? Math.min(settings.timeoutMs, 120000)
-        : settings.timeoutMs,
+      settings.timeoutMs,
     );
     const progress = (
       message: string,
@@ -679,9 +679,19 @@ export class StageWorker extends ServiceBase {
         }
       }
       const latest = this.job(job.id);
+      let stoppedOutput:ReturnType<typeof budgetStopOutput>|undefined;
+      if(error instanceof BudgetStopError&&!controller.signal.aborted)stoppedOutput=budgetStopOutput(error);
+      else if(controller.signal.aborted&&latest.executionRecords?.length){
+        const why=String(controller.signal.reason?.message??'任务中断');
+        stoppedOutput=budgetStopOutput(new BudgetStopError(why,budgetStopArtifact(latest,why,latest.executionRecords,latest.worktree??latest.analysisPath??'',latest.rawOutput)));
+      }
+      if(stoppedOutput&&latest.worktree){try{preservedPatch=await collectPatch(latest.worktree,latest.baseSha);}catch{/* Keep original evidence even if patch inspection fails. */}}
+      if(latest.status==='cancelled'&&stoppedOutput)this.saveJob({...latest,...stoppedOutput,...(preservedPatch?{patch:preservedPatch,patchSha256:patchHash(preservedPatch)}:{}),status:'cancelled'});
       if (latest.status !== "cancelled")
         this.saveJob({
           ...latest,
+          ...(stoppedOutput??{}),
+          ...(stoppedOutput&&preservedPatch?{patch:preservedPatch,patchSha256:patchHash(preservedPatch)}:{}),
           status:
             error instanceof EnvironmentUnavailable
               ? "waiting_environment"

@@ -94,6 +94,8 @@ export function StageExecutionDetails({
               {job.toolDiagnostics.provider}/{job.toolDiagnostics.model} ·{" "}
               {job.toolDiagnostics.preset} · {job.toolDiagnostics.permission}
             </p>
+            {job.toolDiagnostics.toolBudget&&<p>工具预算 {job.toolDiagnostics.toolBudget.used}/{job.toolDiagnostics.toolBudget.limit} · 搜索 {job.toolDiagnostics.toolBudget.searches} · {job.toolDiagnostics.toolBudget.phase==='report'?'已进入收尾':'查阅阶段'} · 收尾请求 {job.toolDiagnostics.toolBudget.reportRequests}/2</p>}
+            {job.budgetStopped&&<p>已保存部分结果；任务未完成，不能作为验收通过依据。</p>}
             <p>挂载工具：{job.toolDiagnostics.mountedTools.join(", ")}</p>
             <p>
               请求 {job.toolDiagnostics.requests.length} · 调用{" "}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toolLoopPolicy } from '../src/core/tool-loop.ts';
+import { automaticToolLimit, toolLoopPolicy } from '../src/core/tool-loop.ts';
 
 test('Issue 4 guidance cycle is blocked despite changing shell descriptions', () => {
   const policy = toolLoopPolicy(true);
@@ -31,17 +31,31 @@ test('opaque argument strings and reordered keys cannot bypass repetition detect
   p.guard('read',{file_path:'A.md',limit:20,offset:1});
   assert.ok(p.reason);
 });
-test('varied document searches also have a bounded investigation budget', () => {
-  const p=toolLoopPolicy(true);
-  for(let i=0;i<60;i++) assert.equal(p.guard('bash',{command:`grep pattern${i} A.md`}),undefined);
-  assert.match(p.guard('bash',{command:'grep next A.md'})!,/文档调查预算阻塞/);
-  assert.ok(p.reason);
-  const code=toolLoopPolicy();
-  for(let i=0;i<100;i++) assert.equal(code.guard('bash',{command:`test ${i}`}),undefined);
+test('all tool stages have a finite budget, warn before exhaustion and preserve report submission',()=>{
+ for(const kind of ['investigate','review','docs','validate','fix','ci']){
+  const p=toolLoopPolicy(kind==='docs',kind==='investigate',{kind,limit:60});let warned=false;
+  for(let i=0;i<60;i++){const notice=p.guard('read',{file_path:`source-${i}.ts`});if(notice)warned=true;assert.equal(p.reason,undefined);}
+  assert.ok(warned);assert.match(p.guard('read',{file_path:'next.ts'})!,/预算已达上限/);
+  assert.match(p.reason!,/不代表阶段成功/);assert.equal(p.guard('submit_stage_report',{report:{}}),undefined);assert.equal(p.state.used,60);
+ }
 });
-test('read-only investigations cannot browse indefinitely and budget exhaustion is not success',()=>{
- const p=toolLoopPolicy(false,true);
- for(let i=0;i<60;i++) assert.equal(p.guard('read',{file_path:`source-${i}.ts`,offset:1,limit:20}),undefined);
- assert.match(p.guard('read',{file_path:'next.ts',offset:1,limit:20})!,/调查预算阻塞/);
- assert.match(p.reason!,/不代表阶段成功/);
+test('scope-aware defaults and explicit override remain independent of token limits',()=>{
+ assert.equal(automaticToolLimit('investigate',['README.md']),80);
+ assert.equal(automaticToolLimit('investigate',['docs']),120);
+ assert.equal(automaticToolLimit('investigate',[]),180);
+ assert.equal(toolLoopPolicy(false,true,{limit:200,scope:['README.md']}).state.limit,200);
+});
+test('varying glob suffixes cannot consume the whole task in search churn',()=>{
+ const p=toolLoopPolicy(false,true,{scope:['README.md']});
+ for(let i=0;i<50&&!p.reason;i++)p.guard('glob',{pattern:`docs/lang${i}/**`});
+ assert.match(p.reason!,/搜索无进展/);assert.ok(p.state.used<50);
+});
+test('edits reset exact-repeat detection but never reset the overall task budget',()=>{
+ const p=toolLoopPolicy(true,false,{limit:10});
+ for(let i=0;i<10;i++){p.guard('read',{file_path:`source${i}`});p.edited('write',false);}
+ assert.match(p.guard('read',{file_path:'next'})!,/预算已达上限/);
+});
+test('report tool guards do not double-count calls or consume exploration allowance',()=>{
+ const p=toolLoopPolicy(false,true,{limit:10});for(let i=0;i<10;i++)p.guard('submit_stage_report',{});
+ assert.equal(p.state.used,0);assert.equal(p.reason,undefined);
 });

@@ -37,6 +37,7 @@ export interface MaintenanceFinding extends MaintenanceFindingInput {
   history: { at: string; action: string; reason: string; jobId?: string }[];
 }
 export interface MaintenanceScan {
+  current?:boolean;
   pr?:MaintenancePR; documents?:DocumentResponsibility[]; inventoryComplete?:boolean;
   id: string; repoId: string; jobId: string; revision: string; scope: string[];
   fingerprint: string; inventoryFiles: Record<string, string>; createdAt: string;

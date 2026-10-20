@@ -212,6 +212,7 @@ export class Store {
   settings(): Settings {
     return {
       stageModels: {},
+      toolCallLimit: 0,
       syncLimit: 1000,
       autoPreflight: false,
       triageMaxTokens: defaultTriageMaxTokens,

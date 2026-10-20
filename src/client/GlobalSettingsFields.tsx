@@ -14,13 +14,14 @@ export function GlobalSettingsFields({settings,update,panel,native,hostPreset}: 
   settings:Settings;update:(s:Settings)=>void;panel:string;native:boolean;hostPreset?:string;
 }) {
   const number = (key: keyof Settings, label:string, min:number, max:number, description?:string, factor=1) => <Row label={label} description={description}>
-    <input aria-label={label} type="number" min={min} max={max} value={(settings[key] as number)/factor}
+    <input aria-label={label} type="number" step={key === "timeoutMs" ? "any" : 1} min={min} max={max} value={(settings[key] as number)/factor}
       onChange={e=>update({...settings,[key]:+e.target.value*factor})}/></Row>;
   const text = (key: keyof Settings, label:string, description?:string) => <Row label={label} description={description}>
     <input aria-label={label} value={settings[key] as string} required onChange={e=>update({...settings,[key]:e.target.value})}/></Row>;
   return <>
     {panel !== "automation" && <>
       {!native && <>{text('provider','模型提供方')}{text('model','模型名称')}</>}
+      {number('timeoutMs','任务最长执行时间（分钟）',1/60,1440,'超时后停止任务并保留记录',60000)}
       {number('concurrency','并发任务',1,4,'同时运行的任务数量')}
       {number('maxJobsPerBatch','每批任务上限',1,50,'单次批量派发的任务数量')}
     </>}
@@ -35,9 +36,9 @@ export function GlobalSettingsFields({settings,update,panel,native,hostPreset}: 
         value={settings.autoReview??false} change={autoReview=>update({...settings,autoReview})}/>
     </>}
     {panel !== "automation" && <details className="mw-preference-details"><summary>高级执行选项</summary>
-      {number('timeoutMs','超时时间（秒）',1,1800,'超过此时间的任务停止并保留记录',1000)}
       {number('triageMaxTokens','分诊 / PR 预检输出 Token 上限',500,8000)}
       <p className="mw-muted">分诊与预检实际额度取此项和仓库／全局输出上限的较小值；模型推理与计划草稿均需预算。默认 6000。</p>
+      <Row label="工具调用预算" description="0 表示按任务与范围自动分配；手动值为 10–1000。独立于输出 Token 和任务时限，接近上限会提示收尾。"><input aria-label="工具调用预算" type="number" min={0} max={1000} step={1} value={settings.toolCallLimit??0} onChange={e=>update({...settings,toolCallLimit:+e.target.value})}/></Row>
       {number('maxTokens','每次请求输出 Token 上限',500,32000,'单次输出上限不等于任务总费用上限')}
       {text('agentPreset','Harness Agent preset',`inherit 跟随宿主默认${hostPreset?`（${hostPreset}）`:''}，复用工具与 Skills`)}
       {text('permissionPreset','修复任务权限 preset','inherit 跟随宿主默认；调查与审查保持只读')}

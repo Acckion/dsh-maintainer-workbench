@@ -18,7 +18,8 @@ export function fingerprint(files: Record<string,string>, paths?: string[]): str
   return digest((paths ?? Object.keys(files)).slice().sort().map(p => [p, files[p] ?? null]));
 }
 export function scopeFingerprint(inventory: MaintenanceInventory, scope: string[]): string {
-  return fingerprint(inventory.files, [...new Set([...Object.keys(inventory.files).filter(p => inScope(p,scope)),...contextDependencies(inventory.files)])]);
+  const context=contextDependencies(inventory.files).filter(p=>!scope.length||!p.includes('/')||p.startsWith('.github/workflows/')||scope.some(target=>target.startsWith(p.slice(0,p.lastIndexOf('/')+1))));
+  return fingerprint(inventory.files, [...new Set([...Object.keys(inventory.files).filter(p => inScope(p,scope)),...context])]);
 }
 export function findingFingerprint(files: Record<string,string>, finding: Pick<MaintenanceFindingInput,'paths'|'dependencies'>): string {
   return fingerprint(files,[...new Set([...finding.paths,...finding.dependencies,...contextDependencies(files)])]);

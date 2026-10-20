@@ -466,7 +466,7 @@ body[data-ds-dark-theme]{
 .mw-final-review-nav .mw-text-button { font-size: 12px !important; }
 
 .mw-reader-tabbar{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0}.mw-reader-tabbar .mw-reader-tabs{min-width:0;flex:1}.mw-reader-stage-actions{display:flex;gap:8px;flex-shrink:0}.mw-reader-stage-actions .mw-button{padding:7px 11px;font-size:12px}@media(max-width:600px){.mw-reader-tabbar{flex-wrap:wrap;gap:4px}.mw-reader-tabbar .mw-reader-tabs{flex-basis:100%}.mw-reader-stage-actions{margin-left:auto;margin-bottom:8px}}
-.mw-task-filters{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}.mw-task-filters button{border:1px solid var(--mw-border,#dfe7e3);border-radius:6px;background:var(--mw-surface,white);color:var(--mw-muted,#63776c);padding:6px 9px;font:inherit;font-size:12px;cursor:pointer}.mw-task-filters button.active{background:var(--mw-selected,#e5f4ee);color:var(--mw-accent,#167963);border-color:var(--mw-border,#a9d5c6)}.mw-task-filters small{margin-left:4px}.mw-task-options{font-size:12px;margin-bottom:12px;color:var(--mw-muted,#657b70)}.mw-task-options label{display:flex;gap:6px;margin:10px 0}.mw-task-options input{width:auto}
+
 .mw-assistant{max-width:1040px;margin:auto;min-width:0}.mw-assistant-status{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px;border-bottom:1px solid var(--mw-border,#e2e9e5);padding:0 0 12px;margin-bottom:20px}.mw-assistant-status strong{color:var(--mw-text,#24745d)}.mw-assistant-status span{color:var(--mw-muted,#7b8c82)}.mw-assistant-intro{font-size:14px;color:var(--mw-muted,#63776c)}.mw-assistant-detail{border:0!important;width:100%!important;max-width:none!important;overflow:visible!important}.mw-assistant-detail>.mw-detail-header,.mw-assistant-detail>h2,.mw-assistant-detail>.mw-detail-meta,.mw-assistant-detail>.mw-detail-actions{display:none!important}.mw-assistant-detail>.mw-detail-scroll{padding:16px 0!important;overflow:visible}.mw-assistant-history .mw-task-row{width:100%}.mw-reader-agent{max-width:none}.mw-reader-embedded .mw-reader-stage-actions .mw-button{border:1px solid var(--mw-border,#dce7e0)}.mw-reader-stage-actions .mw-button.primary{background:var(--mw-accent-fill,#1c7b65);color:var(--mw-on-accent,white)}
 .mw-organize-main{min-width:0;padding:24px 28px;background:var(--mw-surface,white)}.mw-organize-heading{display:flex;gap:20px;justify-content:space-between;align-items:flex-start;margin-bottom:24px}.mw-organize-heading h2{font-size:20px;margin:0 0 8px}.mw-organize-heading p{font-size:13px;color:var(--mw-muted,#6f8378);line-height:1.6;margin:0}.mw-organize-heading .mw-button{flex-shrink:0}.mw-organize-main label,.mw-assistant-instructions label{display:block;font-size:13px;color:var(--mw-text,#496154)}.mw-organize-main textarea,.mw-assistant-instructions textarea{width:100%;box-sizing:border-box;border:1px solid var(--mw-border,#dce6df);border-radius:8px;padding:12px;font:inherit;margin:8px 0 16px}.mw-organize-sidebar .mw-task-row{width:100%;box-sizing:border-box}.mw-organize-sidebar .mw-task-row.focused{background:var(--mw-selected,#e5f3ed);border-left:3px solid var(--mw-focus,#25856c)}.mw-assistant .mw-triage-followup{margin-top:20px;padding-top:16px;border-top:1px solid var(--mw-border,#e0e8e3)}.mw-assistant .mw-response-draft{margin-top:18px}@media(max-width:740px){.mw-organize-heading{flex-wrap:wrap}.mw-organize-main{padding:18px}.mw-assistant-status{margin-bottom:14px}}
 .mw-operation-compact{position:relative;padding:9px 40px 9px 16px;margin-bottom:0;border-radius:0;border-width:0 0 1px;box-shadow:none}.mw-operation-compact summary{font-size:12px;color:var(--mw-text,#4c7563);cursor:pointer}.mw-operation-compact .mw-operation-items{margin-top:10px}.mw-operation-close{position:absolute;right:12px;top:6px;border:0;background:transparent;padding:5px;color:var(--mw-muted,#6d8277)}.mw-layout-tabs .mw-decision-row{grid-template-columns:minmax(0,1fr);width:100%;text-align:left}.mw-layout-tabs .mw-decision-row div{min-width:0}.mw-layout-tabs .mw-decision-row strong{display:block}.mw-assistant-history .mw-task-row{grid-template-columns:minmax(0,1fr);text-align:left}
@@ -486,7 +486,7 @@ body[data-ds-dark-theme]{
 .mw-issue-row .mw-row-status{width:100%;display:flex;flex-direction:row;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:7px;margin-top:6px}
 .mw-row-status .mw-triaged{display:inline-flex;align-items:center;gap:4px}
 .mw-list-panel .mw-toolbar{display:flex;flex-direction:row;flex-wrap:wrap;gap:8px;align-items:center}
-.mw-list-panel .mw-toolbar .mw-search{flex:1;min-width:0}
+.mw-list-panel .mw-toolbar .mw-search{flex:1;min-width:0;flex-direction:row}
 .mw-list-panel .mw-toolbar .mw-filter{flex-basis:100%;width:100%}
 .mw-filter-toggle{flex:none;width:34px;height:34px}
 .mw-filter-toggle.active{color:var(--green);background:var(--mw-surface-soft,#e8f4ef)}
@@ -959,7 +959,7 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 /* Repository uses the same split workspace, list rows and detail tabs as Issues/PRs. */
 .mw.mw-layout-tabs .mw-repository-browser{display:grid;grid-template-columns:280px minmax(0,1fr);gap:0;align-items:stretch;flex:1;min-height:0;height:100%;overflow:hidden}
 .mw .mw-repository-browser .mw-organize-sidebar{padding:0;border:0;border-right:1px solid var(--mw-border);border-radius:0;background:var(--mw-canvas);max-height:none;min-height:0;overflow:auto}
-.mw .mw-repository-browser .mw-organize-sidebar>.mw-toolbar{padding:12px;display:flex}
+.mw .mw-repository-browser .mw-organize-sidebar>.mw-toolbar{padding:10px 14px;display:flex}
 .mw .mw-repository-browser .mw-organize-sidebar .mw-task-row{width:100%;grid-template-columns:16px minmax(0,1fr)}
 .mw .mw-repository-browser .mw-organize-main{padding:0;background:var(--mw-canvas);min-height:0;display:flex;flex-direction:column;overflow:hidden}
 .mw .mw-repository-content{padding:20px 24px;overflow:auto;min-height:0;flex:1}
@@ -1031,7 +1031,7 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-facet-popover{position:fixed;inset:auto;margin:0;width:310px;max-width:calc(100vw - 32px);max-height:70dvh;overflow:auto;padding:14px;color:var(--ink)}
 .mw-facet-popover>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .mw-facet-popover>label{display:flex;flex-direction:column;gap:5px;margin-bottom:11px;font-size:12px}
-.mw-facet-popover select,.mw-facet-popover .mw-label-search{width:100%;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--mw-surface,white);color:var(--ink);padding:7px 9px;font-size:12px;box-sizing:border-box}
+.mw-facet-popover select,.mw-facet-popover .mw-label-search{margin:0;width:100%;min-width:0;border:1px solid var(--line);border-radius:6px;background:var(--mw-surface,white);color:var(--ink);padding:7px 9px;font-size:12px;box-sizing:border-box}
 .mw-facet-popover fieldset{margin:0 0 12px;padding:10px;border:1px solid var(--line);border-radius:7px;min-width:0}
 .mw-facet-popover legend{font-size:11px;color:var(--muted);padding:0 4px}
 .mw-label-options{max-height:150px;overflow:auto;padding:6px 0;margin-bottom:5px}
@@ -1055,3 +1055,35 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw .mw-repository-plan>.mw-repository-field{margin-top:16px}
 .mw .mw-maintenance-run-list{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
 .mw .mw-repository-browser .mw-task-row>div{overflow-wrap:anywhere;min-width:0}
+
+/* Maintenance scopes belong to the file sidebar, not the detail reader. */
+.mw .mw-repository-scopes{display:flex;gap:0;padding:0 8px;width:100%;border-bottom:1px solid var(--mw-border);background:var(--mw-canvas);overflow-x:auto;flex-shrink:0}
+.mw .mw-repository-scopes [role="tab"]{flex:1 0 auto;padding:14px 6px 12px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;white-space:nowrap;cursor:pointer}
+.mw .mw-repository-scopes [role="tab"]:hover{color:var(--ink);background:var(--mw-control-bg)}
+.mw .mw-repository-scopes [aria-selected="true"]{color:var(--mw-tab-accent);border-bottom-color:currentColor}
+.mw .mw-repository-scopes [role="tab"]:focus-visible{outline:2px solid var(--mw-focus,#25856c);outline-offset:-4px}
+@media(max-width:760px){.mw.mw-layout-tabs .mw-repository-browser{flex-direction:column}.mw .mw-repository-scopes{padding:0 8px}.mw .mw-repository-browser .mw-organize-sidebar,.mw .mw-repository-browser .mw-organize-main{flex:1;min-height:0}}
+
+/* Keep the file reader focused on content; check options belong to results. */
+.mw .mw-file-meta{display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding-bottom:12px;border-bottom:1px solid var(--mw-border);margin-bottom:20px}
+.mw .mw-file-meta details{margin:0;max-width:100%}.mw .mw-file-meta details[open]{flex-basis:100%}.mw .mw-file-meta p{margin-top:8px;overflow-wrap:anywhere}
+.mw .mw-file-meta>.mw-text-button{margin-left:auto;background:transparent;border:0;color:var(--mw-tab-accent);font:inherit;padding:4px 0}
+.mw .mw-check-summary{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border:1px solid var(--mw-border);border-radius:8px;padding:14px;margin-bottom:16px;font-size:13px}
+.mw .mw-check-summary small{display:block;margin-top:4px;color:var(--muted)}.mw .mw-check-summary p{margin-top:8px;overflow-wrap:anywhere}.mw .mw-check-summary.warn{border-left:3px solid var(--mw-danger-text,#c67353)}
+.mw .mw-check-options{padding-bottom:12px;border-bottom:1px solid var(--mw-border)}.mw .mw-check-options label{margin-top:12px}.mw .mw-check-options textarea{min-height:72px;max-height:240px;resize:vertical}
+.mw .mw-repository-browser .mw-reader-header h2{overflow-wrap:anywhere}
+@media(max-width:760px){.mw .mw-check-summary{flex-direction:column}.mw .mw-file-meta{gap:8px}}
+
+.mw-filter-hint{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px!important}
+.mw-repository-filter-summary{gap:8px;min-width:0}
+.mw-repository-filter-summary>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mw-repository-filter-summary>button{flex-shrink:0}
+
+.mw-task-filter-summary{gap:8px;align-items:flex-start}
+.mw-task-filter-summary>span{min-width:0;overflow-wrap:anywhere;align-self:center}
+.mw-task-filter-summary>button{flex-shrink:0}
+
+.mw-inventory-notice{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:14px 16px;margin-bottom:16px;background:var(--mw-warning-surface,var(--mw-control-bg));border:1px solid var(--mw-border);border-left:3px solid var(--mw-warning-text,#b39351);border-radius:8px;font-size:13px}
+.mw-inventory-notice>div{min-width:0}.mw-inventory-notice p{margin-top:6px;overflow-wrap:anywhere}.mw-inventory-notice details{margin-top:8px;color:var(--muted)}.mw-inventory-notice summary,.mw-previous-check summary{cursor:pointer}.mw-inventory-notice>button{flex-shrink:0}
+.mw-previous-check{margin-top:10px;color:var(--muted);font-size:12px}.mw-previous-check p{margin-top:6px}
+@media(max-width:760px){.mw-inventory-notice{flex-direction:column;gap:10px}.mw-check-summary>.mw-repository-actions{width:100%}}

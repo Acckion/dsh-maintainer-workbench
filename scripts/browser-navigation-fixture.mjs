@@ -26,7 +26,7 @@ async function pageFor(width,{state=snapshot(),jobsGate,reviewGate,reviewRespons
   return r.fulfill({json:{ok:true}});
  });await p.goto(process.env.WORKBENCH_TEST_URL||'http://127.0.0.1:4317/preview.html');return p;
 }
-async function openTasks(p,filter){await p.getByRole('button',{name:'Tasks'}).click();await p.getByLabel('任务状态筛选').getByRole('button',{name:filter==='all'?/^全部/:/^需要我处理/}).click();}
+async function openTasks(p,filter){await p.getByRole('button',{name:/^Tasks(?:\s|$)/}).click();await p.locator('#mw-list-tasks').getByRole('button',{name:'展开筛选',exact:true}).click();await p.getByLabel('任务状态筛选',{exact:true}).selectOption(filter);await p.keyboard.press('Escape');}
 async function panel(p,width,name){
  if(width>760)await p.getByRole('button',{name:'处理流程',exact:true}).click();else await p.getByRole('combobox',{name:'AI 功能',exact:true}).selectOption('overview');
  const flow=p.getByRole('region',{name:'事项处理流程',exact:true});

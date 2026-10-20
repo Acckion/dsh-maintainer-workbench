@@ -3,6 +3,7 @@ import type { Store } from "../core/store.ts";
 import type { HostStatus, Job, JobKind, Repo, Runner } from "../core/types.ts";
 import type { WorkspaceManager } from "../infrastructure/git/workspace-manager.ts";
 export interface EnqueueOptions {
+  maintenanceScope?: string[];
   sourceJobId?: string;
   instructions?: string;
   forceNew?: boolean;

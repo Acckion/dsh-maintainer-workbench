@@ -1,6 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { Job } from '../../core/types.ts';
-import { digest, findingFingerprint, assetFor } from '../../core/maintenance.ts';
+import { digest, findingFingerprint, assetFor, scopeFingerprint, fingerprint } from '../../core/maintenance.ts';
 import { maintenanceReportSchema, inScope, safeRepoPath, type MaintenanceFinding, type MaintenanceInventory, type MaintenanceScan, type MaintenanceSnapshot, type MaintenanceDecision, type MaintenancePlan } from '../../domain/maintenance.ts';
 /** Durable evidence and decisions. Execution state always comes from jobs. */
 export class MaintenanceRepository {
@@ -19,7 +19,7 @@ export class MaintenanceRepository {
   private saveFinding(value:MaintenanceFinding) {this.db.prepare('INSERT INTO maintenance_findings(id,repoId,data) VALUES(?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(value.id,value.repoId,JSON.stringify(value));}
   snapshot(repoId:string):MaintenanceSnapshot {
     const inventory=this.inventory(repoId);
-    return {inventory:inventory?{...inventory,files:Object.fromEntries(inventory.assets.map(a=>[a.path,a.oid]))}:undefined,scans:this.rows<MaintenanceScan>('maintenance_scans',repoId).map(({inventoryFiles,...s})=>({...s,inventoryFiles:{},documents:s.documents?.map(d=>({...d,current:!!inventory&&findingFingerprint(inventory.files,{paths:[d.path],dependencies:d.relatedPaths})===findingFingerprint(inventoryFiles,{paths:[d.path],dependencies:d.relatedPaths})}))})),findings:this.rows<MaintenanceFinding>('maintenance_findings',repoId).map(f=>({...f,stale:this.stale(f,inventory)}))};
+    return {inventory:inventory?{...inventory,files:Object.fromEntries(inventory.assets.map(a=>[a.path,a.oid]))}:undefined,scans:this.rows<MaintenanceScan>('maintenance_scans',repoId).map(({inventoryFiles,...s})=>({...s,current:s.pr?undefined:!!inventory&&scopeFingerprint(inventory,s.scope)===s.fingerprint&&(!s.dependencies?.length||fingerprint(inventory.files,s.dependencies)===fingerprint(inventoryFiles,s.dependencies)),inventoryFiles:{},documents:s.documents?.map(d=>({...d,current:!!inventory&&findingFingerprint(inventory.files,{paths:[d.path],dependencies:d.relatedPaths})===findingFingerprint(inventoryFiles,{paths:[d.path],dependencies:d.relatedPaths})}))})),findings:this.rows<MaintenanceFinding>('maintenance_findings',repoId).map(f=>({...f,stale:this.stale(f,inventory)}))};
   }
   private stale(f:MaintenanceFinding,inventory?:MaintenanceInventory):boolean {
     if(!f.pr)return !inventory || findingFingerprint(inventory.files,f)!==f.fingerprint;
@@ -37,9 +37,9 @@ export class MaintenanceRepository {
   savePlan(value:MaintenancePlan) {this.db.prepare('INSERT INTO maintenance_plans(id,repoId,data) VALUES(?,?,?) ON CONFLICT(id) DO NOTHING').run(value.id,value.repoId,JSON.stringify(value));}
   plan(id:string):MaintenancePlan|undefined {const r=this.db.prepare('SELECT data FROM maintenance_plans WHERE id=?').get(id);return r?JSON.parse(String(r.data)):undefined;}
   observeJob(job:Job) {
-    const scan=this.scanByJob(job.id);if(!scan || scan.state!=='pending')return;
-    if(['failed','cancelled'].includes(job.status)){this.saveScan({...scan,state:job.status as 'failed'|'cancelled',summary:job.error,complete:false});return;}
-    if(job.status!=='completed')return;
+    const scan=this.scanByJob(job.id);if(!scan || scan.state!=='pending'&&!(job.budgetStopped&&scan.state==='cancelled'))return;
+    if(['failed','cancelled'].includes(job.status)&&!job.budgetStopped){this.saveScan({...scan,state:job.status as 'failed'|'cancelled',summary:job.error,complete:false});return;}
+    if(job.status!=='completed'&&!job.budgetStopped)return;
     const artifact=job.artifact;
     const parsed=maintenanceReportSchema.safeParse(artifact?.stage==='investigate'?artifact.maintenance:undefined);
     if(!parsed.success){this.saveScan({...scan,state:'partial',complete:false,summary:artifact?.summary ?? '报告未提供结构化仓库检查结果；原始报告仍可查看。'});return;}
@@ -60,7 +60,7 @@ export class MaintenanceRepository {
     }
     // Absence resolves only after a complete, unblocked recheck covering every affected path.
     const expected=Object.keys(scan.inventoryFiles).filter(p=>inScope(p,scan.scope)&&(scan.scope.includes(p)||!!assetFor(p,scan.inventoryFiles[p])&&assetFor(p,scan.inventoryFiles[p])!.domain!=='config'));
-    const complete=scan.inventoryComplete!==false && report.complete && (artifact?.stage==='investigate' && !artifact.blockers.length) && checked.length>0 && expected.every(p=>checked.includes(p));
+    const complete=!job.budgetStopped&&scan.inventoryComplete!==false && report.complete && (artifact?.stage==='investigate' && !artifact.blockers.length) && checked.length>0 && expected.every(p=>checked.includes(p));
     if(complete)for(const old of prior)if(old.pr?.issueId===scan.pr?.issueId && !found.has(old.id) && (this.scanByJob(old.jobId)?.createdAt ?? old.createdAt)<=scan.createdAt && old.decision!=='resolved' && old.paths.every(p=>checked.includes(p)))this.saveFinding({...old,decision:'resolved',reason:'完整复查未再发现此问题',updatedAt:at,jobId:job.id,scanId:scan.id,revision:scan.revision,fingerprint:findingFingerprint(scan.inventoryFiles,old),history:[...old.history,{at,action:'resolved',reason:'完整复查未再发现此问题',jobId:job.id}].slice(-100)});
     this.saveScan({...scan,state:complete?'completed':'partial',complete,checkedPaths:checked,dependencies:[...new Set([...report.checkedPaths,...report.findings.flatMap(f=>f.dependencies),...(report.documents??[]).flatMap(d=>d.relatedPaths)])],documents:report.documents?.filter(d=>safeRepoPath(d.path)&&d.relatedPaths.every(safeRepoPath)&&checked.includes(d.path)).map(d=>({...d,oid:scan.inventoryFiles[d.path]})),summary:artifact?.summary});
   }

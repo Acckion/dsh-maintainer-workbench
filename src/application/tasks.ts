@@ -32,6 +32,7 @@ const modelChoiceSchema = z.object({
   reasoningEffort: z.string().min(1).max(100).optional(),
 }).strict();
 export const settingsSchema = z.object({
+  toolCallLimit: z.number().int().min(0).max(1000).refine(v=>v===0||v>=10).default(0),
   nativeDefaultModel: modelChoiceSchema.optional(),
   stageModels: z.record(z.enum(kinds), modelChoiceSchema).default({}),
   syncLimit: z.number().int().min(0).max(1000000).default(1000),
@@ -40,7 +41,7 @@ export const settingsSchema = z.object({
   triageMaxTokens: z.number().int().min(500).max(8000).default(defaultTriageMaxTokens),
   concurrency: z.number().int().min(1).max(4),
   maxJobsPerBatch: z.number().int().min(1).max(50),
-  timeoutMs: z.number().int().min(1000).max(1800000),
+  timeoutMs: z.number().int().min(1000).max(86400000),
   provider: z.string().min(1).max(100),
   model: z.string().min(1).max(100),
   maxTokens: z.number().int().min(500).max(32000),
@@ -251,6 +252,7 @@ export class TaskService extends ServiceBase {
         const id = randomUUID();
         const job: Job = {
           ...(environmentSource ? {worktree:environmentSource.worktree,branch:environmentSource.branch,environmentRecovery:{sourceJobId:environmentSource.id,baseSha:environmentSource.baseSha,patchHash:environmentSource.patchSha256!}} : {}),
+          maintenanceScope: options.maintenanceScope,
           workflowRunId: options.workflowRunId,
           goal: options.goal,
           goalId: options.goal ? (options.goalId ?? id) : undefined,
@@ -324,6 +326,7 @@ export class TaskService extends ServiceBase {
     if (["queued", "running"].includes(job.status) || this.active.has(id))
       throw new Error("任务仍在执行，请结束后重新运行");
     const result = this.hooks.enqueue([job.issueId], job.kind, {
+      maintenanceScope:job.maintenanceScope,
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
       goal: job.goal,
@@ -384,6 +387,7 @@ export class TaskService extends ServiceBase {
       return { created: [recovered.id], reused: [] };
     }
     return this.hooks.enqueue([job.issueId], job.kind, {
+      maintenanceScope:job.maintenanceScope,
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
       goal: job.goal,
@@ -404,6 +408,7 @@ export class TaskService extends ServiceBase {
       if (!waits.length || waits.some((w) => w.state !== "satisfied"))
         throw new Error("请先准备仓库环境");
       return this.hooks.enqueue([job.issueId], job.kind, {
+        maintenanceScope:job.maintenanceScope,
         sourceJobId: job.sourceJobId,
         environmentSourceJobId: job.kind==='validate' && job.worktree && job.patchSha256 ? job.id : undefined,
         forceNew: true,

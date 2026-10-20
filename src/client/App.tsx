@@ -79,6 +79,7 @@ import { StageProgress } from "./StageProgress.tsx";
 import { StageExecutionDetails } from "./StageExecutionDetails.tsx";
 import { StageResult } from "./StageResult.tsx";
 import { taskGroups, type TaskFilter } from "./task-presentation.ts";
+import {TaskFilter as TaskFilters,taskFilterLabels} from "./TaskFilter.tsx";
 export function App({
   openSession,
   host = false,
@@ -156,7 +157,7 @@ export function App({
   const search = pageSearch[searchKey] ?? "";
   useEffect(() => {
     setListLimit(50);
-  }, [page, repoId, search, filter, type, inboxFacets]);
+  }, [page, repoId, search, filter, type, inboxFacets, taskFilter, showQuickTasks]);
 
   const setSearchValue = (value: string) =>
     setPageSearch((values) => ({ ...values, [searchKey]: value }));
@@ -466,6 +467,9 @@ export function App({
       ),
     );
   const listJobs = visibleGroups.map((group) => group.latest);
+  const activeTaskFilter=page==='reviews'?'attention':taskFilter;
+  const taskCounts=Object.fromEntries(Object.keys(taskFilterLabels).map(value=>[value,groups.filter(group=>value==='all'||group.state===value).length])) as Record<TaskFilter,number>;
+  const decisionIssues=activeTaskFilter==='attention'?issues.filter(i=>i.state==='open'&&!i.origin&&(["decision","needs_info"].includes(i.processing?.phase??'')||i.informationRequests?.some(r=>r.state==='reply_received'))&&`${i.title} ${i.number}`.toLowerCase().includes(search.toLowerCase())):[];
   async function openPublishPreview(
     publishKind: NonNullable<typeof publishAction>,
     targetId?: string,
@@ -628,7 +632,7 @@ export function App({
                   }
                   setFocused(undefined);
                   setJobFocus(undefined);
-                  setSearchValue("");
+                  if (page !== "tasks" && page !== "reviews") setSearchValue("");
                   setDetailOpen(false);
                 }}
               >
@@ -953,78 +957,12 @@ export function App({
                     tabIndex={-1}
                     className="mw-list-panel"
                   >
-                    <div className="mw-panel-top">
-                      <h3>
-                        {"任务"} <span>{listJobs.length}</span>
-                      </h3>
-                      <div
-                        className="mw-task-filters"
-                        aria-label="任务状态筛选"
-                      >
-                        {(
-                          [
-                            ["attention", "需要我处理"],
-                            ["running", "正在运行"],
-                            ["completed", "已完成"],
-                            ["failed", "失败 / 已停止"],
-                            ["all", "全部"],
-                          ] as const
-                        ).map(([value, label]) => (
-                          <button
-                            className={taskFilter === value ? "active" : ""}
-                            key={value}
-                            onClick={() => {
-                              setTaskFilter(value);
-                              if (page === "reviews") setPage("tasks");
-                            }}
-                          >
-                            {label}{" "}
-                            <small>
-                              {
-                                groups.filter(
-                                  (g) => value === "all" || g.state === value,
-                                ).length
-                              }
-                            </small>
-                          </button>
-                        ))}
-                      </div>
-                      <details className="mw-task-options">
-                        <summary>显示选项</summary>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={showQuickTasks}
-                            onChange={(e) =>
-                              setShowQuickTasks(e.target.checked)
-                            }
-                          />
-                          包含快速分诊与预检
-                        </label>
-                      </details>
-                      <label className="mw-search">
-                        <Search size={16} />
-                        <input
-                          aria-label="搜索任务"
-                          placeholder="搜索任务…"
-                          value={search}
-                          onChange={(e) => setSearchValue(e.target.value)}
-                        />
-                      </label>
+                    <div className="mw-toolbar">
+                      <label className="mw-search"><Search size={16}/><input aria-label="搜索任务" placeholder="搜索任务…" value={search} onChange={e=>setSearchValue(e.target.value)}/></label>
+                      <TaskFilters value={activeTaskFilter} counts={taskCounts} onChange={value=>{setTaskFilter(value);if(page==='reviews')setPage('tasks');}} includeQuick={showQuickTasks} onIncludeQuickChange={setShowQuickTasks}/>
                     </div>
-                    {taskFilter === "attention" &&
-                      issues
-                        .filter(
-                          (i) =>
-                            i.state === "open" &&
-                            !i.origin &&
-                            (["decision", "needs_info"].includes(
-                              i.processing?.phase ?? "",
-                            ) ||
-                              i.informationRequests?.some(
-                                (r) => r.state === "reply_received",
-                              )),
-                        )
+                    <div className="mw-filter-summary mw-task-filter-summary" aria-live="polite"><span>{listJobs.length} 个任务{decisionIssues.length>0&&` · ${decisionIssues.length} 个待确认事项`}{activeTaskFilter!=='all'&&` · ${taskFilterLabels[activeTaskFilter]}`}{showQuickTasks&&' · 含快速任务'}</span>{(search||activeTaskFilter!=='all'||showQuickTasks)&&<button className="mw-text-button" onClick={()=>{setSearchValue('');setTaskFilter('all');setShowQuickTasks(false);if(page==='reviews')setPage('tasks');}}>重置</button>}</div>
+                    {decisionIssues
                         .map((i) => (
                           <button
                             className="mw-task-row mw-decision-row"
@@ -1095,7 +1033,7 @@ export function App({
                     ) : (
                       <Empty
                         title={
-                          page === "reviews"
+                          decisionIssues.length ? "暂无其他匹配任务" : groups.length ? "没有匹配的任务" : page === "reviews"
                             ? "暂时没有待审核结果"
                             : "还没有维护任务"
                         }

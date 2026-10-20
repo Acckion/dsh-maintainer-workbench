@@ -79,7 +79,7 @@ test('format recovery creates a tool-free session and never reruns implementatio
   assert.ok(sessions.length);assert.ok(sessions.every(id=>id==='maintainer-format-test'));
 });
 
-test('native docs loop stops model requests and keeps the specific blocker without implementation retry', async () => {
+test('native docs loop permits only bounded report closure and keeps the blocker without implementation retry', async () => {
   const root=await mkdtemp(join(tmpdir(),'maintainer-loop-'));
   const store=new Store(':memory:');seedFixture(store);
   let turns=0, disposed=false;
@@ -99,9 +99,9 @@ test('native docs loop stops model requests and keeps the specific blocker witho
           try {
             const execution={name:'bash',arguments:{command:"grep -nE '^#{1,4} ' AGENTS.md"}};
             for(let i=0;i<4;i++) guards.forEach(g=>g(execution));
-            const stream=listeners.get('llm/stream')({sessionId:options.sessionId},()=>{throw Error('Blocked request reached model');});
+            const stream=listeners.get('llm/stream')({sessionId:options.sessionId},async function*(){yield {type:'finish',reason:{kind:'completed'}};});
             const chunks=[];for await(const chunk of stream)chunks.push(chunk);
-            assert.equal(chunks[0].reason.failure.code,'WORKBENCH_TOOL_LOOP');
+            assert.equal(chunks[0].reason.kind,'completed');
             listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:chunks[0].reason}});
           } catch(error) {listeners.get('session/event')({id:options.sessionId},{type:'turn/end',data:{reason:{kind:'error',failure:{message:String(error)}}}});}
         });
@@ -111,7 +111,7 @@ test('native docs loop stops model requests and keeps the specific blocker witho
   try {
     const issue=store.issues()[0],repo=store.repos()[0],now=new Date().toISOString();
     await assert.rejects(harnessRunner(ctx,new GitHub('',async()=>Response.json([])))({repo,issue,related:[],job:{id:'loop-test',repoId:repo.id,issueId:issue.id,kind:'docs',status:'running',revision:'r',baseSha:'a'.repeat(40),issueSnapshot:issue,attempt:1,createdAt:now,updatedAt:now,worktree:root},settings:store.settings(),signal:new AbortController().signal,progress:()=>{}}),/重复工具调用阻塞/);
-    assert.equal(turns,1);assert.equal(disposed,true);assert.equal(listeners.size,0);
+    assert.equal(turns,2);assert.equal(disposed,true);assert.equal(listeners.size,0);
   } finally {store.close();await rm(root,{recursive:true,force:true});}
 });
 
