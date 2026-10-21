@@ -16,7 +16,7 @@ export interface WorkflowRun {
     | "cancelled"
     | "waiting_author";
   currentJobId?: string;
-  checkpoint?: { kind: JobKind; sourceJobId?: string; instructions: string };
+  checkpoint?: { kind: JobKind; sourceJobId?: string; instructions: string; environmentSourceJobId?: string };
   completedJobIds: string[];
   reason: string;
   startedAt: string;

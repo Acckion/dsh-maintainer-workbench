@@ -4,6 +4,7 @@ import { validationPromptHandoff, nativeValidationGuidance, validationTools, val
 import { artifactPrompt, artifactSchemas } from '../src/core/artifacts.ts';
 import { reconcileTestExecutions } from '../src/core/execution-links.ts';
 import type { Job, ExecutionRecord } from '../src/core/types.ts';
+import { requiredValidationCommands, validationChecks, scopedValidationReport } from '../src/core/validation-scope.ts';
 
 test('validation projects only supplied patch hints without historical review evidence or blockers', () => {
  const fix=artifactSchemas.fix.parse({schemaVersion:1,stage:'fix',summary:'fix',coverage:'old proof',evidence:[],nextSteps:[],responseDraft:'committed',changes:['bound'],acceptanceCriteria:['chunks'],limitations:['old blocker'],tests:[{command:'node probe',status:'passed',output:'old output',executionId:'call_old'}]});
@@ -46,4 +47,27 @@ test('document validation uses a real check scope by default and preserves expli
  assert.match(validationInstructions(undefined, 'docs')!, /锚点/);
  assert.equal(validationInstructions('custom scope', 'docs'), 'custom scope');
  assert.equal(validationInstructions('', 'fix'), '');
+});
+
+test('legacy concrete checks retain exact entry and scope without inventing whole-repo requirements',()=>{
+ const command='pnpm test src/utils/chunk-items.test.ts --maxWorkers=1';
+ const gap={id:'project-tests',kind:'system_check' as const,status:'pending' as const,blocks:['validate' as const],summary:'Vitest、构建与类型检查未执行',resolution:`执行 \`${command}\`，并记录构建与类型检查结果`,sources:[]};
+ const job={sourceJobId:'review',handoff:[{id:'review',kind:'review',artifact:{stage:'review',gaps:[gap]}}]} as unknown as Job;
+ assert.deepEqual(validationChecks(gap),[command]);assert.deepEqual(requiredValidationCommands(job),[command]);
+ assert.equal(validationCommandBlocker('bash',{command},job),undefined);
+ for(const extra of ['pnpm build','pnpm tsgo:core','node --import ./scripts/tsx.mjs scripts/test-projects.mts test src/utils/chunk-items.test.ts --maxWorkers=1','node --import ./scripts/tsx.mjs scripts/build-all.mts',command+' test'])
+  assert.match(validationCommandBlocker('bash',{command:extra},job)!,/指定命令/);
+ assert.equal(validationCommandBlocker('bash',{command:'node --version; pnpm --version'},job),undefined);
+ assert.equal(validationCommandBlocker('bash',{command:'pnpm build'},{...job,instructions:'维护者明确要求 pnpm build'}),undefined);
+ const typed={...gap,checks:[command,'pnpm build']};assert.deepEqual(validationChecks(typed),typed.checks);
+ assert.deepEqual(validationChecks({...gap,kind:'environment',checks:['pnpm install --frozen-lockfile',command]}),[command]);
+ const typedJob={...job,handoff:[{...job.handoff![0],artifact:{stage:'review',gaps:[typed]}}]} as unknown as Job;
+ assert.equal(validationCommandBlocker('bash',{command:'pnpm build'},typedJob),undefined);
+ const report=artifactSchemas.validate.parse({schemaVersion:1,stage:'validate',summary:'check',coverage:'scope',environment:'owned',evidence:[],nextSteps:[],responseDraft:'',blockers:[],tests:[{command,status:'passed',output:'PASS'},{command:'pnpm build',status:'not_run',output:'host rejected expansion'}]});
+ const scoped=scopedValidationReport(report,job);
+ assert.equal('tests' in scoped&&scoped.tests.length,1);assert.match(scoped.evidence.at(-1)!.source,/范围外/);
+ const mandatory=scopedValidationReport(report,typedJob);assert.equal('tests' in mandatory&&mandatory.tests.length,2);
+ for(const extra of [{command:'pnpm build',status:'failed' as const,output:'failure'},{command:'pnpm build',status:'not_run' as const,output:'attempted',executionId:'current:1'},{command,status:'not_run' as const,output:'missing dependencies'}]){
+  const original={...report,tests:[extra]};const kept=scopedValidationReport(original,job);assert.equal('tests'in kept&&kept.tests.length,1);
+ }
 });

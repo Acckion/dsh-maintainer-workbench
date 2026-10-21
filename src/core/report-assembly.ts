@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { artifactSchemas, findingSchema, parseArtifact, emptyInputRequest, type Artifact } from './artifacts.ts';
 import { ReportParseError } from './execution-errors.ts';
 import type { ExecutionRecord, Job, JobKind } from './types.ts';
+import { executionOutcome } from './execution-outcome.ts';
 
 export type ReportContext = Pick<Job, 'sessionId' | 'baseSha' | 'worktree' | 'patchSha256' | 'executionRecords'>;
 const sourceRef = z.object({ executionId: z.string().min(1).max(200), path: z.string().min(1).max(6000), line: z.number().int().positive(), quote: z.string().min(1).max(6000).optional() });
@@ -61,8 +62,9 @@ export function assembleReport(kind: JobKind, value: unknown, context?: ReportCo
       output: `${test.output ?? ''}\n宿主无法为引用 ${test.executionId} 找到同会话、同版本的工具记录，已降级为 not_run。`,
     };
     if (!record.command || test.command !== undefined && test.command.trim() !== record.command.trim()) throw new ReportParseError('检查引用与实际执行命令不符', 'schema');
-    const status = test.status === 'not_run' || record.signal || record.exitCode === null
-      ? 'not_run' : test.status === 'failed' || record.isError || record.exitCode !== 0 ? 'failed' : 'passed';
+    const outcome = executionOutcome(record);
+    const status = test.status === 'not_run' || outcome === 'not_run'
+      ? 'not_run' : test.status === 'failed' || outcome === 'failed' ? 'failed' : 'passed';
     return { command: record.command, status, output: record.output, executionId: record.id };
   });
   if (kind === 'review') {

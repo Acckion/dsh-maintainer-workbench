@@ -268,6 +268,7 @@ export class Orchestration {
     sourceJobId?: string,
     feedback = "",
     forceNew = false,
+    environmentSourceJobId?: string,
   ) {
     const run = issue.orchestration!.run!;
     if (
@@ -290,13 +291,14 @@ export class Orchestration {
       ...issue.orchestration,
       run: {
         ...run,
-        checkpoint: { kind, sourceJobId, instructions },
+        checkpoint: { kind, sourceJobId, instructions, environmentSourceJobId },
         currentJobId: undefined,
       },
     });
     try {
       const result = this.wb.enqueue([issue.id], kind, {
         sourceJobId,
+        environmentSourceJobId,
         instructions,
         workflowRunId: run.id,
         forceNew,
@@ -653,6 +655,7 @@ export class Orchestration {
         job.sourceJobId,
         "维护者解除阻塞后重新执行验证，旧失败报告保留。",
         true,
+        job.environmentRecovery?.sourceJobId,
       );
     else if (job?.kind === "docs" || job?.kind === "fix")
       return this.schedule(updated, "validate", job.id);
@@ -663,6 +666,9 @@ export class Orchestration {
         updated,
         run.checkpoint.kind,
         run.checkpoint.sourceJobId,
+        run.checkpoint.instructions,
+        false,
+        run.checkpoint.environmentSourceJobId,
       );
     return { created: [], reused: [] };
   }
@@ -928,7 +934,7 @@ export class Orchestration {
       if (job && run.completedJobIds.includes(job.id)) this.advance(issue, job);
       else if (job) this.completed(job);
       else if (run.checkpoint)
-        this.schedule(issue, run.checkpoint.kind, run.checkpoint.sourceJobId);
+        this.schedule(issue, run.checkpoint.kind, run.checkpoint.sourceJobId,run.checkpoint.instructions,false,run.checkpoint.environmentSourceJobId);
     }
   }
 }

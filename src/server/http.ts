@@ -73,6 +73,10 @@ export function handler(
         send(res, 200, await workbench.githubConnection());
         return;
       }
+      if(req.method==='GET'&&path==='/environment/log') {
+        const log=await workbench.environmentLog(z.string().min(1).parse(url.searchParams.get('id')));
+        res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Cache-Control':'no-store'});res.end(log);return;
+      }
       if (req.method === "GET" && path === "/item-detail") {
         const p = z
           .object({
@@ -329,6 +333,10 @@ export function handler(
           .parse(input);
         send(res, 200, workbench.resume(p.id));
         return;
+      }
+      if(path==='/environment/prepare'||path==='/environment/recheck') {
+        const p=z.object({id:z.string(),expectedVersion:z.number().int().nonnegative()}).strict().parse(input);
+        send(res,200,path==='/environment/prepare'?workbench.prepareEnvironment(p.id,p.expectedVersion):workbench.recheckEnvironment(p.id,p.expectedVersion));return;
       }
       if (path === "/sync-all") {
         const names = [

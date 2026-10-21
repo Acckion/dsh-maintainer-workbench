@@ -299,3 +299,24 @@ for(const drift of [false,true]) test(`validation environment recovery retains p
  if(drift){assert.equal(recovered.status,'failed');assert.match(recovered.error!,/版本或补丁已变化/);}
  else {assert.equal(recovered.artifact?.stage==='validate' && recovered.artifact.tests[0].status,'passed');assert.equal(recovered.status,'completed');}
 });
+
+for (const drift of [false, true]) test(`repeated failed environment retries retain the workspace and reject drift: ${drift}`, async t => {
+ let readyCalls=0;
+ const f=await fixture(t,async({job,issue})=>{
+  const ready=await readFile(join(job.worktree!,'node_modules','ready'),'utf8').catch(()=>undefined);
+  if(ready){readyCalls++;throw new Error('temporary GitHub 401');}
+  return {artifact:{schemaVersion:1 as const,stage:'validate' as const,summary:'缺依赖',coverage:'check',evidence:[],nextSteps:[],responseDraft:'',environment:'缺依赖',tests:[],blockers:['缺依赖'],gaps:[{id:'deps',kind:'environment' as const,summary:'缺依赖',status:'pending' as const,blocks:['validate' as const],resolution:'准备依赖',sources:[]}]},result:fixtureAnalysis(issue,'validate'),engine:'fixture'};
+ });
+ await writeFile(join(f.store.repos()[0].localPath,'.git','info','exclude'),'node_modules/\n');
+ f.workbench.enqueue([f.store.issues()[0].id],'validate');
+ const waiting=await f.run();assert.equal(waiting.status,'waiting_environment');
+ await mkdir(join(waiting.worktree!,'node_modules'));await writeFile(join(waiting.worktree!,'node_modules','ready'),'ready');
+ f.workbench.processing.environmentReady(waiting.repoId);f.workbench.resume(waiting.id);
+ const failed=await f.run();assert.equal(failed.status,'failed');
+ if(drift)await writeFile(join(waiting.worktree!,'value.txt'),'drift\n');
+ f.workbench.retry(failed.id);const retry=await f.run();
+ assert.equal(retry.worktree,waiting.worktree);assert.deepEqual(retry.environmentRecovery,failed.environmentRecovery);
+ assert.equal(retry.status,'failed');
+ if(drift){assert.match(retry.error!,/版本或补丁已变化/);assert.equal(readyCalls,1);}
+ else {assert.equal(readyCalls,2);f.workbench.retry(retry.id);const next=await f.run();assert.equal(next.worktree,waiting.worktree);assert.deepEqual(next.environmentRecovery,failed.environmentRecovery);assert.equal(readyCalls,3);}
+});

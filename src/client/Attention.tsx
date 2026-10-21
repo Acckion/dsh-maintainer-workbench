@@ -79,6 +79,7 @@ export function RepositoryPolicy({
     syncIntervalMinutes: defaults.syncIntervalMinutes,
     timeoutMs: defaults.timeoutMs,
     maxTokens: defaults.maxTokens,
+    environment: repo?.policy?.environment ?? {mode:'manual' as 'manual'|'automatic',allowNetwork:false,allowScripts:false,scope:'root' as 'root'|'workspace',binDirectory:'',timeoutMs:180000},
   });
   const identity = JSON.stringify(value);
   const initial = React.useRef(identity), attempted = React.useRef(identity);
@@ -108,6 +109,13 @@ export function RepositoryPolicy({
     <Toggle label="自动分诊新增或更新的 Issue" description="" value={value.autoTriage} change={autoTriage=>setValue({...value,autoTriage})}/>
     <Toggle label="自动快速预检新增或更新的 PR" description="" value={value.autoPreflight} change={autoPreflight=>setValue({...value,autoPreflight})}/>
     <Toggle label="自动审查 PR" description="同步后自动预检并审查就绪的 PR；只读，结果保存" value={value.autoReview} change={autoReview=>setValue({...value,autoReview})}/>
+    <h4>验证环境</h4>
+    <Toggle label="自动准备验证工作区依赖" description="先检查运行时和锁文件；在独立工作区准备成功后自动验证。事项明确禁止安装时仍需本次授权。" value={value.environment.mode==='automatic'} change={enabled=>setValue({...value,environment:{...value.environment,mode:enabled?'automatic':'manual'}})}/>
+    <Toggle label="允许下载依赖" description="关闭时仅使用本地缓存，缓存不足会显示具体原因。" value={value.environment.allowNetwork} change={allowNetwork=>setValue({...value,environment:{...value.environment,allowNetwork}})}/>
+    <Toggle label="允许安装脚本" description="允许依赖和仓库的生命周期脚本；默认关闭。不会运行 pnpmfile。" value={value.environment.allowScripts} change={allowScripts=>setValue({...value,environment:{...value.environment,allowScripts}})}/>
+    <Row label="依赖准备范围"><select aria-label="依赖准备范围" disabled={busy} value={value.environment.scope} onChange={e=>setValue({...value,environment:{...value.environment,scope:e.target.value as 'root'|'workspace'}})}><option value="root">根项目</option><option value="workspace">整个工作区</option></select></Row>
+    <Row label="运行时工具目录"><input aria-label="运行时工具目录" disabled={busy} value={value.environment.binDirectory} placeholder="留空使用宿主已配置的 Node 和包管理器" onChange={e=>setValue({...value,environment:{...value.environment,binDirectory:e.target.value}})}/></Row>
+    <Row label="环境准备时限（秒）"><input type="number" aria-label="环境准备时限（秒）" min={1} max={600} disabled={busy} value={value.environment.timeoutMs/1000} onChange={e=>setValue({...value,environment:{...value.environment,timeoutMs:Number(e.target.value)*1000}})}/></Row>
     {number("syncLimit","同步记录上限（0 表示无上限）",0,1000000)}
     {number("syncIntervalMinutes","同步间隔（分钟，0 关闭）",0,1440)}
     <details className="mw-preference-details"><summary>高级执行选项</summary>
