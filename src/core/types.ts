@@ -126,6 +126,7 @@ export interface ToolDiagnostics {
   validationRepair?: { attempts: number; reason: string };
   implementationRepair?: { attempts: number; reason: string };
   evidenceRepair?: { attempts: number; reasons: string[] };
+  reportRepair?: { attempts: number; reasons: string[] };
   sessionId: string;
   provider: string;
   model: string;

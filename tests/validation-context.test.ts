@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validationPromptHandoff, nativeValidationGuidance, validationTools, validationCommandBlocker, validationInstructions } from '../src/core/validation-context.ts';
+import { validationPromptHandoff, nativeValidationGuidance, validationTools, validationToolAllow, validationCommandBlocker, validationInstructions } from '../src/core/validation-context.ts';
 import { artifactPrompt, artifactSchemas } from '../src/core/artifacts.ts';
 import { reconcileTestExecutions } from '../src/core/execution-links.ts';
 import type { Job, ExecutionRecord } from '../src/core/types.ts';
@@ -26,10 +26,13 @@ for(const mismatch of ['none','session','patch','cwd','version','unknownExit','d
 });
 
 test('validation exposes local checks and rejects tool installation without widening host permissions',()=>{
- assert.ok(validationTools.includes('bash'));assert.ok(validationTools.includes('read'));
+ assert.ok(validationToolAllow('pwsh').includes('pwsh'));assert.ok(validationTools.includes('read'));
+ assert.ok(!validationTools.includes('bash') && !validationToolAllow().includes('bash'));
  for(const name of ['skill','edit','write','subagent','workflow'])assert.ok(!validationTools.includes(name));
  for(const command of ['brew install gh','/opt/homebrew/bin/brew install gh','npm install','pnpm add vitest','pip3 install requests','npx vitest'])assert.ok(validationCommandBlocker('bash',{command}),command);
  for(const command of ['node --input-type=module -e "1+1"','pnpm test src/utils/chunk-items.test.ts','git diff --cached','npx --no-install vitest'])assert.equal(validationCommandBlocker('bash',{command}),undefined,command);
+ assert.ok(validationCommandBlocker('pwsh',{command:'npm install typescript'}),'install blocker also applies to the Windows pwsh tool');
+ assert.equal(validationCommandBlocker('pwsh',{command:'node --test'}),undefined);
 });
 
 test('unexecuted validation cannot present an invented read-only environment as host fact',()=>{

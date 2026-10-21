@@ -55,7 +55,7 @@
     "prepare": "npm run build",
     "start": "node --use-system-ca dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts",
+    "test": "node --import tsx --import ./tests/support/fixture-git-env.ts --test tests/*.test.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "harness": "node scripts/harness.mjs",
     "test:browser": "node scripts/browser-smoke.mjs",

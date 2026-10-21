@@ -206,7 +206,9 @@ test('secrets persist with 0600 permissions and invalid remote HTTP is refused',
   const oldKey = process.env.MAINTAINER_API_KEY, oldDeepseek = process.env.DEEPSEEK_API_KEY;
   const credentials = new Credentials(directory);
   await credentials.save({ apiKey: 'test-placeholder', baseUrl: 'https://api.example.com/v1' });
-  assert.equal((await stat(join(directory, 'credentials.json'))).mode & 0o777, 0o600);
+  const secretMode = (await stat(join(directory, 'credentials.json'))).mode & 0o777;
+  if (process.platform !== 'win32') assert.equal(secretMode, 0o600);
+  else assert.ok(secretMode & 0o200); // NTFS ignores POSIX modes; owner-write is the strongest portable check
   await assert.rejects(credentials.save({ baseUrl: 'http://remote.example.com' }), /HTTPS/);
   if (oldKey === undefined) delete process.env.MAINTAINER_API_KEY; else process.env.MAINTAINER_API_KEY = oldKey;
   if (oldDeepseek === undefined) delete process.env.DEEPSEEK_API_KEY; else process.env.DEEPSEEK_API_KEY = oldDeepseek;

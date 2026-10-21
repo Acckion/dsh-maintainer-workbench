@@ -12,7 +12,12 @@ export function requestBudget(messages: readonly { role: string; content?: unkno
   return { messageChars, toolChars, systemChars, estimatedInputTokens,
     roles: messages.map(message => ({ role: message.role, chars: wireSize(message) })) };
 }
-export const documentTools = ['read', 'glob', 'grep', 'edit', 'write', 'bash', 'job_output', 'job_list', 'job_kill'];
+export const documentTools = ['read', 'glob', 'grep', 'edit', 'write', 'job_output', 'job_list', 'job_kill'];
+
+/** Docs-stage allow list; the host shell tool (bash vs pwsh) is resolved at setup and appended. */
+export function documentToolAllow(shellTool?: string): string[] {
+  return [...documentTools, ...(shellTool ? [shellTool] : []), 'ask_user_question'];
+}
 
 /** Reject unbounded document reads before execution; do not truncate host results. */
 export function documentReadBlocker(name: string, args: unknown): string | undefined {

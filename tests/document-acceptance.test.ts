@@ -36,7 +36,7 @@ test('checker exit-code echo retains current-session evidence without accepting 
   const before=process.cwd();const {tmpdir}=await import('node:os');const {readFileSync}=await import('node:fs');
   const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
   assert.ok(pkg.files.includes('scripts/verify-document-patch.mjs'));
-  try{process.chdir(tmpdir());const command=documentCheckCommand({worktree:'/tmp/worktree',baseSha:'a'.repeat(40)});assert.ok(command.includes('scripts/verify-document-patch.mjs'));assert.ok(!command.includes("'/tmp/scripts/"));}finally{process.chdir(before);}
+  try{process.chdir(tmpdir());const command=documentCheckCommand({worktree:'/tmp/worktree',baseSha:'a'.repeat(40)}).replaceAll('\\','/');assert.ok(command.includes('scripts/verify-document-patch.mjs'));assert.ok(!command.includes("'/tmp/scripts/"));}finally{process.chdir(before);}
  });
 
 test('host checker evidence is attached before reconciling shortened supplemental model commands',async()=>{

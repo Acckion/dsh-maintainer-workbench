@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {defaultTriageMaxTokens,effectiveOutputTokens,exhaustedOutputMessage} from '../src/core/output-budget.ts';
+import {defaultTriageMaxTokens,effectiveOutputTokens,effectiveTimeoutMs,exhaustedOutputMessage,stageTimeoutFloorMs} from '../src/core/output-budget.ts';
 import {Store} from '../src/core/store.ts';
 import {settingsSchema} from '../src/application/tasks.ts';
 
@@ -16,4 +16,13 @@ test('plan-generation budget defaults are consistent and explicit global/reposit
 test('output exhaustion reports the effective cap and correct stage controls without implying automatic recovery',()=>{
  const message=exhaustedOutputMessage('triage',1800);assert.match(message,/实际上限 1800/);assert.match(message,/分诊 \/ PR 预检/);assert.match(message,/较小值/);assert.match(message,/未自动/);
  assert.doesNotMatch(exhaustedOutputMessage('docs',6000),/分诊/);
+});
+test('fix and docs keep a 20-minute timeout floor while lightweight stages follow the shared setting',()=>{
+ const base={timeoutMs:600000};
+ assert.equal(effectiveTimeoutMs('fix',base),1200000);assert.equal(effectiveTimeoutMs('docs',base),1200000);
+ assert.equal(stageTimeoutFloorMs.fix,1200000);assert.equal(stageTimeoutFloorMs.docs,1200000);
+ assert.equal(effectiveTimeoutMs('triage',base),600000);assert.equal(effectiveTimeoutMs('validate',base),600000);
+ assert.equal(effectiveTimeoutMs('fix',{timeoutMs:1500000}),1500000);
+ assert.equal(effectiveTimeoutMs('fix',base,{timeoutMs:300000}),300000);
+ assert.equal(effectiveTimeoutMs('triage',base,{timeoutMs:300000}),300000);
 });

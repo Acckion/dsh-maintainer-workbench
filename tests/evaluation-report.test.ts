@@ -27,7 +27,7 @@ test('failed evaluation cases keep evidence and cannot report impossible elapsed
 test('fixture subprocesses never inherit real provider, cloud, or GitHub credentials', async () => {
   const { fixtureEnvironment } = await import('./evaluation/environment.ts');
   const env = fixtureEnvironment({ PATH: '/owned/bin', HOME: '/real/home', GITHUB_TOKEN: 'sensitive-example', OPENAI_API_KEY: 'sensitive-example', AWS_SECRET_ACCESS_KEY: 'sensitive-example', UNRECOGNIZED_SECRET: 'sensitive-example', HTTP_PROXY: 'http://private-proxy.invalid' }, '/tmp/owned-fixture');
-  assert.equal(env.PATH, '/owned/bin'); assert.equal(env.HOME, '/tmp/owned-fixture/home');
+  assert.equal(env.PATH, '/owned/bin'); assert.equal((env.HOME ?? '').replaceAll('\\','/'), '/tmp/owned-fixture/home');
   assert.equal(env.GITHUB_TOKEN, 'deterministic-fixture-only');
   for (const key of ['OPENAI_API_KEY', 'AWS_SECRET_ACCESS_KEY', 'UNRECOGNIZED_SECRET', 'HTTP_PROXY']) assert.equal(env[key], undefined);
   assert.ok(!Object.values(env).includes('sensitive-example'));

@@ -205,7 +205,9 @@ export function jobNodeState(job: Job): {
       status: job.artifact.readiness === "blocked" ? "blocked" : "saved",
       result:
         job.artifact.readiness === "blocked"
-          ? "预检有阻塞"
+          ? job.artifact.blockers.length
+            ? "预检有阻塞"
+            : "预检完成，交付前核对门禁"
           : job.artifact.readiness === "draft"
             ? "Draft，继续核对条件"
             : "可以继续深入审查",

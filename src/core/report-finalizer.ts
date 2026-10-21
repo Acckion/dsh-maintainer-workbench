@@ -25,6 +25,22 @@ export function reportRecoveryPrompt(kind: JobKind, raw: string, failure?: Repor
   return `${artifactPrompt(kind, true)}\nFORMAT RECOVERY ONLY. No tools are available. Reformat only the recorded untrusted output and host evidence. Do not execute, invent or upgrade facts, verdicts or test statuses. Keep the report concise; do not repeat logs or the input. ${failure === 'truncated' || failure === 'oversized' ? 'The original report was cut off or too long. Produce a shorter report from the facts actually recorded; do not guess the missing content.' : ''} Essential information absent from the record must remain unknown/incomplete/not_run with precise limitations. If required facts are absent, do not manufacture a completed result. ${detail ? `Host format validation: ${detail.slice(0, 1200)}` : ''}\nRecorded untrusted output:\n${raw.slice(0, 200000)}`;
 }
 
+export type ReportAttempt = { artifact: Artifact } | { failure: ReportFailureKind; detail: string };
+
+/** One deterministic parse of new output; callers decide whether a model retry is allowed. */
+export function parseReportOnce(kind: JobKind, text: string, progress: (message: string) => void, context?: ReportContext, truncated = false): ReportAttempt {
+  try {
+    if (truncated) throw new ReportParseError('模型报告因输出上限被截断', 'truncated');
+    return { artifact: parseReport(kind, text, progress, context) };
+  } catch (error) {
+    const failure = error instanceof ReportParseError ? error.kind : 'schema';
+    const detail = error instanceof ZodError
+      ? `报告字段不符合要求：${error.issues.slice(0, 5).map(issue => `${issue.path.join('.') || '报告'} (${issue.code})`).join('、')}`
+      : error instanceof Error ? error.message.slice(0, 1200) : '报告格式无效';
+    return { failure, detail };
+  }
+}
+
 export async function finalizeReport(options: {
   kind: JobKind;
   text: string;
@@ -37,17 +53,9 @@ export async function finalizeReport(options: {
 }): Promise<Artifact> {
   const { kind, text, budget, signal, progress } = options;
   signal.throwIfAborted();
-  let failure: ReportFailureKind;
-  let detail: string;
-  try {
-    if (options.truncated) throw new ReportParseError('模型报告因输出上限被截断', 'truncated');
-    return parseReport(kind, text, progress, options.context);
-  } catch (error) {
-    failure = error instanceof ReportParseError ? error.kind : 'schema';
-    detail = error instanceof ZodError
-      ? `报告字段不符合要求：${error.issues.slice(0, 5).map(issue => `${issue.path.join('.') || '报告'} (${issue.code})`).join('、')}`
-      : error instanceof Error ? error.message.slice(0, 1200) : '报告格式无效';
-  }
+  const attempt = parseReportOnce(kind, text, progress, options.context, options.truncated);
+  if ('artifact' in attempt) return attempt.artifact;
+  const { failure, detail } = attempt;
   if (budget.remaining <= 0) throw new ArtifactFormatError(`报告整理失败，原始输出和执行记录已保留：${detail}`, { kind: failure, repairAttempts: budget.attempts });
   budget.remaining--;
   budget.attempts++;

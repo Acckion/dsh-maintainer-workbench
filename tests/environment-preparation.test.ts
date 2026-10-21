@@ -13,7 +13,7 @@ import { GitHub } from '../src/core/github.ts';
 import { artifactSchemas, asAnalysis } from '../src/core/artifacts.ts';
 import { seedFixture } from './support/fixtures.ts';
 import type { Repo, Job } from '../src/core/types.ts';
-import { runtimeBashTool } from '../src/plugin/environment-runtime.ts';
+import { runtimeBashTool, runtimeShellTool } from '../src/plugin/environment-runtime.ts';
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools';
 import { execFileSync } from 'node:child_process';
 
@@ -144,4 +144,14 @@ test('native workflow stops before model on missing dependencies, then authorize
  store.put('jobs',{...checked,environmentAuthorization:{...checked.environmentAuthorization!,patchHash:'different'}});
  const changed=wb.enqueue([checked.issueId],'validate',{sourceJobId:checked.id,forceNew:true});
  assert.equal(store.get<Job>('jobs',changed.created[0])?.environmentAuthorization,undefined,'changed patch cannot inherit installation authorization');
+});
+
+
+test('prepared runtime respects the resolved pwsh tool and preserves host arguments',async()=>{
+ const args=Object.freeze({command:'node --version',workdir:'fixture',permission:'host-owned'});let forwarded:any;
+ const shell={name:'pwsh',execute:async(input:unknown)=>{forwarded=input;return 'ok';}} as unknown as ToolDefinition;
+ assert.equal(await runtimeShellTool(shell,"C:/tools'quoted",'existing-path').execute(args,{} as never),'ok');
+ assert.ok(forwarded.command.startsWith("$env:PATH = 'C:/tools''quoted"));
+ assert.ok(forwarded.command.endsWith('\nnode --version'));
+ assert.equal(forwarded.permission,'host-owned');assert.equal(args.command,'node --version');
 });

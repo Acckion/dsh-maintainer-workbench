@@ -894,7 +894,7 @@ export function App({
                                 <>
                                   <span className="mw-triaged">
                                     <CheckCheck size={13} />
-                                    {i.type === "pr" ? "已预检" : "已分诊"}
+                                    {i.type === "pr" ? "元数据已核对" : "已分诊"}
                                   </span>
                                 </>
                               ) : (
@@ -906,9 +906,9 @@ export function App({
                                           draft: "草稿阶段",
                                           blocked: "存在阻塞",
                                         } as Record<string, string>
-                                      )[i.processing.phase] ?? "已预检")
+                                      )[i.processing.phase] ?? "处理中")
                                     : i.type === "pr"
-                                      ? "待预检"
+                                      ? "待核对元数据"
                                       : "待分诊"}
                                 </span>
                               )}

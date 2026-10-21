@@ -34,11 +34,18 @@ export function reportTool(kind: JobKind, receive: (value: unknown) => void) {
   return defineTool({
     name: 'submit_stage_report',
     description: 'Submit the concise final stage report. Cite current tool IDs instead of copying commands or logs. The host validates findings and evidence after submission. Do not use during implementation or before requested checks.',
-    parameters: { report: { ...toolSchema(compactReportSchema(kind)), required: true } },
+    parameters: { report: { oneOf: [toolSchema(compactReportSchema(kind)), { type: 'string' }], required: true } },
     output: { schema: { type: 'object', additionalProperties: false, properties: { received: { type: 'boolean', required: true } } },
       render: () => [{ type: 'text', text: 'Report received for host validation. This receipt is not acceptance or proof of verification.' }] },
     async execute(args, exec) {
-      exec.signal.throwIfAborted(); receive(args.report); exec.concludeTurn();
+      exec.signal.throwIfAborted();
+      let report = (args as { report: unknown }).report;
+      if (typeof report === 'string') {
+        try { report = JSON.parse(report); }
+        catch (error) { throw new Error(`report 参数必须是 JSON 对象或可解析的 JSON 字符串：${error instanceof Error ? error.message.slice(0, 200) : '解析失败'}`); }
+        if (!report || typeof report !== 'object' || Array.isArray(report)) throw new Error('report JSON 字符串解析结果必须是对象');
+      }
+      receive(report); exec.concludeTurn();
       return { received: true };
     },
   });

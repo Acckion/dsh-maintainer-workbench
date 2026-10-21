@@ -3,7 +3,7 @@ import { classifyArtifact, classificationRevision } from '../core/classification
 import {unansweredInputRequest} from '../domain/input.ts';
 import {blockingGaps} from '../domain/gaps.ts';
 import {normalizePreflight} from '../core/preflight-policy.ts';
-import {effectiveOutputTokens} from '../core/output-budget.ts';
+import {effectiveOutputTokens,effectiveTimeoutMs} from '../core/output-budget.ts';
 import { withManualContext } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
@@ -87,7 +87,7 @@ export class StageWorker extends ServiceBase {
     const policy = this.repo(job.repoId).policy;
     const settings = {
       ...defaults,
-      timeoutMs: policy?.timeoutMs ?? defaults.timeoutMs,
+      timeoutMs: effectiveTimeoutMs(job.kind, defaults, policy),
       maxTokens: effectiveOutputTokens(job.kind,defaults,policy),
     };
     const timer = setTimeout(
