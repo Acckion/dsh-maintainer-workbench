@@ -1799,6 +1799,7 @@ export function App({
         <>
           <StageResult
             job={job}
+            jobs={state?.jobs??[]}
             open={openEvidenceJob}
             openLocation={(path, line) =>
               setReaderRequest({

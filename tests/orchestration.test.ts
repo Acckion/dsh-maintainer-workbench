@@ -1006,6 +1006,20 @@ test('PR review hands off required validation once, then returns to the original
   assert.equal(f.store.issues()[0].orchestration?.run?.currentJobId,review.id);
  }finally{await f.wb.close();}
 });
+
+test('a fresh independent review does not create another validator for already proven source checks',async()=>{
+ const f=prReviewSetup();try{
+  const review=completePRReview(f),queued=f.store.jobs().at(-1)!;
+  const artifact=artifactSchemas.validate.parse({...common,stage:'validate',environment:'prepared',tests:[{command:'scope-test',status:'passed',output:'PASS',executionId:'validated:1'}],blockers:[],gaps:[]});
+  const checked={...queued,status:'completed' as const,sessionId:'validated',worktree:'/tmp/prepared',patchSha256:review.patchSha256,prContext:review.prContext,artifact,result:asAnalysis(artifact),executionRecords:[{id:'validated:1',callId:'scope',sessionId:'validated',cwd:'/tmp/prepared',checkoutSha:queued.baseSha,patchHash:review.patchSha256!,command:'scope-test',exitCode:0,isError:false,output:'PASS',tool:'bash',recordedAt:'now',truncated:false}]};
+  f.store.put('jobs',checked);
+  const independent={...review,id:'independent-review',sourceJobId:checked.id,artifact:artifactSchemas.review.parse({...common,stage:'review',inspectedSources:[],findings:[],followups:[],verdict:'no_findings',blockers:[],gaps:[{...validationGap,id:'review-directory-missing-deps',kind:'environment'}]})};
+  f.store.put('jobs',independent);const issue=f.store.issues()[0];
+  f.store.put('issues',{...issue,orchestration:{...issue.orchestration,run:{...issue.orchestration!.run!,status:'running',currentJobId:independent.id}}});
+  f.wb.orchestration.completed(independent);
+  assert.equal(f.store.jobs().length,3);assert.equal(f.store.issues()[0].orchestration?.run?.status,'review');
+ }finally{await f.wb.close();}
+});
 for(const mode of ['no_requirement','findings','failed_validation','stale_validation'] as const) test(`PR validation handoff respects ${mode}`,async()=>{
  const f=prReviewSetup();try{
   const review=completePRReview(f,mode==='no_requirement'?[]:[validationGap],mode==='findings'?'changes_requested':'no_findings');
@@ -1037,6 +1051,23 @@ test('PR validation environment recovery retains workflow authorization and bind
   const resumed=f.store.get<Job>('jobs',result.created[0])!;
   assert.equal(resumed.workflowRunId,waiting.workflowRunId);assert.equal(resumed.sourceJobId,waiting.sourceJobId);
   assert.equal(f.store.get<Job>('jobs',waiting.id)?.status,'waiting_environment');
+ }finally{await f.wb.close();}
+});
+
+test('rechecking a completed but incomplete environment recovery retains its prepared workspace',async()=>{
+ const f=prReviewSetup();try{
+  const review=completePRReview(f);const queued=f.store.jobs().at(-1)!;
+  const waiting={...queued,status:'waiting_environment' as const,worktree:'/tmp/prepared-validation',patchSha256:review.patchSha256};
+  f.store.put('jobs',waiting);
+  f.store.processing.dispatch(f.pr.id,{type:'environment.observed',ready:false,reason:'deps'},'system','wait-env');
+  f.wb.orchestration.completed(waiting);f.wb.processing.environmentReady(f.repo.id);
+  const resumed=f.wb.orchestration.resume(f.pr.id);const run=f.store.get<Job>('jobs',resumed.created[0])!;
+  const artifact=artifactSchemas.validate.parse({...common,stage:'validate',environment:'prepared',tests:[],blockers:['proof incomplete']});
+  const checked={...run,status:'completed' as const,artifact,result:asAnalysis(artifact)};
+  f.store.put('jobs',checked);f.wb.orchestration.completed(checked);
+  const result=f.wb.orchestration.resume(f.pr.id);const retry=f.store.get<Job>('jobs',result.created[0])!;
+  assert.equal(retry.worktree,waiting.worktree);assert.deepEqual(retry.environmentRecovery,run.environmentRecovery);
+  assert.equal(f.store.issues()[0].orchestration?.run?.checkpoint?.environmentSourceJobId,waiting.id);
  }finally{await f.wb.close();}
 });
 

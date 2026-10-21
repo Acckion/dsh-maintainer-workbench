@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { environmentPolicySchema } from '../domain/environment.ts';
 import {
   ServiceBase,
   type Enqueue,
@@ -453,6 +454,7 @@ export class RepositoryService extends ServiceBase {
         syncIntervalMinutes: z.number().int().min(0).max(1440),
         timeoutMs: z.number().int().min(1000).max(86400000),
         maxTokens: z.number().int().min(500).max(32000),
+        environment: environmentPolicySchema.optional(),
       })
       .parse(input);
     this.store.put("repos", { ...this.repo(repoId), policy });

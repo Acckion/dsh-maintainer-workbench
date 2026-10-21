@@ -7,7 +7,7 @@ const artifact=()=>artifactSchemas.validate.parse({schemaVersion:1,stage:'valida
 const job={kind:'validate',sourceJobId:'docs',handoff:[{id:'docs',kind:'docs'}],worktree:'/tmp/doc-worktree',sessionId:'session',baseSha:'a'.repeat(40),patchSha256:'patch',executionRecords:[]} as unknown as Job;
 test('document completeness blocks diff-only reports and mismatched sessions',()=>{
  const output=documentAcceptance(artifact(),job);assert.equal(output.stage,'validate');if(output.stage!=='validate')return;assert.equal(output.tests[0].status,'not_run');assert.equal(output.blockers.length,4);assert.doesNotMatch(output.responseDraft,/all passed/);
- const record={id:'session:1',sessionId:'other',cwd:job.worktree,checkoutSha:job.baseSha,patchHash:'patch',command:documentCheckCommand(job),exitCode:0,isError:false,output:'DOCUMENT_CHECKS_JSON={"checks":{"whitespace":true,"link_files":true,"link_anchors":true,"exact_repetition":true}}'} as ExecutionRecord;
+ const record={id:'session:1',sessionId:'other',cwd:job.worktree,checkoutSha:job.baseSha,patchHash:'patch',command:documentCheckCommand(job),exitCode:0,isError:false,output:'DOCUMENT_CHECKS_JSON={"checks":{"whitespace":true,"link_files":true,"link_anchors":true,"exact_repetition":true}}\nvalidator_exit=0\n'} as ExecutionRecord;
  const wrong=documentAcceptance(artifact(),{...job,executionRecords:[record]});if(wrong.stage==='validate')assert.equal(wrong.tests[0].status,'not_run');
  const passed=documentAcceptance(artifact(),{...job,executionRecords:[{...record,sessionId:'session'}]});if(passed.stage==='validate'){assert.equal(passed.tests[0].status,'passed');assert.equal(passed.blockers.length,0);assert.match(passed.coverage,/语义重复需人工/);}
 });
@@ -43,7 +43,7 @@ test('host checker evidence is attached before reconciling shortened supplementa
  const {reconcileTestExecutions}=await import('../src/core/execution-links.ts');
  const {documentChecksPassed}=await import('../src/core/document-acceptance.ts');
  const {validationState}=await import('../src/core/workflow-state.ts');
- const record={id:'session:1',sessionId:'session',cwd:job.worktree,checkoutSha:job.baseSha,patchHash:'patch',command:documentCheckCommand(job)+'; echo "validator_exit=$?"',exitCode:0,isError:false,output:'DOCUMENT_CHECKS_JSON={"checks":{"whitespace":true,"link_files":true,"link_anchors":true,"exact_repetition":true}}'} as ExecutionRecord;
+ const record={id:'session:1',sessionId:'session',cwd:job.worktree,checkoutSha:job.baseSha,patchHash:'patch',command:documentCheckCommand(job)+'; echo "validator_exit=$?"',exitCode:0,isError:false,output:'DOCUMENT_CHECKS_JSON={"checks":{"whitespace":true,"link_files":true,"link_anchors":true,"exact_repetition":true}}\nvalidator_exit=0\n'} as ExecutionRecord;
  const current={...job,executionRecords:[record]};
  const report={...artifact(),tests:[{command:documentCheckCommand(job),status:'passed' as const,output:'checker passed'},{command:'git diff --check; ...',status:'passed' as const,output:'model shortened command'}]};
  const accepted=documentAcceptance(report,current);

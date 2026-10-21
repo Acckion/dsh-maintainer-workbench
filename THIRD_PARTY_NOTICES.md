@@ -7,6 +7,7 @@
 | React / React DOM | 18.3.1 | MIT | UI, native build reuses host React |
 | Lucide React | 0.468.0 | ISC | UI icons |
 | Zod | 3.25.76 | MIT | Request and model output validation |
+| semver | 7.8.5 | ISC | Validate target repository Node engine requirements |
 | React Scheduler | 0.23.2 | MIT | React DOM scheduling in standalone preview |
 | esbuild | 0.25.12 | MIT | Development/build only |
 | TypeScript | 5.9.3 | Apache-2.0 | Development/type checking only |

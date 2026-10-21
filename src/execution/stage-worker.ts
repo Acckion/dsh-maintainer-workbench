@@ -22,6 +22,8 @@ import { parseReport } from "../core/report-finalizer.ts";
 import { ZodError } from "zod";
 import { saveExecutionLog } from "../core/execution-evidence.ts";
 import { reconcileTestExecutions } from "../core/execution-links.ts";
+import { scopedValidationReport } from '../core/validation-scope.ts';
+import { prepareValidationEnvironment, environmentPolicyKey } from './environment-preparation.ts';
 import { reconcileReviewFollowups } from "../core/finding-followup.ts";
 import {
   collectPatch,
@@ -311,11 +313,21 @@ export class StageWorker extends ServiceBase {
             "工作区在输出失败后已变化，不能整理旧产物；请重新派发",
           );
       }
-      inputPatchHash = patchHash(
-        job.worktree && readOnlyStage
-          ? await collectPatch(job.worktree, job.baseSha)
-          : "",
-      );
+      const inputPatch = job.worktree && readOnlyStage ? await collectPatch(job.worktree, job.baseSha) : '';
+      inputPatchHash = patchHash(inputPatch);
+      if(this.nativeRunner && job.kind==='validate' && !job.formatOnly && job.worktree &&
+        !job.handoff?.some(h=>h.id===job.sourceJobId&&h.kind==='docs')) {
+        job={...job,patch:inputPatch,patchSha256:inputPatchHash};this.saveJob(job);
+        const owned=this.deps.workspaces.records().find(w=>w.path===job.worktree&&w.ownerRunId===job.id&&w.status==='in_use');
+        if(!owned)throw new EnvironmentUnavailable(new Error('环境准备未取得当前工作区的独占所有权'));
+        const preparationPolicy=environmentPolicyKey(repo);
+        await prepareValidationEnvironment({repo,job,dataDir:this.dataDir,signal:controller.signal,observe:state=>{
+          job={...job,environmentPreparation:state};this.saveJob({...this.job(job.id),environmentPreparation:state});progress(state.reason);
+        }});
+        const currentIssue=this.store.get<Issue>('issues',job.issueId)!;
+        if(currentIssue.processing?.id!==job.caseId||revision(currentIssue,this.repo(repo.id),job.kind)!==job.revision)throw new Error('环境准备期间事项版本或处理周期已变化，请重新派发');
+        if(environmentPolicyKey(this.repo(repo.id))!==preparationPolicy)throw new EnvironmentUnavailable(new Error('环境准备期间仓库策略已变化，请按新策略重新检查'));
+      }
       if (
         job.kind === "ci" &&
         job.issueSnapshot.type === "pr" &&
@@ -539,6 +551,7 @@ export class StageWorker extends ServiceBase {
           ...job,
           patchSha256: patchHash(patch),
         });
+        output.artifact = scopedValidationReport(output.artifact,job);
         output.artifact = reconcileTestExecutions(output.artifact, {
           ...job,
           patchSha256: patchHash(patch),

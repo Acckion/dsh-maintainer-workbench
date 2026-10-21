@@ -28,6 +28,11 @@ export function AssistantActions({
     issue.actionsAvailable ??
     availableActions(issue, job, history);
   const control = actions.controls?.[0];
+  if(job?.status==='waiting_environment'&&job.kind==='validate')return <>
+    <button className="mw-button primary" disabled={busy} onClick={()=>void act('/environment/recheck',{id:job.id,expectedVersion:actions.expectedVersion},'已重新检查当前工作区环境，成功后继续验证')}>重新检查环境并继续验证</button>
+    <button className="mw-button" disabled={busy} onClick={()=>void act('/environment/prepare',{id:job.id,expectedVersion:actions.expectedVersion},'已授权本次验证工作区准备依赖，代码范围不变')}>授权本次依赖准备并继续</button>
+    <small>本次授权仅用于当前周期同版本、同补丁的环境准备，可解除“不安装依赖”限制；代码或策略变化需重新授权。联网、脚本仍按仓库设置。</small>
+  </>;
   if (control?.kind === "resume" && !control.enabled) return null;
   if (control) {
     const button = (

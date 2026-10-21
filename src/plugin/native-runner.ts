@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runtimeBashTool } from './environment-runtime.ts';
 import {
   artifactPrompt,
   asAnalysis,
@@ -366,6 +367,12 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
             );
           } else {
             await ctx.agentPresets.mount(agentCtx, preset.id);
+            // Coding tools do not exist until the preset has been mounted.
+            if(job.kind==='validate'&&job.environmentPreparation?.status==='ready'&&repo.policy?.environment?.binDirectory){
+              const bash=agentCtx.tools.get('bash',agent);
+              if(!bash)throw new Error('宿主缺少 bash，不能使用已准备的验证环境');
+              agentCtx.tools.register(runtimeBashTool(bash,repo.policy.environment.binDirectory));
+            }
             agentCtx.tools.register(
               inputTool((input) => {
                 pendingInput = input;
@@ -396,6 +403,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
                   validationCommandBlocker(
                     execution.name,
                     execution.arguments,
+                    job,
                   ) ??
                   inspection?.guard(execution.name, execution.arguments) ??
                   documentReadBlocker(execution.name, execution.arguments),
