@@ -284,7 +284,6 @@ test("historical processing cycles remain queryable and reject a foreign case ID
 test("workflow v1 upgrades once and preserves pending input and recorded answers", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "mw-upgrade-")),
     path = join(dir, "state.sqlite");
-  t.after(() => rm(dir, { recursive: true, force: true }));
   const first = new Store(path);
   seedFixture(first);
   const issue = first.issues()[0],
@@ -321,7 +320,10 @@ test("workflow v1 upgrades once and preserves pending input and recorded answers
   const count = restored.processing.events(after.id).length;
   restored.close();
   const twice = new Store(path);
-  t.after(() => twice.close());
+  t.after(() => {
+    twice.close();
+    return rm(dir, { recursive: true, force: true });
+  });
   assert.equal(twice.processing.events(after.id).length, count);
   assert.equal(twice.jobs().length, 0);
 });
@@ -398,7 +400,6 @@ test("repository preparation failures pause without automatic retries and resume
 test("published clarification receipts reconcile a durable reporter wait exactly once after restart", async (t) => {
   const dir = await mkdtemp(join(tmpdir(), "mw-published-questions-")),
     path = join(dir, "state.sqlite");
-  t.after(() => rm(dir, { recursive: true, force: true }));
   const first = new Store(path);
   seedFixture(first);
   const issue = first.issues()[0],
@@ -471,7 +472,10 @@ test("published clarification receipts reconcile a durable reporter wait exactly
   await w.close();
   const twice = new Store(path),
     w2 = new Workbench(twice, dir, undefined, undefined, false);
-  t.after(() => w2.close());
+  t.after(async () => {
+    await w2.close();
+    await rm(dir, { recursive: true, force: true });
+  });
   assert.equal(
     twice.get<Issue>("issues", issue.id)!.informationRequests!.length,
     1,

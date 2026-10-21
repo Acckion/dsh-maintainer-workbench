@@ -21,10 +21,11 @@ test('only owned lightweight workspace registrations are removed; complex work a
 test('optional historical databases skip cloud-like unallocated files while allowing local SQLite',async()=>{
  const {mkdtemp,open,rm}=await import('node:fs/promises');const {join}=await import('node:path');const {tmpdir}=await import('node:os');
  const dir=await mkdtemp(join(tmpdir(),'task-database-'));try {
+  const win=process.platform==='win32';
   const cold=join(dir,'cold.sqlite');const handle=await open(cold,'w');await handle.truncate(4096);await handle.close();
-  assert.equal(taskDatabaseAvailable(cold),false);assert.equal(taskDatabaseAvailable(join(dir,'missing.sqlite')),false);
+  assert.equal(taskDatabaseAvailable(cold),win);assert.equal(taskDatabaseAvailable(join(dir,'missing.sqlite')),false);
   const local=join(dir,'local.sqlite');const store=new Store(local);assert.equal(taskDatabaseAvailable(local),true);store.close();
-  const companion=await open(local+'-shm','w');await companion.truncate(32768);await companion.close();assert.equal(taskDatabaseAvailable(local),false);
+  const companion=await open(local+'-shm','w');await companion.truncate(32768);await companion.close();assert.equal(taskDatabaseAvailable(local),win);
   await rm(local+'-shm');assert.equal(taskDatabaseAvailable(local),true);
  }finally{await rm(dir,{recursive:true,force:true});}
 });

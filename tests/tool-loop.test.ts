@@ -56,6 +56,15 @@ test('edits reset exact-repeat detection but never reset the overall task budget
  assert.match(p.guard('read',{file_path:'next'})!,/预算已达上限/);
 });
 test('report tool guards do not double-count calls or consume exploration allowance',()=>{
- const p=toolLoopPolicy(false,true,{limit:10});for(let i=0;i<10;i++)p.guard('submit_stage_report',{});
- assert.equal(p.state.used,0);assert.equal(p.reason,undefined);
+  const p=toolLoopPolicy(false,true,{limit:10});for(let i=0;i<10;i++)p.guard('submit_stage_report',{});
+  assert.equal(p.state.used,0);assert.equal(p.reason,undefined);
+});
+test('pwsh executions count toward the same budget and repetition detection as bash',()=>{
+  const p=toolLoopPolicy(true,false,{kind:'docs',limit:10});
+  assert.equal(p.guard('pwsh',{command:'Get-Content AGENTS.md'}),undefined);
+  assert.equal(p.guard('pwsh',{command:'Get-Content AGENTS.md'}),undefined);
+  assert.match(p.guard('pwsh',{command:'Get-Content AGENTS.md'})!,/提醒/);
+  assert.equal(p.state.used,3,'Windows shell executions must count when the tool is named pwsh');
+  assert.equal(p.guard('bash',{command:'Get-Content AGENTS.md'}),undefined,'a different tool name starts a separate fingerprint');
+  assert.equal(p.state.used,4);
 });

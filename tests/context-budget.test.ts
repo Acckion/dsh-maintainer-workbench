@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestBudget, documentTools, documentReadBlocker, budgetBlockedStream } from '../src/core/context-budget.ts';
+import { requestBudget, documentTools, documentToolAllow, documentReadBlocker, budgetBlockedStream } from '../src/core/context-budget.ts';
 test('request budget accounts for system, schemas and all message roles without storing text', () => {
   const messages = [{role:'system', content:'secret instructions'}, {role:'tool', content:'x'.repeat(40000)}];
   const budget = requestBudget(messages, [{name:'read', description:'read file'}], 'host rules');
@@ -9,8 +9,11 @@ test('request budget accounts for system, schemas and all message roles without 
   assert.equal(budget.roles[1].role, 'tool');
   assert.ok(!JSON.stringify(budget).includes('secret instructions'));
   assert.ok(requestBudget(messages, [{description:'x'.repeat(1000)}]).estimatedInputTokens > requestBudget(messages, []).estimatedInputTokens);
-  assert.ok(documentTools.includes('edit') && documentTools.includes('bash'));
+  assert.ok(documentTools.includes('edit') && !documentTools.includes('bash'));
   assert.ok(!documentTools.includes('skill') && !documentTools.includes('subagent_fork'));
+  const allow = documentToolAllow('pwsh');
+  assert.ok(allow.includes('edit') && allow.includes('pwsh') && allow.includes('ask_user_question'));
+  assert.ok(!documentToolAllow().includes('pwsh') && !documentToolAllow().includes('bash'));
 });
 
 test('document reads require bounded segments without rewriting source output', () => {

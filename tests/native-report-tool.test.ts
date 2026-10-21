@@ -12,6 +12,7 @@ import { ToolRuntime } from '@deepseek-ai/dsh-tools';
 import { SystemPrompt } from '@deepseek-ai/dsh-system-prompt';
 import { createScope } from '@deepseek-ai/dsh-scope';
 import { reportTool } from '../src/plugin/report-tool.ts';
+import { platformShellTool } from '../src/core/shell-tools.ts';
 import { git } from '../src/core/git.ts';
 import { GitHub } from '../src/core/github.ts';
 
@@ -79,8 +80,20 @@ for (const mode of ['tool', 'text', 'invalid'] as const) test(`native compact re
   assert.deepEqual(result.artifact?.evidence, report.evidence);
   assert.equal(mounted, 0); assert.equal(turns, 1); assert.ok(texts[0].includes(issue.body));
   assert.doesNotMatch(texts[0], /UNTRUSTED_INPUT_JSON/); assert.ok(raw[0].includes('compact-v1'));
-  assert.equal(tool.parameters.properties.report.properties.reportFormat.const, 'compact-v1');
+  assert.equal(tool.parameters.properties.report.oneOf[0].properties.reportFormat.const, 'compact-v1');
+  assert.deepEqual(tool.parameters.properties.report.oneOf[1], { type: 'string' });
   assert.ok(guards.some(guard => guard({ name: 'bash', arguments: { command: 'echo forbidden' } })));
+});
+
+test('submit_stage_report accepts a JSON-string report argument', async () => {
+  let received: unknown;
+  const tool: any = reportTool('triage', value => { received = value; });
+  let concluded = false;
+  const exec = () => ({ signal: new AbortController().signal, concludeTurn: () => { concluded = true; } });
+  assert.deepEqual(await tool.execute({ report: JSON.stringify(report) }, exec()), { received: true });
+  assert.equal(concluded, true); assert.deepEqual(received, report);
+  await assert.rejects(() => tool.execute({ report: '{bad json' }, exec()), /JSON 对象或可解析的 JSON 字符串/);
+  await assert.rejects(() => tool.execute({ report: '"just a string"' }, exec()), /解析结果必须是对象/);
 });
 
 for (const kind of ['fix', 'docs', 'validate'] as const) test(`${kind} preserves its report tool and budget after premature submissions, with patch-bound checks`, async t => {
@@ -105,8 +118,8 @@ for (const kind of ['fix', 'docs', 'validate'] as const) test(`${kind} preserves
     agents: { create: async (options: any) => {
       await options.setup({ tools: {
         register: (definition: any) => { if (definition.name === 'submit_stage_report') reportDefinition = definition; return () => {}; },
-        schemas: () => [reportDefinition], guard: (guard: any) => guards.push(guard),
-        restrict: (restriction: any) => assert.ok(restriction.allow.includes('bash') && !restriction.allow.includes('submit_stage_report')),
+        schemas: () => [reportDefinition, { name: platformShellTool() }], guard: (guard: any) => guards.push(guard),
+        restrict: (restriction: any) => assert.ok(restriction.allow.includes(platformShellTool()) && !restriction.allow.includes('submit_stage_report')),
       } });
       const emit = (event: any) => listeners.get('session/event')({ id: options.sessionId }, event);
       const execute = async (command: string, output = 'PASS', action?: () => Promise<void>) => {
