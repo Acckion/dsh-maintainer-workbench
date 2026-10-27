@@ -1,6 +1,8 @@
 import { MaintenanceService } from "../application/maintenance.ts";
 import { classificationRevision } from './classification.ts';
 import { ManualStepService } from "../application/manual-steps.ts";
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import packageInfo from "../../package.json" with { type: "json" };
 import { IssueService } from "../application/issues.ts";
 import { ProcessingService } from "../application/processing.ts";
@@ -117,6 +119,7 @@ export class Workbench {
         this.saveJob({
           ...job,
           status: "failed",
+          environmentPreparation: job.environmentPreparation && ['checking','preparing'].includes(job.environmentPreparation.status) ? {...job.environmentPreparation,status:'failed',reason:'上次环境准备被进程中断；保留工作区和日志，检查后重试'} : job.environmentPreparation,
           waitingReason: undefined,
           error:
             "上次进程中断。为避免重复修改，未自动重新执行；请检查 worktree 后重试。",
@@ -164,7 +167,22 @@ export class Workbench {
   }
   async prepareRepository(repoId: string) {
     await this.repositories.prepareRepository(repoId);
-    this.processing.environmentReady(repoId);
+  }
+  prepareEnvironment(id:string,expectedVersion:number) {
+    const job=this.tasks.authorizeEnvironment(id,expectedVersion);
+    return this.recheckEnvironment(job.id,expectedVersion);
+  }
+  recheckEnvironment(id:string,expectedVersion:number) {
+    const job=this.store.get<Job>('jobs',id),issue=job?this.store.get<Issue>('issues',job.issueId):undefined;
+    if(!job||!issue||issue.processing?.version!==expectedVersion||issue.processing.currentRunId!==id||job.caseId!==issue.processing.id||job.kind!=='validate'||job.status!=='waiting_environment')throw new Error('当前环境等待已变化，请刷新后重试');
+    if(issue.orchestration?.run?.currentJobId===id)return this.orchestration.resume(issue.id);
+    this.store.processing.dispatch(issue.id,{type:'environment.observed',ready:true,reason:'维护者要求重新检查当前验证工作区，准备成功后继续'},'user',`environment-recheck:${id}:${expectedVersion}`);
+    return this.tasks.resume(id);
+  }
+  async environmentLog(id:string) {
+    const job=this.store.get<Job>('jobs',id);
+    if(!job||!/^[a-zA-Z0-9_.-]+$/.test(id)||!job.environmentPreparation?.logPath)throw new Error('该任务没有环境准备日志');
+    return (await readFile(join(this.dataDir,'environments','logs',id+'.log'),'utf8')).slice(0,128000);
   }
   updatePolicy(repoId: string, input: unknown) {
     return this.repositories.updatePolicy(repoId, input);

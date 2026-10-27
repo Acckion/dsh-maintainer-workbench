@@ -22,6 +22,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runtimeShellTool } from './environment-runtime.ts';
 import {
   artifactPrompt,
   asAnalysis,
@@ -386,6 +387,11 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
                 agentCtx.tools.schemas(agent).map((tool) => tool.name),
               );
             }
+            if(job.kind==='validate'&&job.environmentPreparation?.status==='ready'&&repo.policy?.environment?.binDirectory){
+              const shell=shellTool?agentCtx.tools.get(shellTool,agent):undefined;
+              if(!shell)throw new Error('宿主缺少可用命令工具，不能使用已准备的验证环境');
+              agentCtx.tools.register(runtimeShellTool(shell,repo.policy.environment.binDirectory));
+            }
             if (job.kind === "docs") {
               agentCtx.tools.restrict({
                 allow: documentToolAllow(shellTool),
@@ -403,6 +409,7 @@ export function harnessRunner(ctx: Context, github = new GitHub()): Runner {
                   validationCommandBlocker(
                     execution.name,
                     execution.arguments,
+                    job,
                   ) ??
                   inspection?.guard(execution.name, execution.arguments) ??
                   documentReadBlocker(execution.name, execution.arguments),

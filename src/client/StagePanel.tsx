@@ -1,4 +1,5 @@
 import { stepDisposition } from "../workflow/manual.ts";
+import { EnvironmentStatus } from './EnvironmentStatus.tsx';
 import { useId, type ReactNode } from "react";
 import { StageTabs } from "./StageTabs.tsx";
 import type { Issue, Job } from "../core/types.ts";
@@ -163,6 +164,7 @@ export function StagePanel({
         aria-labelledby={`${panelId}-${detail}`}
         className="mw-stage-content"
       >
+        {detail==='result'&&<EnvironmentStatus job={attempt}/>}
         {detail === "manual" ? (
           manual
         ) : detail === "plan" ? (

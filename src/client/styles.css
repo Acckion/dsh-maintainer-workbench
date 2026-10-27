@@ -1101,3 +1101,5 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-list-context-menu button{display:flex;width:100%;justify-content:flex-start;border:0;border-radius:5px;padding:7px 12px;background:transparent;color:inherit;font-size:12px;text-align:left;white-space:normal}
 .mw-list-context-menu button:not(:disabled):hover,.mw-list-context-menu button:focus-visible{background:var(--mw-control-bg,#eef1f5);outline:none}
 .mw-list-context-menu button:disabled{opacity:.4}
+/* Environment preparation is one progress message, not a multi-column callout. */
+.mw-callout.mw-environment-status{display:block;min-width:0;overflow-wrap:anywhere}.mw-environment-status>strong{display:block;margin-bottom:8px}.mw-environment-status>p{margin:6px 0}.mw-environment-status>small{display:block;margin-top:10px}.mw-environment-status>a{display:inline-block;margin-top:6px}

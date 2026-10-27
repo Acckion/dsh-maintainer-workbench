@@ -3,6 +3,7 @@ import { withManualContext, stepResolved } from "../workflow/manual.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {defaultTriageMaxTokens} from '../core/output-budget.ts';
+import { environmentPolicyKey } from '../execution/environment-preparation.ts';
 import {
   ServiceBase,
   type Enqueue,
@@ -250,9 +251,14 @@ export class TaskService extends ServiceBase {
           environmentSource.issueId!==issue.id || environmentSource.revision!==rev || environmentSource.caseId!==this.store.processing.current(issue.id)?.id ||
           !environmentSource.worktree || !environmentSource.patchSha256)) throw new Error("环境恢复来源已失效，请重新验证");
         const id = randomUUID();
+        const origin=options.sourceJobId?this.job(options.sourceJobId):undefined;
+        const grant=origin?.environmentAuthorization;
+        const inheritedGrant=grant&&origin?.caseId===this.store.processing.current(issue.id)?.id&&origin.revision===rev&&
+          grant.caseId===origin.caseId&&grant.revision===rev&&grant.baseSha===origin.baseSha&&grant.patchHash===origin.patchSha256&&grant.policyKey===environmentPolicyKey(repo)?grant:undefined;
         const job: Job = {
-          ...(environmentSource ? {worktree:environmentSource.worktree,branch:environmentSource.branch,environmentRecovery:{sourceJobId:environmentSource.id,baseSha:environmentSource.baseSha,patchHash:environmentSource.patchSha256!}} : {}),
           maintenanceScope: options.maintenanceScope,
+          environmentAuthorization: inheritedGrant,
+          ...(environmentSource ? {worktree:environmentSource.worktree,branch:environmentSource.branch,environmentAuthorization:environmentSource.environmentAuthorization,environmentRecovery:{sourceJobId:environmentSource.id,baseSha:environmentSource.baseSha,patchHash:environmentSource.patchSha256!}} : {}),
           workflowRunId: options.workflowRunId,
           goal: options.goal,
           goalId: options.goal ? (options.goalId ?? id) : undefined,
@@ -386,8 +392,16 @@ export class TaskService extends ServiceBase {
       if (this.autoStart) this.pump();
       return { created: [recovered.id], reused: [] };
     }
+    const checkpoint = job.environmentRecovery;
+    if (checkpoint) {
+      const source = this.job(checkpoint.sourceJobId);
+      if (job.kind !== 'validate' || job.worktree !== source.worktree ||
+        checkpoint.baseSha !== source.baseSha || checkpoint.patchHash !== source.patchSha256)
+        throw new Error('环境恢复检查点已变化，请重新验证');
+    }
     return this.hooks.enqueue([job.issueId], job.kind, {
       maintenanceScope:job.maintenanceScope,
+      environmentSourceJobId: checkpoint?.sourceJobId,
       sourceJobId: job.sourceJobId,
       instructions: job.instructions,
       goal: job.goal,
@@ -395,6 +409,16 @@ export class TaskService extends ServiceBase {
       workflowRunId: job.workflowRunId,
       forceNew: true,
     });
+  }
+  authorizeEnvironment(id:string,expectedVersion:number):Job {
+    const job=this.job(id),state=this.store.processing.current(job.issueId);
+    if(!state||state.version!==expectedVersion)throw new Error('事项状态已变化，请刷新后重试');
+    if(job.kind!=='validate'||job.status!=='waiting_environment'||!job.worktree||!job.patchSha256||job.caseId!==state.id||state.currentRunId!==job.id)
+      throw new Error('只能授权当前等待环境的验证工作区');
+    if(job.revision!==revision(this.store.get<Issue>('issues',job.issueId)!,this.repo(job.repoId),job.kind))throw new Error('版本已变化，请重新验证');
+    const authorized={...job,environmentAuthorization:{caseId:state.id,revision:job.revision,policyKey:environmentPolicyKey(this.repo(job.repoId)),baseSha:job.baseSha,patchHash:job.patchSha256}};
+    this.saveJob(authorized);this.store.audit('environment.authorized','维护者授权当前周期同版本、同补丁、同策略的验证环境准备；验证 Agent 与代码范围不变',job.id);
+    return authorized;
   }
   resume(id: string): { created: string[]; reused: string[] } {
     const job = this.job(id),

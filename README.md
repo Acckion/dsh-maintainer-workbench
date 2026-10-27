@@ -14,6 +14,10 @@ npm run harness
 
 打开终端打印的本地认证链接，跳过首次引导或配置模型，在 Harness 左侧点击 **维护工作台**。默认端口 4318。开发启动器默认沿用 `DSH_HOME` 或正常用户 Harness 配置目录，维护数据保存在 `.data/native/`；不会再将插件密钥覆盖到宿主环境。`HARNESS_PROFILE` 可选择已有 profile。需要隔离开发环境时显式运行 `npm run harness:isolated`，使用 `.harness-local/`；为避免大量文件监听，开发启动器关闭宿主 HMR，修改后重新构建并重启。
 
+目标仓库需要独立 Node/pnpm 时，可在 `.data/native/runtime/config.json`（或 `MAINTAINER_DATA_DIR/runtime/config.json`）配置 `{"binDirectory":"/absolute/path/to/bin","nodeOptions":["--max-old-space-size=4096"]}`。该目录必须提供可执行的 `node` 和 `pnpm`。之后仍使用 `npm run harness`，启动器会用指定 Node 启动宿主，并把该目录置于工具进程 PATH 首位。配置缺失时沿用当前环境；配置存在但无效时停止启动，避免静默退回旧版本。依赖仍需按目标仓库锁文件安装到各验证工作区，不共享 `node_modules`。
+
+在「仓库设置 → 验证环境」可开启自动准备 npm/pnpm 锁定依赖，选择根项目或整个工作区，以及该仓库的运行时工具目录。联网下载与安装脚本默认关闭；离线自动准备仅支持禁用安装脚本。后端在验证模型启动前检查 Node engines、包管理器版本与当前目录依赖，准备成功后直接验证；只共享下载缓存。缺工具、无锁文件、准备失败或版本变化会明确停止并保留日志，不循环安装。事项明确“不安装依赖”时，仓库默认策略不会覆盖它；维护者可点击「授权本次依赖准备并继续」，只授权当前版本环境准备，代码范围与验证 Agent 权限不变。详见 [验证工作区环境计划](docs/product/WORKSPACE-ENVIRONMENT.md)。
+
 只体验界面和队列：
 
 ```sh

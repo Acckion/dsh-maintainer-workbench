@@ -1,4 +1,5 @@
 import {prReviewValidation} from '../core/pr-review-validation.ts';
+import { EnvironmentStatus } from './EnvironmentStatus.tsx';
 import {GapSummary} from './GapSummary.tsx';
 import {readOnlyScope} from '../core/issue-flow.ts';
 import React, { useEffect, useState } from "react";
@@ -129,6 +130,7 @@ export function WorkflowCard({
     <section className="mw-workflow-card" aria-label="处理建议与进度">
       {draftError && <p role="alert">{draftError}</p>}
       <h3>{run ? "事项处理进度" : "系统处理建议"}</h3>
+      <EnvironmentStatus job={current}/>
       <p>
         {issue.orchestrationView?.reason ??
           "系统先整理已有材料、范围和验收草稿；只请你补充真正缺失的信息。"}
@@ -473,6 +475,7 @@ export function WorkflowCard({
               {current?.status === "waiting_environment" && current.kind === "validate" ? "重新检查环境并继续验证" : "恢复可继续的步骤"}
             </button>
           )}
+          {current?.kind==='validate'&&current.status==='waiting_environment'&&<button className="mw-button" disabled={busy||!!active} onClick={()=>void act('/environment/prepare',{id:current.id},'已授权本次工作区准备依赖，成功后自动验证')}>授权本次依赖准备并继续</button>}
           {["paused", "blocked", "cancelled"].includes(run.status) &&
             draft &&
             plan && (

@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import type { Artifact } from './artifacts.ts';
 import type { Job, ExecutionRecord } from './types.ts';
 import { linkedExecution } from './execution-links.ts';
+import { executionOutcome } from './execution-outcome.ts';
 const quote=(text:string)=>"'"+text.replace(/'/g,"'\\''")+"'";
 export function documentCheckCommand(job: Pick<Job,'worktree'|'baseSha'>): string {
  const script=[new URL('../scripts/verify-document-patch.mjs',import.meta.url),new URL('../../scripts/verify-document-patch.mjs',import.meta.url)].find(url=>existsSync(url));
@@ -22,7 +23,7 @@ function documentCheckEvidence(job: Job) {
  let data: {checks?:Record<string,boolean>;limitations?:string[]}|undefined;
  try{const line=record?.output.split('\n').find(l=>l.startsWith('DOCUMENT_CHECKS_JSON='));if(line)data=JSON.parse(line.slice('DOCUMENT_CHECKS_JSON='.length));}catch{}
  const required=['whitespace','link_files','link_anchors','exact_repetition'];
- const complete=record&&!record.isError&&record.exitCode===0&&required.every(k=>data?.checks?.[k]===true);
+ const complete=record&&executionOutcome(record)==='passed'&&required.every(k=>data?.checks?.[k]===true);
  return {command,record,data,complete};
 }
 export function documentChecksPassed(job: Job): boolean {
@@ -41,7 +42,7 @@ export function documentAcceptance(artifact: Artifact, job: Job): Artifact {
  const supplemental=extra.filter(t=>!requiredExtra.includes(t));
  const supplementalEvidence=supplemental.map(t=>{
   const r=linkedExecution(job,t);
-  const status=r && r.exitCode!==null ? !r.isError && r.exitCode===0 ? 'passed' : 'failed' : 'not_run';
+  const status=r ? executionOutcome(r) : 'not_run';
   return {source:`补充检查（不计入本次验收）：${t.command}`,detail:`${status}：${status==='not_run'?'报告描述无法精确关联当前执行记录；不作为成功证据':`执行记录 ${r!.id}，退出码 ${r!.exitCode}`}`};
  });
  const test={command:record?.command??command,status:complete?'passed' as const:record?'failed' as const:'not_run' as const,output:complete?'差异空白、新增相对链接文件、锚点及完全重复文本检查通过。':blockers.join('；'),...(record?{executionId:record.id}:{})};

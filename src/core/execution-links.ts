@@ -1,5 +1,6 @@
 import type { ExecutionRecord, Job } from './types.ts';
 import type { Artifact } from './artifacts.ts';
+import { executionOutcome } from './execution-outcome.ts';
 // Host-owned absolute cwd values; normalize the standard macOS temporary-directory alias.
 const canonical = (path: string) => path.replace(/^\/private\/var\//, '/var/').replace(/\/+$/, '');
 export function linkedExecution(job: Job, test: { command: string; executionId?: string }): ExecutionRecord | undefined {
@@ -21,8 +22,10 @@ export function reconcileTestExecutions(artifact: Artifact, job: Job): Artifact 
       missing.push(reason); return { ...test, status: 'not_run' as const, executionId: undefined, output: `${test.output}\n${reason}` };
     }
     if (!record) return test;
-    const contradicted = test.status === 'passed' && (record.isError || record.exitCode !== null && record.exitCode !== 0);
-    return { ...test, executionId: record.id, status: contradicted ? 'failed' as const : test.status, output: contradicted ? `${test.output}\n宿主工具记录显示执行失败（退出码 ${record.exitCode ?? '未知'}），不能接受报告中的 passed。` : test.output };
+    const outcome = executionOutcome(record);
+    const contradicted = test.status === 'passed' && outcome !== 'passed';
+    if (contradicted && outcome === 'not_run') missing.push(`${test.command}：无法确认检查命令的真实退出状态`);
+    return { ...test, executionId: record.id, status: contradicted ? outcome : test.status, output: contradicted ? `${test.output}\n宿主工具记录中的检查状态为 ${outcome}；外层 shell 退出码 ${record.exitCode ?? '未知'} 不能证明检查通过。` : test.output };
   });
   if (strict && artifact.stage === 'validate' && !(job.executionRecords ?? []).some(record => record.command && (record.exitCode !== null || record.isError) && linkedExecution(job, { command: record.command, executionId: record.id }) === record)) {
     const reason = '本次未记录可判定验证进程，模型的环境阻塞判断尚未获工具证实';

@@ -39,6 +39,58 @@ test('mandatory checks require explicit per-gap current execution evidence',()=>
  assert.equal(prReviewValidation(two,[all]).passed,true);
 });
 
+test('legacy inline check commands also require the exact project test evidence',()=>{
+ const legacy={...gap,checks:undefined,resolution:'执行 `pnpm test scoped.test.ts`，记录其他覆盖限制'};
+ const source={...review,artifact:{...review.artifact!,gaps:[legacy]}};
+ assert.equal(prReviewValidation(source,[validation]).passed,false,'an unrelated pass cannot satisfy a concrete legacy command');
+ const command='pnpm test scoped.test.ts';
+ const current={...validation,executionRecords:validation.executionRecords!.map(r=>({...r,command})),artifact:{...validation.artifact!,stage:'validate' as const,environment:'local',tests:[{command,status:'passed' as const,output:'PASS',executionId:'s:1'}],gaps:[{...legacy,status:'resolved' as const,sources:['s:1']}],blockers:[]}};
+ assert.equal(prReviewValidation(source,[current]).passed,true);
+});
+
+test('only successful exit-preserving wrappers can cover a named check',()=>{
+ for(const [command,output,exitCode,passed] of [
+  ['set -o pipefail; test | tail -40; echo "EXIT=${PIPESTATUS[0]}"','PASS\nEXIT=0',0,true],
+  ['cd /tmp/check && test; echo "EXIT_CODE=$?"','PASS\nEXIT_CODE=0',0,true],
+  ['cd /tmp/check && test; echo "EXIT_CODE=$?"','FAIL\nEXIT_CODE=1',0,false],
+  ['test; pwd','/tmp/check',0,false],
+  ['test | tail -40; echo "EXIT=${PIPESTATUS[0]}"','FAIL\nEXIT=1',0,false],
+  ['test | tail -40','PASS',0,false],
+  ['set -o pipefail\ntest | tail -40\nstatus=${PIPESTATUS[0]}\necho done\nexit $status','PASS',0,true],
+  ['set -o pipefail\nwrong-test | tail -40\nstatus=${PIPESTATUS[0]}\nexit $status','PASS',0,false],
+ ] as const){
+  const current={...validation,executionRecords:validation.executionRecords!.map(r=>({...r,command,output,exitCode})),artifact:{...validation.artifact!,stage:'validate' as const,environment:'local',tests:[{command,status:'passed' as const,output,executionId:'s:1'}],gaps:[{...gap,status:'resolved' as const,sources:['s:1']}],blockers:[]}};
+  assert.equal(prReviewValidation(review,[current]).passed,passed,command);
+ }
+});
+
+test('environment gaps cite current environment probes without pretending they are project tests',()=>{
+ const env={...gap,id:'node-env',kind:'environment' as const,checks:['node --version']};
+ const source={...review,artifact:{...review.artifact!,gaps:[gap,env]}};
+ const probe={...validation.executionRecords![0],id:'s:2',callId:'env-probe',command:'node --version',output:'v26.11.1'};
+ const checked={...validation,executionRecords:[...validation.executionRecords!,probe],artifact:{...validation.artifact!,stage:'validate' as const,environment:'owned',tests:validation.artifact!.stage==='validate'?validation.artifact!.tests:[],blockers:[],gaps:[{...gap,status:'resolved' as const,sources:['s:1']},{...env,status:'resolved' as const,sources:['s:2']}]}};
+ assert.equal(prReviewValidation(source,[checked]).passed,true);
+ for(const change of [{sessionId:'foreign'},{cwd:'/other'},{exitCode:1},{command:'echo ok'}])
+  assert.equal(prReviewValidation(source,[{...checked,executionRecords:[...validation.executionRecords!,{...probe,...change}]}]).passed,false);
+ const system={...source,artifact:{...source.artifact!,gaps:[gap,{...env,kind:'system_check' as const}]}};
+ assert.equal(prReviewValidation(system,[checked]).passed,false,'actual test gaps still require test execution references');
+});
+
+test('independent review reuses only exact proven source checks, and never masks a newer validation failure',()=>{
+ const source={...validation,id:'prior-validation',sourceJobId:'implementation',artifact:{...validation.artifact!,gaps:[]}};
+ const current={...review,sourceJobId:source.id};
+ const result=prReviewValidation(current,[source,current]);assert.equal(result.passed,true);assert.equal(result.reusedSource,true);
+ for(const change of [{caseId:'other'},{revision:'old'},{patchSha256:'other'},{status:'failed' as const},{artifactState:'stale'},{sessionId:undefined}])
+  assert.equal(prReviewValidation(current,[{...source,...change},current]).passed,false);
+ const extra={...current,artifact:{...current.artifact!,gaps:[gap,{...gap,id:'new-check',checks:['extra-check']}]}};
+ assert.equal(prReviewValidation(extra,[source,extra]).passed,false,'new requirements need real additional checks');
+ const unlinked={...current,sourceJobId:'missing'};assert.equal(prReviewValidation(unlinked,[source,unlinked]).passed,false);
+ const later={...validation,id:'later',sourceJobId:current.id,status:'failed' as const,createdAt:'2026-10-13T00:00:00Z'};
+ assert.equal(prReviewValidation(current,[source,current,later]).passed,false,'a later explicit failure is authoritative');
+ assert.equal(prReviewValidation(current,[source,current,{...later,sourceJobId:source.sourceJobId}]).passed,false,'newer failed siblings of the referenced validator cannot be hidden');
+ const before=JSON.stringify(current);prReviewValidation(current,[source,current]);assert.equal(JSON.stringify(current),before,'raw review remains immutable');
+});
+
 test('current manual completion/skip overrides handoff without changing historical evidence',()=>{
  for(const mode of ['complete','skip'] as const) {
   const state={id:'case',manualSteps:[{stage:'validate',mode}]} as unknown as import('../src/domain/processing.ts').ProcessingCase;

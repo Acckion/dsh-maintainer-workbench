@@ -180,7 +180,7 @@ export interface Repo {
     | "syncIntervalMinutes"
     | "timeoutMs"
     | "maxTokens"
-  >;
+  > & { environment?: import('../domain/environment.ts').EnvironmentPolicy };
   private?: boolean;
   id: string;
   fullName: string;
@@ -289,6 +289,8 @@ export interface Job {
   deliveryReviewId?: string;
   formatRecovery?: { baseSha: string; patchHash: string; reason?: import('./execution-errors.ts').ReportFailureKind; repairAttempts?: number };
   environmentRecovery?: { sourceJobId: string; baseSha: string; patchHash: string };
+  environmentPreparation?: import('../domain/environment.ts').EnvironmentPreparation;
+  environmentAuthorization?: {caseId: string; revision: string; policyKey: string; baseSha: string; patchHash: string};
   waitingReason?: string;
   artifactState?: string;
   formatOnly?: boolean;
