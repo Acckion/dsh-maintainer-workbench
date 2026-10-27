@@ -208,6 +208,7 @@ export function handler(
             patch: z
               .object({
                 view: z.string().max(30).optional(),
+                reviewFollowupId: z.string().max(400).optional(),
                 systemPlanInputKey: z.string().max(64).optional(),
                 reply: z.string().max(30000).optional(),
                 instructions: z.string().max(10000).optional(),

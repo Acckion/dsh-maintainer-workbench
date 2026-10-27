@@ -180,7 +180,7 @@ export interface Repo {
     | "syncIntervalMinutes"
     | "timeoutMs"
     | "maxTokens"
-  > & { environment?: import('../domain/environment.ts').EnvironmentPolicy };
+  > & { environment?: import('../domain/environment.ts').EnvironmentPolicy; inheritMaxTokens?: boolean };
   private?: boolean;
   id: string;
   fullName: string;

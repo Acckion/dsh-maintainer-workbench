@@ -4,6 +4,7 @@ import { artifactSchemas, findingSchema, parseArtifact, emptyInputRequest, type 
 import { ReportParseError } from './execution-errors.ts';
 import type { ExecutionRecord, Job, JobKind } from './types.ts';
 import { executionOutcome } from './execution-outcome.ts';
+import { executionWithinWorktree } from './execution-cwd-native.ts';
 
 export type ReportContext = Pick<Job, 'sessionId' | 'baseSha' | 'worktree' | 'patchSha256' | 'executionRecords'>;
 const sourceRef = z.object({ executionId: z.string().min(1).max(200), path: z.string().min(1).max(6000), line: z.number().int().positive(), quote: z.string().min(1).max(6000).optional() });
@@ -30,7 +31,7 @@ function optionalRecordFor(kind: JobKind, id: string, context?: ReportContext, i
   const matches = context?.executionRecords?.filter(record => record.id === id || record.callId === id) ?? [];
   const record = matches[0];
   if (matches.length !== 1 || !context?.sessionId || !record || record.sessionId !== context.sessionId ||
-    record.checkoutSha !== context.baseSha || (context.worktree && record.cwd !== context.worktree) ||
+    record.checkoutSha !== context.baseSha || (context.worktree && !executionWithinWorktree(context.worktree, record.cwd)) ||
     ((['validate', 'review', 'ci'].includes(kind) || implementationCheck) && context.worktree && (!context.patchSha256 || record.patchHash !== context.patchSha256)))
     return undefined;
   return record;
@@ -70,13 +71,19 @@ export function assembleReport(kind: JobKind, value: unknown, context?: ReportCo
   if (kind === 'review') {
     const source = (ref: z.infer<typeof sourceRef>) => {
       const record = optionalRecordFor(kind, ref.executionId, context);
-      if (!record) return undefined; // Dangling refs are filtered out; the review gate stays strict on the survivors.
-      if (ref.quote !== undefined) return ref; // The existing review gate verifies explicit quotes.
+      if (!record) return undefined; // Keep unverified references out of the evidence gate.
       const readPath = record.sourcePath && context?.worktree && resolve(context.worktree, record.sourcePath) === resolve(context.worktree, ref.path) && /read|file|open/i.test(record.tool);
       const readCommand = record.command && /\b(cat|nl|sed|rg|head|tail|awk)\b/.test(record.command) && record.command.includes(ref.path);
       const line = record.output.split('\n').map(text => text.match(/^\s*(\d+)(?:\s*[|:] ?|[ \t]+)(.*)$/)).find(match => match && Number(match[1]) === ref.line);
-      if ((!readPath && !readCommand) || !line?.[2].trim()) throw new ReportParseError('工具输出没有可提取的编号源码行，请提供简短原文引用', 'schema');
-      return { ...ref, quote: line[2] };
+      if ((readPath || readCommand) && line?.[2].trim()) {
+        if (ref.quote !== undefined && (!ref.quote.trim() || !line[2].trim().includes(ref.quote.trim())))
+          throw new ReportParseError(`源码引用与工具记录 ${record.id} 的 ${ref.path}:${ref.line} 不匹配；请使用完整原文或省略 quote 由主机提取：${line[2].trim()}`, 'schema');
+        // The host supplies the full numbered line, including Markdown/list punctuation.
+        // Legacy quote fragments must match it; unrelated text is never rewritten into evidence.
+        return { ...ref, quote: line[2] };
+      }
+      if (ref.quote !== undefined) return ref; // The final evidence gate verifies unnumbered reads against disk.
+      throw new ReportParseError('工具输出没有可提取的编号源码行，请提供简短原文引用', 'schema');
     };
     body.inspectedSources = (report.inspectedSources as z.infer<typeof sourceRef>[] | undefined)
       ?.map(source).filter((ref): ref is z.infer<typeof sourceRef> => ref !== undefined);

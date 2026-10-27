@@ -11,7 +11,6 @@ import { StagePanel, type StageSelection } from "./StagePanel.tsx";
 import { API, request } from "./api.ts";
 import type { AgentTab } from "./RepositoryDetail.tsx";
 import { WorkflowTimeline } from "./WorkflowTimeline.tsx";
-import { ProcessingRecords } from "./ProcessingRecords.tsx";
 import { NextAction } from "./NextAction.tsx";
 import { reportPresentation } from './report-presentation.ts';
 
@@ -61,7 +60,6 @@ const fallbackCase = (
 
 export function WorkflowDetail({
   issue,
-  openSession,
   jobs,
   job,
   legacyTab,
@@ -116,7 +114,6 @@ export function WorkflowDetail({
   });
   const generation = useRef(0);
   const workflowRef = useRef<HTMLElement>(null);
-  const navigateToExecution = useRef(false);
   const timeline = reportPresentation(
     loaded?.caseId === (cycle || state.id) &&
     (cycle || loaded.version === state.version)
@@ -244,15 +241,7 @@ export function WorkflowDetail({
   };
   // Never expose current controls while an older cycle is still loading.
   const cycleLoading = !!cycle && timeline.caseId !== cycle;
-  useEffect(() => {
-    if (!navigateToExecution.current || cycleLoading) return;
-    const panel =
-      workflowRef.current?.querySelector<HTMLElement>(".mw-stage-panel");
-    if (!panel) return;
-    navigateToExecution.current = false;
-    panel.scrollIntoView({ block: "start" });
-    panel.focus({ preventScroll: true });
-  }, [selection, cycleLoading]);
+
   return (
     <section
       ref={workflowRef}
@@ -365,26 +354,7 @@ export function WorkflowDetail({
               }
             />
           )}
-          <ProcessingRecords
-            timeline={timeline}
-            jobs={history}
-            openSession={openSession}
-            openExecution={(run) => {
-              const nextCycle = run.caseId
-                ? run.caseId === state.id
-                  ? ""
-                  : run.caseId
-                : timeline.historical
-                  ? timeline.caseId
-                  : "";
-              if (nextCycle !== cycle) {
-                setCycle(nextCycle);
-                setLoaded(undefined);
-              }
-              navigateToExecution.current = true;
-              choose({ view: "stage", detail: "execution", attemptId: run.id });
-            }}
-          />
+
         </>
       )}
     </section>

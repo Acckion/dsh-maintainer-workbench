@@ -1,13 +1,12 @@
 import type { ExecutionRecord, Job } from './types.ts';
 import type { Artifact } from './artifacts.ts';
 import { executionOutcome } from './execution-outcome.ts';
-// Host-owned absolute cwd values; normalize the standard macOS temporary-directory alias.
-const canonical = (path: string) => path.replace(/^\/private\/var\//, '/var/').replace(/\/+$/, '');
+import { executionWithinWorktree } from './execution-cwd.ts';
 export function linkedExecution(job: Job, test: { command: string; executionId?: string }): ExecutionRecord | undefined {
   const strict = job.kind === 'validate' && !!job.worktree && !!(job.sessionId || job.toolDiagnostics);
   const sessionId = job.sessionId ?? job.toolDiagnostics?.sessionId;
   const matches = (job.executionRecords ?? []).filter(record => record.command?.trim() === test.command.trim() && record.checkoutSha === job.baseSha && (!record.patchHash || record.patchHash === job.patchSha256) && (!test.executionId || record.id === test.executionId || record.callId === test.executionId)
-    && (!strict || record.sessionId === sessionId && !!record.patchHash && record.patchHash === job.patchSha256 && !!record.cwd && canonical(record.cwd) === canonical(job.worktree!)));
+    && (!strict || record.sessionId === sessionId && !!record.patchHash && record.patchHash === job.patchSha256 && executionWithinWorktree(job.worktree!, record.cwd)));
   return matches.length === 1 ? matches[0] : undefined;
 }
 export function reconcileTestExecutions(artifact: Artifact, job: Job): Artifact {

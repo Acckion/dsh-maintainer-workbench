@@ -1,5 +1,5 @@
 import { MaintenanceService } from "../application/maintenance.ts";
-import { classificationRevision } from './classification.ts';
+import { classificationCurrent, classificationRevision } from './classification.ts';
 import { ManualStepService } from "../application/manual-steps.ts";
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -394,7 +394,7 @@ export class Workbench {
         return {
         ...issue,
         classification: issue.classification
-          ? { ...issue.classification, stale: issue.classification.revision !== classificationRevision(issue) }
+          ? { ...issue.classification, stale: !classificationCurrent(issue, histories.get(issue.id) ?? []) }
           : issue.analysis && repos.has(issue.repoId)
             ? { category: issue.analysis.category, priority: issue.analysis.priority, labels: issue.analysis.labels, jobId: '', updatedAt: issue.updatedAt, revision: classificationRevision(issue), stale: issue.analysisRevision !== revision(issue, repos.get(issue.repoId)!) }
             : undefined,

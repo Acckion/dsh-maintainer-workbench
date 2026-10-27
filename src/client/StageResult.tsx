@@ -1,3 +1,5 @@
+import {AnalysisEvidence} from './AnalysisEvidence.tsx';
+import {presentedGaps} from './gap-presentation.ts';
 import {GapSummary} from './GapSummary.tsx';
 import { prReviewValidation, reviewValidationNeeds } from '../core/pr-review-validation.ts';
 import type { Job } from "../core/types.ts";
@@ -10,14 +12,17 @@ export function StageResult({
   jobs=[],
   open,
   openLocation,
+  history = [],
 }: {
   job: Job;
   jobs?: Job[];
+  history?: Job[];
   open?: (id: string, tab: DetailTab) => void;
   openLocation?: (path: string, line?: number) => void;
 }) {
   const artifact = job.artifact;
-  const validation=artifact?.stage==='review'?prReviewValidation(job,jobs):undefined;
+  const allJobs=jobs.length?jobs:history;
+  const validation=artifact?.stage==='review'?prReviewValidation(job,allJobs):undefined;
   const covered=validation?.passed&&validation.latest?new Set(reviewValidationNeeds(job).map(g=>g.id)):new Set<string>();
   const displayGaps=artifact?.gaps?.map(g=>covered.has(g.id)?{...g,status:'resolved' as const,resolution:'宿主已核验同版本、同补丁的独立验证证据；不要求审查目录重复准备依赖。',sources:[validation!.latest!.id]}:g);
   const groups: [string, string[]][] = [];
@@ -49,7 +54,7 @@ export function StageResult({
   return (
     <section className="mw-stage-result">
       {validation?.reusedSource&&<p className="mw-muted">所需检查已由前序独立验证完成；当前审查目录的环境限制不重复阻塞此补丁。原始报告与目录状态保留。</p>}
-      {artifact && <GapSummary plan={{gaps:displayGaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
+      {artifact && <GapSummary presentation={presentedGaps({...job,artifact:{...artifact,gaps:displayGaps}},allJobs)} plan={{gaps:displayGaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
       <p className="mw-stage-summary">
         {artifact?.summary ?? job.result?.summary ?? "暂无保存结果"}
       </p>
@@ -181,17 +186,7 @@ export function StageResult({
           </p>
         </details>
       )}
-      {!!job.result?.evidence.length && (
-        <details>
-          <summary>分析依据 · {job.result?.evidence.length ?? 0}</summary>
-          {job.result?.evidence.map((e, index) => (
-            <article key={index}>
-              <strong>{e.source}</strong>
-              <p>{e.detail}</p>
-            </article>
-          ))}
-        </details>
-      )}
+      <AnalysisEvidence job={job}/>
     </section>
   );
 }

@@ -595,25 +595,27 @@ export function RepositoryDetail({
                 填入当前分析的回复建议
               </button>
             )}
-            <button
-              className="mw-button"
-              disabled={!draft.reply?.trim()}
-              onClick={() => void navigator.clipboard.writeText(draft.reply!)}
-            >
-              复制草稿
-            </button>
-            <button
-              className="mw-button"
-              disabled={!onPreviewReply || !draft.reply?.trim() || !!draftError}
-              onClick={onPreviewReply}
-            >
-              预览发布回复
-            </button>
-            <small>
-              {onPreviewReply
-                ? "保存在本机，尚未发布"
-                : "本机草稿；先在 Review 接受结果才能发布"}
-            </small>
+            <div className="mw-reply-actions">
+              <button
+                className="mw-button"
+                disabled={!draft.reply?.trim()}
+                onClick={() => void navigator.clipboard.writeText(draft.reply!)}
+              >
+                复制草稿
+              </button>
+              <button
+                className="mw-button"
+                disabled={!onPreviewReply || !draft.reply?.trim() || !!draftError}
+                onClick={onPreviewReply}
+              >
+                发布回复
+              </button>
+              <small>
+                {onPreviewReply
+                  ? "保存在本机，尚未发布"
+                  : "本机草稿；先在 Review 接受结果才能发布"}
+              </small>
+            </div>
           </section>
         )}
         {tab === "activity" && (

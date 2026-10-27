@@ -2,8 +2,8 @@ import type {JobKind} from './types.ts';
 
 // Routing now includes an editable plan and structured gaps, in addition to model reasoning.
 export const defaultTriageMaxTokens = 6000;
-export function effectiveOutputTokens(kind:JobKind, settings:{maxTokens:number;triageMaxTokens?:number}, policy?:{maxTokens?:number}) {
-  const limit=policy?.maxTokens ?? settings.maxTokens;
+export function effectiveOutputTokens(kind:JobKind, settings:{maxTokens:number;triageMaxTokens?:number}, policy?:{maxTokens?:number;inheritMaxTokens?:boolean}) {
+  const limit=policy?.inheritMaxTokens ? settings.maxTokens : policy?.maxTokens ?? settings.maxTokens;
   return ['triage','preflight'].includes(kind) ? Math.min(limit,settings.triageMaxTokens ?? defaultTriageMaxTokens) : limit;
 }
 export function exhaustedOutputMessage(kind:JobKind, maxTokens:number) {
