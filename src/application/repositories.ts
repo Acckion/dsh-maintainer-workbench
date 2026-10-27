@@ -452,7 +452,8 @@ export class RepositoryService extends ServiceBase {
         autoTriage: z.boolean(),
         syncIntervalMinutes: z.number().int().min(0).max(1440),
         timeoutMs: z.number().int().min(1000).max(86400000),
-        maxTokens: z.number().int().min(500).max(32000),
+        maxTokens: z.number().int().min(500),
+        inheritMaxTokens: z.boolean().optional(),
       })
       .parse(input);
     this.store.put("repos", { ...this.repo(repoId), policy });

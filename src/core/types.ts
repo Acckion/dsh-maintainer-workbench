@@ -179,7 +179,7 @@ export interface Repo {
     | "syncIntervalMinutes"
     | "timeoutMs"
     | "maxTokens"
-  >;
+  > & { inheritMaxTokens?: boolean };
   private?: boolean;
   id: string;
   fullName: string;

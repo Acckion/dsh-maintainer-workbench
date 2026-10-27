@@ -160,7 +160,7 @@ export function projectTimeline(
         currentJob?.kind === "investigate" &&
         !!currentJob.result)) &&
     !!currentJob &&
-    ["completed", "awaiting_review"].includes(currentJob.status);
+    ["completed", "awaiting_review", "approved"].includes(currentJob.status);
   const currentStage: TimelineStage = canonicalStage(
     issue,
     state.manualCursor ??
@@ -195,8 +195,8 @@ export function projectTimeline(
     Object.assign(current, jobNodeState(currentJob));
   if (reviewDecision)
     Object.assign(current, {
-      status: "waiting",
-      result: "等待维护者检查审查结论",
+      status: currentJob?.status === "approved" ? "saved" : "waiting",
+      result: currentJob?.status === "approved" ? "维护者已确认" : "等待维护者检查审查结论",
     });
   if (currentStage === "track" && !terminal)
     Object.assign(current, { status: "waiting", result: "等待远端进度" });
@@ -304,7 +304,7 @@ export function projectTimeline(
         ? ["先完成前序调查或审查，核对目标、范围与证据"]
         : n.stage === "track"
           ? ["维护者确认产物后，预览并确认交付；发布后跟踪远端活动"]
-          : ["前序阶段完成且输入版本仍有效后，按服务端条件继续"];
+          : [];
     if (draft && (n.stage === "decision" || n.stage === "track"))
       n.conditions.push(
         "当前 PR 是 Draft，需核对作者的暂缓条件；审查完成不代表可以合并",

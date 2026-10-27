@@ -52,6 +52,7 @@ import { API, request } from "./api.ts";
 import { InboxFilter } from "./InboxFilter.tsx";
 import { IssuePlanning } from "./IssuePlanning.tsx";
 import { flushItemDraft } from "./item-draft.ts";
+import { ReplyPublication } from './ReplyPublication.tsx';
 import { ItemInstructions } from "./ItemInstructions.tsx";
 import {
   captureOrigin,
@@ -140,6 +141,7 @@ export function App({
   >();
   const [publishPreview, setPublishPreview] = useState<PublicationPreview>();
   const [publishPreviewError, setPublishPreviewError] = useState("");
+  const [replyPublicationId, setReplyPublicationId] = useState<string>();
   const [loadError, setLoadError] = useState("");
   const [operationRecords, setOperationRecords] = useState<
     Record<string, OperationRecord>
@@ -490,12 +492,8 @@ export function App({
         (issue ? jobs.find((j) => j.issueId === issue.id) : undefined));
     if (!job || busy) return;
     if (publishKind === "comment") {
-      try {
-        await flushItemDraft(job.issueId);
-      } catch {
-        setToast({ text: "回复草稿尚未保存，请重试", error: true });
-        return;
-      }
+      setReplyPublicationId(job.id);
+      return;
     }
     const preview = await action(
       "publish-preview",
@@ -1292,6 +1290,17 @@ export function App({
           agentPanel={null}
         />
       )}
+      {replyPublicationId && jobs.find(j => j.id === replyPublicationId) && <ReplyPublication
+        key={replyPublicationId}
+        direct
+        job={jobs.find(j => j.id === replyPublicationId)!}
+        repository={repo?.githubName ?? repo?.fullName ?? ''}
+        close={() => setReplyPublicationId(undefined)}
+        published={async () => {
+          await refresh();
+          setToast({ text: 'GitHub 回复发布结果已确认' });
+        }}
+      />}
       {publishAction && previewJob && (
         <Modal
           title="发布预览"
@@ -1554,7 +1563,7 @@ export function App({
       backLabel={originRef.current?.repoId===repoId&&originRef.current.page!==page?'返回来源列表':'返回任务列表'} back={()=>{if(originRef.current?.repoId===repoId)returnToOrigin();else returnToTasks();}} close={returnToTasks} open={openEvidenceJob} openSession={openSession}
       input={<ProcessingInput issue={displayedIssue} runId={job.id} embedded busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>}
       actions={renderReviewActions(job)} reviewControls={job.kind==='review'?<ReviewFindingControls job={job} history={jobs.filter(j=>j.issueId===job.issueId)} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>:undefined}
-      tools={<OperationTracker record={operationRecords[repoId]} jobs={jobs} close={()=>setOperationRecords(records=>{const next={...records};delete next[repoId];return next;})} open={id=>{navigationGeneration.current++;rememberOrigin(id);setDecisionFocus(undefined);setJobFocus(id);setReaderRequest(undefined);setReviewNote(reviewNoteForTask(jobFocus,id,reviewNote));moveFocusToDetail();}}/>}/>
+      tools={null}/>
   }
 
   function renderReader() {
@@ -1767,28 +1776,7 @@ export function App({
                   }
                 />
               )}
-              <OperationTracker
-                record={operationRecords[repoId]}
-                jobs={jobs}
-                close={() =>
-                  setOperationRecords((records) => {
-                    const next = { ...records };
-                    delete next[repoId];
-                    return next;
-                  })
-                }
-                open={(id) => {
-                  navigationGeneration.current += 1;
-                  rememberOrigin(id);
-                  navigate("tasks", repoId, true);
-                  setTaskFilter("all");
-                  setFocused(undefined);
-                  setDecisionFocus(undefined);setJobFocus(id);
-                  setReaderRequest(undefined);
-                  setReviewNote(reviewNoteForTask(jobFocus, id, reviewNote));
-                  moveFocusToDetail();
-                }}
-              />
+
             </section>
           }
         />
@@ -1797,7 +1785,9 @@ export function App({
     if (stage === "review")
       return job && (job.result || job.artifact || job.patch) ? (
         <>
+          {!readOnly && !["triage", "preflight"].includes(job.kind) && <section className="mw-stage-review-actions" aria-label="报告审核与交付">{renderReviewActions(job)}</section>}
           <StageResult
+            history={history}
             job={job}
             open={openEvidenceJob}
             openLocation={(path, line) =>
@@ -1810,16 +1800,7 @@ export function App({
               })
             }
           />
-          {!readOnly &&
-            !["triage", "preflight"].includes(job.kind) &&
-            (decision ? (
-              renderReviewActions(job)
-            ) : (
-              <details className="mw-stage-review-actions">
-                <summary>审核与交付操作</summary>
-                {renderReviewActions(job)}
-              </details>
-            ))}
+
           {job.kind === "review" && !readOnly && (
             <section aria-label="发现处置与讨论串">
               <ReviewFindingControls

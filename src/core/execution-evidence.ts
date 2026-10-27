@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { ExecutionRecord, Job } from './types.ts';
 
 const object = (v: unknown): Record<string, unknown> => v && typeof v === 'object' ? v as Record<string, unknown> : {};
@@ -15,7 +15,7 @@ export function executionRecord(job: Job, sessionId: string, seq: number, call: 
   const exitCode = Number.isInteger(meta.exitCode) ? meta.exitCode as number : null;
   const sourcePath = args.file_path ?? args.path ?? args.filePath;
   return { id: `${sessionId}:${seq}`, sessionId, callId: String(message.toolCallId ?? ''), tool: call?.name ?? 'unknown', sourcePath: typeof sourcePath === 'string' ? sourcePath : undefined, command: typeof args.command === 'string' ? args.command : undefined,
-    cwd: typeof args.workdir === 'string' ? args.workdir : job.worktree, checkoutSha: job.baseSha, patchHash,
+    cwd: typeof args.workdir === 'string' ? resolve(job.worktree ?? job.analysisPath ?? '.', args.workdir) : job.worktree ?? job.analysisPath, checkoutSha: job.baseSha, patchHash,
     exitCode, signal: typeof meta.signal === 'string' ? meta.signal : undefined, isError: message.isError === true,
     recordedAt: new Date().toISOString(), output: output.slice(0, 6000), truncated: output.length > 6000 || stdout.truncated === true || stderr.truncated === true };
 }

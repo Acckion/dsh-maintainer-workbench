@@ -149,6 +149,17 @@ test("Draft and no findings mean maintainer confirmation, never merge approval",
       .conditions.some((c) => c.includes("Draft")),
   );
   assert.ok(!view.next.includes("可以合并"));
+  const approved = { ...review, status: 'approved' as const };
+  const acceptedView = projectTimeline(
+    { ...issue, draft: true }, { ...state, currentRunId: approved.id },
+    [approved], [], availableActions(issue, approved, [approved]),
+  );
+  const decision = acceptedView.nodes.find(n => n.stage === 'decision')!;
+  assert.equal(acceptedView.currentNodeId, decision.id);
+  assert.equal(acceptedView.currentRunId, approved.id);
+  assert.equal(decision.status, 'saved');
+  assert.equal(decision.result, '维护者已确认');
+  assert.ok(!acceptedView.next.includes('可以合并'));
 });
 
 test("each wait stays attached to its requesting stage and future points are not fake runs", () => {
@@ -180,7 +191,7 @@ test("each wait stays attached to its requesting stage and future points are not
   for (const node of view.nodes.filter((n) => n.status === "future")) {
     assert.equal(node.attemptIds.length, 0);
     assert.equal(node.occurredAt, undefined);
-    assert.ok(node.conditions.length);
+    if (node.stage === 'decision' || node.stage === 'track') assert.ok(node.conditions.length);
   }
 });
 

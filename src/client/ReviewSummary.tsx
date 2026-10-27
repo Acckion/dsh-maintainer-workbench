@@ -96,7 +96,7 @@ export function ReviewSummary({ job, jobs, audit, native, open, openSession, iss
     <div className="mw-review-links">{[implementation, ...evidence.validations, review].filter((source, index, rows): source is Job => !!source && rows.findIndex(other => other?.id === source.id) === index).map(source => <button type="button" className="mw-text-button" key={source.id} onClick={() => open(source.id, 'overview')}>{kindNames[source.kind]}记录 {source.id.slice(0, 8)}</button>)}</div>
     {deliveryActions && <section aria-label="交付操作" data-review-section="交付操作"><h4>交付操作</h4>
       {review && implementation && implementation.id !== job.id && <p><button type="button" className="mw-text-button" onClick={() => open(implementation.id, 'overview')}>查看对应实施产物与交付状态</button></p>}
-      <p className="mw-muted">接受保存本地决定；对外发布仍需预览确认，并重新核验版本和补丁。</p>{deliveryActions}
+      <p className="mw-muted">接受保存本地决定；发布回复会直接发送，其他交付操作需核对预览。发布前会重新校验版本与补丁。</p>{deliveryActions}
     </section>}
     <p className="mw-muted">测试状态是保存的报告，需核对工具证据和原生会话。摘要不替代接受或发布时的实时版本核验。</p>
   </section>;

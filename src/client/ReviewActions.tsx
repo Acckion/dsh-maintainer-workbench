@@ -1,3 +1,4 @@
+import {PostReviewActions} from './PostReviewActions.tsx';
 import {
   ArrowDownToLine,
   CheckCheck,
@@ -43,20 +44,15 @@ export function ReviewActions({
   openPublishPreview: (kind: PublishAction) => Promise<void>;
   openSession?: (id: string) => void;
 }) {
+  const prReview=job?.artifact?.stage==='review'&&job.issueSnapshot.type==='pr';
+  const commentPublished=job?.publications?.comment?.status==='published';
   const acceptance = job ? acceptanceEligibility(job, jobs, issue?.processing) : undefined;
   return (
     job && (
       <div className="mw-review-bar">
+        <h4>{['awaiting_review','completed'].includes(job.status)?'审核报告':job.status==='approved'?(prReview?(commentPublished?'PR 审查结论已发布':'下一步：发布审查结论'):'报告已接受 · 交付操作'):'任务操作'}</h4>
         {["awaiting_review", "completed"].includes(job.status) ? (
           <>
-            <label>
-              审核备注
-              <input
-                placeholder="可选：接受或退回的理由"
-                value={reviewNote}
-                onChange={(e) => setReviewNote(e.target.value)}
-              />
-            </label>
             <div>
               <AcceptArtifactButton
                 job={job}
@@ -86,6 +82,15 @@ export function ReviewActions({
                 退回
               </button>
             </div>
+            <label>
+              审核备注
+              <input
+                placeholder="可选：接受或退回的理由"
+                value={reviewNote}
+                onChange={(e) => setReviewNote(e.target.value)}
+              />
+            </label>
+            {(job.artifactState==='stale'||acceptance?.reason)&&<p role="status" className="mw-callout amber">{job.artifactState==='stale'?'报告对应的输入版本已变化，请重新核对后再接受。':acceptance?.reason}</p>}
             <p className="mw-muted">
               接受只保存本地决定，不代表测试通过，也不会自动发布。
             </p>
@@ -119,7 +124,35 @@ export function ReviewActions({
             <CheckCheck size={14} /> {taskStatus(job).label}
           </Tag>
         )}
-        {!["queued", "running"].includes(job.status) && (
+        {job.status === "approved" && job.artifactState !== "stale" && !(prReview&&commentPublished) && (
+          <div className="mw-publish-actions">
+            <button
+              className="mw-button primary"
+              onClick={() => void openPublishPreview("comment")}
+              disabled={busy}
+            >
+              {prReview?(commentPublished?'核对已发布的评论':'发布结论到 PR 评论'):'发布回复'}
+            </button>
+
+          </div>
+        )}
+        {job.status==='approved'&&job.artifactState!=='stale'&&<>            {job.patch && ["fix", "docs"].includes(job.kind) && (
+              <button
+                className="mw-button primary"
+                onClick={() =>
+                  void openPublishPreview(
+                    job.issueSnapshot.type === "pr" ? "update_pr" : "pr",
+                  )
+                }
+                disabled={busy}
+              >
+                <GitPullRequest size={13} />
+                {job.issueSnapshot.type === "pr" ? "更新原 PR" : "创建草稿 PR"}
+              </button>
+            )}</>}
+        {prReview&&job.status==='approved'&&!commentPublished&&<p className="mw-muted">报告已在本地接受。点击“发布结论到 PR 评论”，贡献者才能在 GitHub 看到本次结论。</p>}
+        {prReview&&commentPublished&&<PostReviewActions job={job} issue={issue} jobs={jobs} native={native} busy={busy} action={action}/>}
+        <details className="mw-review-secondary"><summary>其他操作</summary>        {!["queued", "running"].includes(job.status) && (
           <button
             className="mw-button"
             disabled={busy}
@@ -137,16 +170,7 @@ export function ReviewActions({
             重新运行
           </button>
         )}
-        {job.status === "approved" && job.artifactState !== "stale" && (
-          <div className="mw-publish-actions">
-            <button
-              className="mw-button"
-              onClick={() => void openPublishPreview("comment")}
-              disabled={busy}
-            >
-              发布回复
-            </button>
-            <button
+{job.status==='approved'&&job.artifactState!=='stale'&&<>            <button
               className="mw-button"
               onClick={() => void openPublishPreview("labels")}
               disabled={busy}
@@ -162,26 +186,11 @@ export function ReviewActions({
                 发布已采纳发现
               </button>
             )}
-            {job.patch && ["fix", "docs"].includes(job.kind) && (
-              <button
-                className="mw-button primary"
-                onClick={() =>
-                  void openPublishPreview(
-                    job.issueSnapshot.type === "pr" ? "update_pr" : "pr",
-                  )
-                }
-                disabled={busy}
-              >
-                <GitPullRequest size={13} />
-                {job.issueSnapshot.type === "pr" ? "更新原 PR" : "创建草稿 PR"}
-              </button>
-            )}
-          </div>
-        )}
+</>}</details>
         {job.publications &&
           Object.entries(job.publications).map(([key, receipt]) => (
             <div className="mw-publication" key={key}>
-              {key} ·{" "}
+              {({comment:"PR 评论",review:"审查意见",labels:"标签",pr:"草稿 PR",update_pr:"PR 更新"} as Record<string,string>)[key]??key} ·{" "}
               {receipt.status === "published"
                 ? "已发布"
                 : receipt.status === "failed"

@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+import {AnalysisEvidence} from './AnalysisEvidence.tsx';
+import {useEffect,useState,type ReactNode} from "react";
+import {analysisEvidence} from "./evidence-presentation.ts";
 import type { Audit, Job } from "../core/types.ts";
 import { ExecutionEvidence } from "./ExecutionEvidence.tsx";
 
@@ -17,61 +19,31 @@ export function StageExecutionDetails({
   openSession?: (id: string) => void;
   showOpenEvidence?: boolean;
 }) {
+  const [view,setView]=useState<'commands'|'evidence'>('commands'),[selected,setSelected]=useState(0);
+  useEffect(()=>{setView('commands');setSelected(0);},[job?.id]);
   if (!job) return <p>暂无执行记录。</p>;
   const logs = audit
     .filter((a) => a.jobId === job.id)
     .sort((a, b) => b.at.localeCompare(a.at));
   return (
     <section className="mw-stage-execution" aria-label="执行详情">
-      <div className="mw-stage-execution-toolbar">
-        {showOpenEvidence && <button className="mw-text-button" onClick={() => openEvidence(job.id)}>
-          查看完整执行记录
-        </button>}
-        {job.sessionId && openSession && (
-          <button
-            className="mw-text-button"
-            onClick={() => openSession(job.sessionId!)}
-          >
-            打开执行会话
-          </button>
-        )}
-      </div>
-      <section className="mw-stage-log" aria-label="运行日志">
-        <h4>运行日志</h4>
-        {logs.length ? (
-          logs.map((a) => (
-            <div className="mw-job-log" key={a.id}>
-              <time dateTime={a.at}>
-                {new Date(a.at).toLocaleString("zh-CN", { hour12: false })}
-              </time>
-              <p>{a.detail}</p>
-            </div>
-          ))
-        ) : (
-          <p className="mw-muted">暂未收到运行日志。</p>
-        )}
-      </section>
-      {!!job.executionRecords?.length && (
-        <details>
-          <summary>命令与验证记录 · {job.executionRecords.length}</summary>
-          {job.executionRecords.map((record) => (
-            <ExecutionEvidence key={record.id} job={job} record={record} />
-          ))}
-        </details>
-      )}
-      {!!job.result?.evidence.length && (
-        <details>
-          <summary>分析依据 · {job.result.evidence.length}</summary>
-          {job.result.evidence.map((e, i) => (
-            <article className="mw-evidence" key={i}>
-              <strong>{e.source}</strong>
-              <p>{e.detail}</p>
-            </article>
-          ))}
-        </details>
-      )}
-      <details>
-        <summary>来源与执行环境</summary>
+      {job.sessionId && openSession && <div className="mw-stage-execution-toolbar"><button className="mw-text-button" onClick={()=>openSession(job.sessionId!)}>打开执行会话</button></div>}
+      {['queued','running'].includes(job.status) && logs.length>0 && <section className="mw-stage-log" aria-label="运行日志"><h4>运行日志</h4>{logs.slice(0,20).map(a=><p key={a.id}>{a.detail}</p>)}</section>}
+      {!!(job.executionRecords?.length || analysisEvidence(job).length) && <>
+        <div className="mw-execution-tabs" role="tablist" aria-label="执行记录内容">
+          {!!job.executionRecords?.length&&<button role="tab" aria-selected={view==='commands'} onClick={()=>setView('commands')}>命令与输出 · {job.executionRecords.length}</button>}
+          {!!analysisEvidence(job).length&&<button role="tab" aria-selected={view==='evidence'||!job.executionRecords?.length} onClick={()=>setView('evidence')}>分析依据 · {analysisEvidence(job).length}</button>}
+        </div>
+        {view==='commands'&&job.executionRecords?.length ? <section className="mw-command-browser" aria-label="命令与输出">
+          <nav aria-label="执行命令">{job.executionRecords.map((record,index)=><button key={record.id} aria-pressed={index===Math.min(selected,job.executionRecords!.length-1)} onClick={()=>setSelected(index)}><code>{record.command??record.tool}</code><span>{record.isError||record.signal||record.exitCode!==null&&record.exitCode!==0?'执行失败':record.exitCode===0?'退出码 0':'退出码未知'}</span></button>)}</nav>
+          {(()=>{const record=job.executionRecords[Math.min(selected,job.executionRecords.length-1)];return <div className="mw-command-output"><p className="mw-muted">{record.recordedAt}{record.truncated?' · 输出已裁剪':''}</p><pre tabIndex={0} aria-label="选中命令输出">{record.output||'此工具未返回文本输出。'}</pre></div>;})()}
+        </section>:<AnalysisEvidence job={job} collapsible={false}/>}
+      </>}
+      {!job.executionRecords?.length&&!analysisEvidence(job).length&&!logs.length&&<p className="mw-muted">此任务没有保存命令输出或分析依据。</p>}
+      <details className="mw-execution-technical">
+        <summary>技术详情</summary>
+        <h4>来源与执行环境</h4>
+
         <dl className="mw-stage-facts">
           <dt>来源提交</dt>
           <dd>
@@ -108,7 +80,8 @@ export function StageExecutionDetails({
             <p>Token {job.tokens ?? "未采集"}</p>
           </>
         )}
-      </details>
+        {!!logs.length && !['queued','running'].includes(job.status) && <section className="mw-stage-log" aria-label="运行日志"><h4>运行日志</h4>{logs.map(a=><div className="mw-job-log" key={a.id}><time>{new Date(a.at).toLocaleString('zh-CN',{hour12:false})}</time><p>{a.detail}</p></div>)}</section>}
+        {!!job.executionRecords?.length&&<section aria-label="原始工具记录"><h4>原始工具记录</h4>{job.executionRecords.map(record=><ExecutionEvidence key={record.id} job={job} record={record}/>)}</section>}
       {job.rawOutput && !job.result && (
         <details>
           <summary>未解析的原始输出</summary>
@@ -116,6 +89,7 @@ export function StageExecutionDetails({
         </details>
       )}
       {tools}
+      </details>
     </section>
   );
 }

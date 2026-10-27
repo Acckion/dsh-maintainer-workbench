@@ -28,7 +28,7 @@ export function TaskDetail({job,issue,jobs,members,audit,repository,native,reque
       <nav className="mw-reader-tabs" aria-label="任务详情页面">{Object.entries(tabs).map(([key,label])=><button key={key} className={tab===key?'active':''} aria-current={tab===key?'page':undefined} onClick={()=>setTab(key as DetailTab)}>{label}</button>)}</nav>
     </header>
     <div className="mw-task-detail-content" ref={reader}>
-      {tab==='overview'&&<>{showProgress&&<StageProgress job={job} issue={liveIssue} audit={audit} readOnly={!issue} input={issue?input:undefined} openSession={openSession}/>} {(job.artifact||job.result)&&<StageResult job={job} open={open} openLocation={showLocation}/>}<section aria-label="任务操作">{actions}</section></>}
+      {tab==='overview'&&<><section aria-label="任务操作">{actions}</section>{showProgress&&<StageProgress job={job} issue={liveIssue} audit={audit} readOnly={!issue} input={issue?input:undefined} openSession={openSession}/>} {(job.artifact||job.result)&&<StageResult history={jobs} job={job} open={open} openLocation={showLocation}/>}</>}
       {tab==='log'&&<StageExecutionDetails job={job} audit={audit} tools={tools} showOpenEvidence={false} openEvidence={id=>open(id,'log')} openSession={openSession}/>}
       {tab==='diff'&&<>{location&&<p className="mw-task-diff-location">发现位置：<code>{location.path}{location.line?`:${location.line}`:''}</code> · 本次任务保存的补丁</p>}{job.patch?<RepositoryPatch patch={job.patch}/>:<Empty title="本次任务没有保存文件差异" text="此处仅展示所选任务的补丁，其他步骤的改动可通过处理步骤或关联证据查看。"/>}</>}
       {tab==='evidence'&&<><ReviewSummary job={job} jobs={jobs} audit={audit} native={native} issue={issue} open={open} openSession={openSession} openLocation={showLocation} deliveryActions={actions}/>{reviewControls}</>}

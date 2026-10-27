@@ -1,3 +1,5 @@
+import {AnalysisEvidence} from './AnalysisEvidence.tsx';
+import {presentedGaps} from './gap-presentation.ts';
 import {GapSummary} from './GapSummary.tsx';
 import type { Job } from "../core/types.ts";
 import { TestExecutionLink } from "./ExecutionEvidence.tsx";
@@ -8,8 +10,10 @@ export function StageResult({
   job,
   open,
   openLocation,
+  history = [],
 }: {
   job: Job;
+  history?: Job[];
   open?: (id: string, tab: DetailTab) => void;
   openLocation?: (path: string, line?: number) => void;
 }) {
@@ -42,7 +46,7 @@ export function StageResult({
       : (job.result?.tests ?? []);
   return (
     <section className="mw-stage-result">
-      {artifact && <GapSummary plan={{gaps:artifact.gaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
+      {artifact && <GapSummary presentation={presentedGaps(job,history)} plan={{gaps:artifact.gaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
       <p className="mw-stage-summary">
         {artifact?.summary ?? job.result?.summary ?? "暂无保存结果"}
       </p>
@@ -174,17 +178,7 @@ export function StageResult({
           </p>
         </details>
       )}
-      {!!job.result?.evidence.length && (
-        <details>
-          <summary>分析依据 · {job.result?.evidence.length ?? 0}</summary>
-          {job.result?.evidence.map((e, index) => (
-            <article key={index}>
-              <strong>{e.source}</strong>
-              <p>{e.detail}</p>
-            </article>
-          ))}
-        </details>
-      )}
+      <AnalysisEvidence job={job}/>
     </section>
   );
 }

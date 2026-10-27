@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import type { Artifact } from './artifacts.ts';
 import type { Job, ExecutionRecord, ToolDiagnostics } from './types.ts';
 import { collectPatch, git } from './git.ts';
+import { executionWithinWorktree } from './execution-cwd-native.ts';
 
 export function toolDiagnosticReasons(d?: ToolDiagnostics): string[] {
   if (!d) return ['未采集工具诊断，请重新派发审查'];
@@ -24,7 +25,7 @@ function matchingRecord(job: Job, id: string, processResult = false): ExecutionR
   if (matches.length !== 1) return undefined;
   const r = matches[0];
   return r.sessionId === job.sessionId && r.checkoutSha === job.baseSha && r.patchHash === job.patchSha256
-    && r.cwd === job.worktree && (processResult ? r.exitCode !== null && !r.signal : !r.isError && (r.exitCode === null || r.exitCode === 0)) ? r : undefined;
+    && !!job.worktree && executionWithinWorktree(job.worktree, r.cwd) && (processResult ? r.exitCode !== null && !r.signal : !r.isError && (r.exitCode === null || r.exitCode === 0)) ? r : undefined;
 }
 
 /** Verify source citations against the current pinned checkout, never execute repository code. */

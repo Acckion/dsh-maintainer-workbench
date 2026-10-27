@@ -79,6 +79,7 @@ export function RepositoryPolicy({
     syncIntervalMinutes: defaults.syncIntervalMinutes,
     timeoutMs: defaults.timeoutMs,
     maxTokens: defaults.maxTokens,
+    inheritMaxTokens: repo?.policy?.inheritMaxTokens ?? !repo?.policy,
   });
   const identity = JSON.stringify(value);
   const initial = React.useRef(identity), attempted = React.useRef(identity);
@@ -100,8 +101,8 @@ export function RepositoryPolicy({
     return () => clearTimeout(timer);
   }, [identity, busy]);
   if (!repo) return null;
-  const number = (key:"syncLimit"|"syncIntervalMinutes"|"timeoutMs"|"maxTokens", label:string, min:number, max:number, factor=1) =>
-    <Row label={label}><input type="number" aria-label={label} min={min} max={max} disabled={busy}
+  const number = (key:"syncLimit"|"syncIntervalMinutes"|"timeoutMs"|"maxTokens", label:string, min:number, max:number|undefined, factor=1) =>
+    <Row label={label}><input type="number" aria-label={label} step={key === "timeoutMs" ? "any" : 1} min={min} max={max} disabled={busy}
       value={value[key]/factor} onChange={e=>setValue({...value,[key]:Number(e.target.value)*factor})}/></Row>;
   return <section className="mw-settings-card">
     <h3>仓库设置</h3>
@@ -110,9 +111,11 @@ export function RepositoryPolicy({
     <Toggle label="自动审查 PR" description="同步后自动预检并审查就绪的 PR；只读，结果保存" value={value.autoReview} change={autoReview=>setValue({...value,autoReview})}/>
     {number("syncLimit","同步记录上限（0 表示无上限）",0,1000000)}
     {number("syncIntervalMinutes","同步间隔（分钟，0 关闭）",0,1440)}
+    {number("timeoutMs","任务最长执行时间（分钟）",1/60,1440,60000)}
     <details className="mw-preference-details"><summary>高级执行选项</summary>
-      {number("timeoutMs","单次任务时间上限（秒）",1,1800,1000)}
-      {number("maxTokens","输出 Token 上限",500,32000)}
+      <Toggle label="输出额度跟随全局设置" description={`全局每次请求上限：${state.settings.maxTokens} Token。关闭后使用本仓库独立额度。`} value={value.inheritMaxTokens} change={inheritMaxTokens=>setValue({...value,inheritMaxTokens})}/>
+      {!value.inheritMaxTokens&&number("maxTokens","输出 Token 上限",500,undefined)}
+      <p className="mw-muted">当前普通任务输出上限：{value.inheritMaxTokens?state.settings.maxTokens:value.maxTokens} Token（{value.inheritMaxTokens?'全局设置':'仓库独立设置，优先于全局'}）。分诊／预检还受全局专项额度 {state.settings.triageMaxTokens??6000} Token 约束。</p>
     </details>
     {error && <div role="alert" className="mw-settings-feedback error">{error} <button type="button" className="mw-button" disabled={busy} onClick={()=>void persist()}>重试保存</button></div>}
   </section>;
