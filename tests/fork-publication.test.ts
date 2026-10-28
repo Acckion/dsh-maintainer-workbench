@@ -36,3 +36,17 @@ test('only exact confirmed publication in the same source lineage permits update
  store.put('jobs',{...source,publications:{comment:{...source.publications!.comment!,status:'failed'}}});assert.throws(()=>assertIssueFresh(store,fix,'own-comment'),/已更新/);
  }finally{store.close();}
 });
+
+
+test('own published review does not invalidate its repair after synchronization; other updates do',async()=>{
+ const {currentJobRevision}=await import('../src/core/current-job-input.ts');
+ const {revision}=await import('../src/core/revision.ts');
+ const store=new Store(':memory:');seedFixture(store);const issue={...store.issues()[0],comments:0,updatedAt:'2026-10-28T01:00:00Z'};const repo=store.repos()[0];
+ const source={id:'source',issueId:issue.id,repoId:repo.id,caseId:'case',issueSnapshot:issue,publications:{comment:{status:'published',at:'now',remoteUpdatedAt:'2026-10-28T02:00:00Z',urls:['https://github.com/fixture/queue/issues/128#issuecomment-123']}}} as unknown as Job;
+ const job={...source,id:'repair',kind:'fix',sourceJobId:source.id,publications:undefined,revision:revision(issue,repo,'fix')} as Job;
+ const updated={...issue,comments:1,updatedAt:'2026-10-28T02:00:00Z'};
+ try{assert.equal(currentJobRevision(job,updated,repo,[source,job]),job.revision);
+ for(const changed of [{...updated,comments:2},{...updated,body:'external edit'},{...updated,headSha:'new-head'},{...updated,updatedAt:'2026-10-28T03:00:00Z'}])assert.notEqual(currentJobRevision(job,changed,repo,[source,job]),job.revision);
+ assert.notEqual(currentJobRevision(job,updated,repo,[{...source,caseId:'other'},job]),job.revision);
+ }finally{store.close();}
+});

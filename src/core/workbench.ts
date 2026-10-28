@@ -1,3 +1,4 @@
+import {currentJobRevision} from "./current-job-input.ts";
 import { MaintenanceService } from "../application/maintenance.ts";
 import { classificationCurrent, classificationRevision } from './classification.ts';
 import { ManualStepService } from "../application/manual-steps.ts";
@@ -368,8 +369,8 @@ export class Workbench {
       repositories = this.store.repos();
     const items = new Map(issues.map((issue) => [issue.id, issue]));
     const repos = new Map(repositories.map((repo) => [repo.id, repo]));
-    const jobs: Job[] = this.store
-      .jobs()
+    const savedJobs = this.store.jobs();
+    const jobs: Job[] = savedJobs
       .reverse()
       .map((job) => {
         const issue = items.get(job.issueId),
@@ -380,7 +381,7 @@ export class Workbench {
           artifactState:
             issue &&
             repo &&
-            job.revision === revision(issue, repo, job.kind) &&
+            job.revision === currentJobRevision(job,issue,repo,savedJobs) &&
             (!job.caseId || job.caseId === issue.processing?.id)
               ? "current"
               : "stale",

@@ -1,3 +1,4 @@
+import {currentJobRevision} from "./current-job-input.ts";
 import {reportReply} from "./reply-draft.ts";
 import { stepResolved } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
@@ -122,7 +123,7 @@ function assertInputCurrent(store: Store, job: Job, repo: Repo): void {
     currentIssue.number !== job.issueSnapshot.number ||
     currentRepo.fullName !== repo.fullName ||
     currentRepo.defaultBranch !== repo.defaultBranch ||
-    job.revision !== revision(currentIssue, currentRepo, job.kind)
+    job.revision !== currentJobRevision(job,currentIssue,currentRepo,store.jobs())
   )
     throw new Error("发布输入已变化，预览已失效；请重新同步、分析并审核");
 }

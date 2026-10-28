@@ -1,3 +1,4 @@
+import {currentJobRevision} from "../core/current-job-input.ts";
 import type { Store } from "../core/store.ts";
 import type { Issue, Repo } from "../core/types.ts";
 import type { ProcessingTimeline } from "../domain/timeline.ts";
@@ -21,15 +22,15 @@ export function processingTimeline(
     if (!state) throw new Error("处理周期不属于此事项");
     const historical = state.id !== current.id;
     const repo = store.get<Repo>("repos", item.repoId);
-    const jobs = store
-      .jobs()
+    const savedJobs=store.jobs();
+    const jobs = savedJobs
       .filter((j) => j.issueId === issueId)
       .map((job) => ({
         ...job,
         artifactState: historical
           ? "historical"
           : repo &&
-              job.revision === revision(item, repo, job.kind) &&
+              job.revision === currentJobRevision(job,item,repo,savedJobs) &&
               (!job.caseId || job.caseId === current.id)
             ? "current"
             : "stale",
