@@ -306,6 +306,10 @@ export function handler(
         });
         return;
       }
+      if(path === "/processing/ask-reporter") {
+        const p=z.object({id:z.string().min(1)}).parse(input);
+        const result=await workbench.askReporter(p.id);if(result.error)throw Error(result.error);send(res,200,result);return;
+      }
       if (path === "/processing/input") {
         const p = z
           .object({

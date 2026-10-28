@@ -148,7 +148,7 @@ export class IssueService extends ServiceBase {
     questions: string[],
     waitingFor: string,
     askedAt?: string,
-    published?: { id: string },
+    published?: { id: string; url?:string },
   ): { id: string; reused: boolean } {
     const issue = this.store.get<Issue>("issues", issueId);
     if (!issue || issue.type !== "issue" || issue.state !== "open")
@@ -205,6 +205,7 @@ export class IssueService extends ServiceBase {
           baselineComments: issue.comments,
           state: "asked",
           source: published ? "published_comment" : "maintainer_record",
+          questionUrl: published?.url,
           replies: [],
         },
       ],

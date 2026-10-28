@@ -1,5 +1,6 @@
+import {reporterWait} from "../core/reporter-question.ts";
 import { useState, useEffect, useRef } from "react";
-import type { Issue } from "../core/types.ts";
+import type { Issue,Job } from "../core/types.ts";
 import type { ProcessingWait } from "../domain/processing.ts";
 
 export function ProcessingInput({
@@ -7,8 +8,10 @@ export function ProcessingInput({
   busy,
   act,
   runId,
+  job,
   embedded = false,
 }: {
+  job?:Job;
   runId?: string;
   embedded?: boolean;
   issue: Issue;
@@ -25,7 +28,7 @@ export function ProcessingInput({
             (!runId || !w.requestedByRunId || w.requestedByRunId === runId),
         )
         .map((wait) => (
-          <InputForm
+          reporterWait(wait) && job ? <ReporterInquiryStatus key={wait.id} job={job} issue={issue} wait={wait} busy={busy} act={act}/> : <InputForm
             key={wait.id}
             wait={wait}
             issue={issue}
@@ -120,4 +123,22 @@ function InputForm({
       </div>
     </form>
   );
+}
+
+
+export function ReporterInquiryStatus({job,issue,wait,busy,act}:{job:Job;issue:Issue;wait?:ProcessingWait;busy:boolean;act:(path:string,data:unknown,message:string)=>Promise<unknown>}) {
+ const inquiry=job.reporterInquiry;
+ if(!inquiry&&!wait)return null;
+ const request=issue.informationRequests?.find(r=>r.id===inquiry?.requestId);
+ const questions=wait?.questions?.map(q=>q.question)??job.artifact?.inputRequest?.fields.filter(q=>q.actor==='reporter').map(q=>q.question)??[];
+ return <section className="mw-callout mw-reporter-inquiry" aria-label="向 Issue 报告者补充提问">
+  <h4>{inquiry?.status==='published'?(request?.state==='reply_received'?'报告者已回复，正在重新分诊':'已向报告者提问，等待回复'):inquiry?.status==='publishing'?'正在向 Issue 发布补充问题':'向报告者补充提问'}</h4>
+  <p>这些资料由 @{issue.author} 在原 Issue 中补充，维护者无需代填。</p>
+  <ol>{questions.map(q=><li key={q}>{q}</li>)}</ol>
+  {inquiry?.url&&<a href={inquiry.url} target="_blank" rel="noreferrer">查看 Issue 中的补充问题 ↗</a>}
+  {inquiry?.status==='published'?<p className="mw-muted">同步仓库检测到报告者回复后，会重新分诊并核对资料是否足够；收到回复不代表问题已解决。</p>:<>
+   {inquiry?.error&&<p role="alert">提问未确认发布：{inquiry.error}</p>}
+   <button className="mw-button primary" disabled={busy||inquiry?.status==='publishing'} onClick={()=>void act('/processing/ask-reporter',{id:job.id},'已向 Issue 报告者发布补充问题，等待回复')}>{inquiry?.status==='failed'?'重试发布补充问题':'向 Issue 报告者提问'}</button>
+  </>}
+ </section>;
 }

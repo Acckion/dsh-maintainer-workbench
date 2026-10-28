@@ -37,7 +37,7 @@ import { WorkflowCard } from "./WorkflowCard.tsx";
 import { OperationTracker, type OperationRecord } from "./OperationTracker.tsx";
 import { Empty, Modal, Tag } from "./Primitives.tsx";
 import { ProcessingHistory } from "./ProcessingHistory.tsx";
-import { ProcessingInput } from "./ProcessingInput.tsx";
+import { ProcessingInput,ReporterInquiryStatus } from "./ProcessingInput.tsx";
 import {
   PublicationConfirm,
   publicationPreviewCurrent,
@@ -1574,7 +1574,7 @@ export function App({
     return <TaskDetail key={job.id} job={job} issue={liveIssue} members={members} jobs={jobs} audit={state?.audit??[]} repository={repo?.fullName??''} native={!!state?.capabilities.harness} requested={requested}
       source={liveIssue&&!liveIssue.origin?()=>{originRef.current=undefined;rememberOrigin(job.id);navigationGeneration.current++;navigate('inbox',repoId,true);setType(liveIssue.type);setFocused(liveIssue.id);setJobFocus(undefined);setReaderRequest(undefined);moveFocusToDetail();}:undefined}
       backLabel={originRef.current?.repoId===repoId&&originRef.current.page!==page?'返回来源列表':'返回任务列表'} back={()=>{if(originRef.current?.repoId===repoId)returnToOrigin();else returnToTasks();}} close={returnToTasks} open={openEvidenceJob} openSession={openSession}
-      input={<ProcessingInput issue={displayedIssue} runId={job.id} embedded busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>}
+      input={<ProcessingInput job={job} issue={displayedIssue} runId={job.id} embedded busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>}
       actions={renderReviewActions(job)} reviewControls={job.kind==='review'?<ReviewFindingControls job={job} history={jobs.filter(j=>j.issueId===job.issueId)} busy={!!busy} act={(path,data,message)=>action('workflow',path,data,message)}/>:undefined}
       tools={null}/>
   }
@@ -1710,6 +1710,7 @@ export function App({
         <>
           {renderProcessingAdvice()}
           <ProcessingInput
+            job={job}
             issue={displayedIssue}
             runId={job?.id}
             busy={!!busy}
@@ -1760,6 +1761,7 @@ export function App({
             input={
               !readOnly && (
                 <ProcessingInput
+            job={job}
                   issue={displayedIssue}
                   runId={job?.id}
                   embedded
@@ -1799,6 +1801,7 @@ export function App({
       return job && (job.result || job.artifact || job.patch) ? (
         <>
           {decision && !readOnly && !["triage", "preflight"].includes(job.kind) && <section className="mw-stage-review-actions" aria-label="报告审核与交付">{renderReviewActions(job)}</section>}
+          {job.reporterInquiry&&<ReporterInquiryStatus job={job} issue={displayedIssue} busy={!!busy} act={(path,data,message)=>action("workflow",path,data,message)}/>}
           <StageResult
             history={history}
             job={job}

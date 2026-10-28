@@ -60,6 +60,8 @@ export interface IssuePlan {
   decision: "proposed" | "accepted" | "deferred";
 }
 export interface InformationRequest {
+  questionUrl?:string;
+  reassessmentJobId?: string;
   id: string;
   questions: string[];
   waitingFor: string;
@@ -180,7 +182,7 @@ export interface Repo {
     | "syncIntervalMinutes"
     | "timeoutMs"
     | "maxTokens"
-  > & { environment?: import('../domain/environment.ts').EnvironmentPolicy; inheritMaxTokens?: boolean };
+  > & { autoAskReporter?:boolean; environment?: import('../domain/environment.ts').EnvironmentPolicy; inheritMaxTokens?: boolean };
   private?: boolean;
   id: string;
   fullName: string;
@@ -264,6 +266,7 @@ export type JobStatus =
   | "failed"
   | "cancelled";
 export interface Job {
+  reporterInquiry?: {waitId:string;status:"publishing"|"published"|"failed";body:string;startedAt:string;url?:string;requestId?:string;remoteUpdatedAt?:string;error?:string};
   maintenanceScope?: string[];
   budgetStopped?: boolean;
   caseId?: string;

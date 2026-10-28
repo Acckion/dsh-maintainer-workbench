@@ -1176,3 +1176,9 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-review-bar .mw-review-action-row:empty{display:none}
 .mw-review-bar .mw-review-action-row>.mw-button{flex:0 1 auto;width:auto;max-width:100%;margin:0;box-sizing:border-box;min-height:36px;padding:8px 12px;font-size:12px!important;line-height:18px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;white-space:normal}
 .mw-review-bar .mw-review-secondary{padding-top:12px;border-top:1px solid var(--mw-border)}
+
+.mw-reporter-inquiry{display:block!important;min-width:0}
+.mw-reporter-inquiry h4{margin:0 0 10px;font-size:14px;line-height:1.5}
+.mw-reporter-inquiry p{margin:8px 0;line-height:1.7}
+.mw-reporter-inquiry ol{margin:10px 0 14px;padding-left:24px;line-height:1.8;overflow-wrap:anywhere}
+.mw-reporter-inquiry .mw-button{margin-top:8px}

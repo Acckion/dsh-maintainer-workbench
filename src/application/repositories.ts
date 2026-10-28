@@ -451,6 +451,7 @@ export class RepositoryService extends ServiceBase {
         autoPreflight: z.boolean().optional(),
         autoReview: z.boolean().optional(),
         autoTriage: z.boolean(),
+        autoAskReporter: z.boolean().optional(),
         syncIntervalMinutes: z.number().int().min(0).max(1440),
         timeoutMs: z.number().int().min(1000).max(86400000),
         maxTokens: z.number().int().min(500),

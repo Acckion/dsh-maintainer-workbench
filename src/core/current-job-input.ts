@@ -11,7 +11,9 @@ export function currentJobRevision(job:Job,issue:Issue,repo:Repo,jobs:Job[]):str
  const receipts=[];const seen=new Set<string>();let source:Job|undefined=job;
  while(source&&!seen.has(source.id)&&seen.size<30){
   if(source.repoId!==job.repoId||source.issueId!==job.issueId||source.caseId!==job.caseId)break;
-  seen.add(source.id);const receipt=source.publications?.comment;
+  seen.add(source.id);const inquiry=source.reporterInquiry;
+  if(inquiry?.status==='published'&&inquiry.url&&inquiry.remoteUpdatedAt&&Date.parse(inquiry.remoteUpdatedAt)>Date.parse(original.updatedAt)&&/#issuecomment-\d+$/.test(inquiry.url))receipts.push({remoteUpdatedAt:inquiry.remoteUpdatedAt,urls:[inquiry.url]});
+  const receipt=source.publications?.comment;
   if(receipt?.status==='published'&&receipt.remoteUpdatedAt&&Date.parse(receipt.remoteUpdatedAt)>Date.parse(original.updatedAt)&&receipt.urls.length===1&&/#issuecomment-\d+$/.test(receipt.urls[0]))receipts.push(receipt);
   source=jobs.find(candidate=>candidate.id===source!.sourceJobId);
  }

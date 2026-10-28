@@ -75,6 +75,7 @@ export function RepositoryPolicy({
     autoPreflight:
       defaults.autoPreflight ?? state.settings.autoPreflight ?? false,
     autoTriage: defaults.autoTriage,
+    autoAskReporter: repo?.policy?.autoAskReporter ?? false,
     autoReview: defaults.autoReview ?? false,
     syncIntervalMinutes: defaults.syncIntervalMinutes,
     timeoutMs: defaults.timeoutMs,
@@ -107,6 +108,7 @@ export function RepositoryPolicy({
       value={value[key]/factor} onChange={e=>setValue({...value,[key]:Number(e.target.value)*factor})}/></Row>;
   return <section className="mw-settings-card">
     <h3>仓库设置</h3>
+    <Toggle label="资料不足时自动向 Issue 报告者提问" description="发布 Agent 生成的事实问题；报告者回复同步后重新分诊。维护者决策仍在工作台确认。" value={value.autoAskReporter} change={autoAskReporter=>setValue({...value,autoAskReporter})}/>
     <Toggle label="自动分诊新增或更新的 Issue" description="" value={value.autoTriage} change={autoTriage=>setValue({...value,autoTriage})}/>
     <Toggle label="自动快速预检新增或更新的 PR" description="" value={value.autoPreflight} change={autoPreflight=>setValue({...value,autoPreflight})}/>
     <Toggle label="自动审查 PR" description="同步后自动预检并审查就绪的 PR；只读，结果保存" value={value.autoReview} change={autoReview=>setValue({...value,autoReview})}/>

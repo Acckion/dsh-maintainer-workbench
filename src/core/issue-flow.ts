@@ -90,6 +90,7 @@ export function receiveReplies(
   if (!["asked", "reply_received"].includes(request.state)) return request;
   const fresh = replies.filter(
     (reply) =>
+      reply.url !== request.questionUrl &&
       reply.author.toLowerCase() === request.waitingFor.toLowerCase() &&
       Date.parse(reply.createdAt) > Date.parse(request.askedAt),
   );

@@ -60,7 +60,7 @@ export function StageProgress({
         ? "需要你授权工具执行"
         : environment
           ? "等待执行环境"
-          : external ? "等待外部结果" : waiting
+          : external ? (external.type==="reporter_reply"?"等待报告者回复":"等待外部结果") : waiting
             ? "任务已暂停"
             : job.status === "queued"
               ? "等待执行"

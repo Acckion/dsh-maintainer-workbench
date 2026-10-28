@@ -1,3 +1,5 @@
+import {reporterWait} from "./reporter-question.ts";
+import {ReporterInquiryService} from "../application/reporter-inquiry.ts";
 import {currentJobRevision} from "./current-job-input.ts";
 import { MaintenanceService } from "../application/maintenance.ts";
 import { classificationCurrent, classificationRevision } from './classification.ts';
@@ -26,7 +28,7 @@ import type { OrganizeMode } from "./organize.ts";
 import type { PublishAction } from "./publish.ts";
 import { revision } from "./revision.ts";
 import { Store } from "./store.ts";
-import type { GlobalSettingsSnapshot, HostModelCatalog, HostStatus, Issue, Job, JobKind, Runner, Snapshot } from "./types.ts";
+import type { GlobalSettingsSnapshot, HostModelCatalog, HostStatus, Issue, Job, JobKind, Runner, Snapshot, Repo } from "./types.ts";
 import { settingsSchema } from "../application/tasks.ts";
 import { assertCatalogChoice } from "./models.ts";
 export { revision } from "./revision.ts";
@@ -38,6 +40,7 @@ export class Workbench {
   private tasks: TaskService;
   private reviews: ReviewService;
   private publication: PublicationService;
+  private reporterInquiry: ReporterInquiryService;
   private worker: StageWorker;
   private scheduler: Scheduler;
   readonly processing: ProcessingService;
@@ -73,6 +76,8 @@ export class Workbench {
       enqueue: (...args) => this.tasks.enqueue(...args),
       execute: async (job, controller) => {
         await this.worker.execute(job, controller);
+        const finished=this.store.get<Job>("jobs",job.id)!;
+        if(this.store.get<Repo>("repos",job.repoId)?.policy?.autoAskReporter&&finished.status==="waiting_input"&&!/不要.{0,20}(?:发布评论|对外发布)|do not.{0,30}(?:post|publish)/i.test(finished.instructions??"")&&this.store.get<Issue>("issues",job.issueId)?.processing?.waits.some(w=>w.requestedByRunId===job.id&&reporterWait(w)))await this.reporterInquiry.ask(job.id).catch(error=>{this.store.audit("reporter.question_blocked",error instanceof Error?error.message:String(error),job.id);});
         await this.maintenance.enforceScope(this.store.get<Job>("jobs",job.id)!);
         if (!this.scheduler.closed)
           this.orchestration.completed(this.store.get<Job>("jobs", job.id)!);
@@ -83,7 +88,7 @@ export class Workbench {
       enqueue: (...args) => this.tasks.enqueue(...args),
       syncRemote: (id) => this.tracking.syncRemote(id),
       isClosed: () => this.scheduler.closed,
-      synced: (id) => this.orchestration.synced(id),
+      synced: (id) => { this.orchestration.synced(id); this.reassessReporterReplies(id); },
     });
     this.tasks = new TaskService(deps, {
       active: this.scheduler.active,
@@ -95,6 +100,7 @@ export class Workbench {
     );
     this.reviews = new ReviewService(deps);
     this.publication = new PublicationService(deps);
+    this.reporterInquiry = new ReporterInquiryService(deps);
     this.publication.recoverFollowups();
     this.orchestration.reconcilePreflightPlans();
     this.worker = new StageWorker(deps, {
@@ -266,6 +272,18 @@ export class Workbench {
     const result = this.tasks.retry(id);
     this.orchestration.replacement(id, result);
     return this.maintenance.replacement(id,result);
+  }
+  askReporter(id:string){ return this.reporterInquiry.ask(id); }
+  private reassessReporterReplies(repoId:string):void {
+    for(const issue of this.store.issues().filter(i=>i.repoId===repoId&&i.state==='open')){
+      const request=issue.informationRequests?.find(r=>r.source==='published_comment'&&r.state==='reply_received'&&!r.reassessmentJobId&&this.store.jobs().some(j=>j.reporterInquiry?.requestId===r.id));
+      if(!request||this.store.jobs().some(j=>j.issueId===issue.id&&['queued','running'].includes(j.status)))continue;
+      try{
+        const result=this.enqueue([issue.id],'triage',{forceNew:true,instructions:'报告者已有新回复。根据已保存的追问与回复重新分诊；逐项判断是否足够，不把收到回复当成问题已解决。不要重复提出已经回答的问题。'});
+        const id=result.created[0]??result.reused[0];
+        if(id){const current=this.store.get<Issue>('issues',issue.id)!;this.store.put('issues',{...current,informationRequests:current.informationRequests?.map(r=>r.id===request.id?{...r,reassessmentJobId:id}:r)});}
+      }catch(error){this.store.audit('reporter.reassessment_blocked',error instanceof Error?error.message:String(error));}
+    }
   }
   resume(id: string) {
     const job = this.store.get<Job>("jobs", id);
