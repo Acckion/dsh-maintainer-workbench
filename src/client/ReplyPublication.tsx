@@ -1,3 +1,4 @@
+import {reportReply} from "../core/reply-draft.ts";
 import {useEffect,useRef,useState} from 'react';
 import type {Job} from '../core/types.ts';
 import {request} from './api.ts';
@@ -6,12 +7,7 @@ import {Modal} from './Primitives.tsx';
 import {publicationPreviewCurrent,type PublicationPreview} from './PublicationConfirm.tsx';
 
 /** Seed editable prose from the accepted report, without inferring tests or a merge decision. */
-export function replyFromReport(job:Job):string{
- if(job.result?.responseDraft?.trim())return job.result.responseDraft;
- const summary=job.artifact?.summary??job.result?.summary;if(!summary?.trim())return '';
- const coverage=job.artifact?.coverage;
- return [summary,coverage?`审查范围与限制：${coverage}`:'','以上为 AI 辅助分析，经维护者本地确认。'].filter(Boolean).join('\n\n');
-}
+export const replyFromReport=reportReply;
 export function publicationError(error:unknown):string{
  const message=error instanceof Error?error.message:'发布未完成，请重试';
  if(/\b403\b|Resource not accessible|权限不足/i.test(message))return `${message}\n请在 GitHub 连接设置中核对当前账号与评论权限；公开仓库可读取不代表当前凭据可发布评论。`;
@@ -25,13 +21,13 @@ export function ReplyPublication({job,repository,close,published,direct=true}:{j
  const [body,setBody]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [urls,setUrls]=useState<string[]>([]),[sent,setSent]=useState(false);
  useEffect(()=>{
-  if(ready&&!initialized.current){initialized.current=true;const initial=typeof draft.reply==='string'?draft.reply:replyFromReport(job);setBody(initial);if(direct&&initial.trim())void send(initial);}
+  if(ready&&!initialized.current){initialized.current=true;const bound=draft.replyJobId===job.id||(!draft.replyJobId&&!['fix','docs'].includes(job.kind));const initial=bound&&typeof draft.reply==='string'?draft.reply:replyFromReport(job);setBody(initial);if(direct&&initial.trim())void send(initial);}
  },[ready,draft.reply,job,direct]);
  async function send(text:string){
   if(inFlight.current||!text.trim()||sent)return;
   inFlight.current=true;setBusy(true);setError('');
   try{
-   await saveItemDraft(job.issueId,{reply:text});await flushItemDraft(job.issueId);
+   await saveItemDraft(job.issueId,{reply:text,replyJobId:job.id});await flushItemDraft(job.issueId);
    const checked:PublicationPreview=await request('/publish/preview',{id:job.id,action:'comment'});
    if(!publicationPreviewCurrent(checked,job))throw Error('报告版本或审批已变化，请回到处理流程核对后再发布。');
    const result=await request('/publish',{id:job.id,action:'comment',previewStamp:checked.stamp});

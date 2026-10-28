@@ -211,6 +211,7 @@ export function handler(
                 reviewFollowupId: z.string().max(400).optional(),
                 systemPlanInputKey: z.string().max(64).optional(),
                 reply: z.string().max(30000).optional(),
+                replyJobId: z.string().max(400).optional(),
                 instructions: z.string().max(10000).optional(),
                 plan: issuePlanSchema
                   .extend({

@@ -1367,7 +1367,7 @@ export function App({
                         2,
                       )
                     : publishAction === "update_pr"
-                      ? `将已审核补丁提交并推送至现有 PR 分支 ${previewJob.prContext?.headRef}，不会强制推送。\n${previewJob.result?.summary}`
+                      ? `将已审核补丁提交并推送至原 PR 来源 ${previewJob.prContext?.headRepo} 的 ${previewJob.prContext?.headRef} 分支，不会强制推送。\n${previewJob.result?.summary}`
                       : `分支：${previewJob.branch}\n目标：${repo?.defaultBranch}\n将提交已审核差异、推送分支并创建草稿 PR。\n\n${previewJob.result?.summary}`}
             </div>
             <PublicationConfirm

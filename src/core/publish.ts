@@ -1,3 +1,4 @@
+import {reportReply} from "./reply-draft.ts";
 import { stepResolved } from "../workflow/manual.ts";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -37,10 +38,29 @@ const previewStamp = (
     .update(JSON.stringify([approvalStamp(job), action, mode]))
     .digest("hex");
 
-function commentText(store: Store, job: Job): string {
-  const reply = job.issueId ? store.draft(job.issueId).reply : undefined;
-  return typeof reply === "string" ? reply : (job.result?.responseDraft ?? "");
+export function commentText(store: Store, job: Job): string {
+  const draft = job.issueId ? store.draft(job.issueId) : {};
+  const bound = draft.replyJobId === job.id || (!draft.replyJobId && !['fix','docs'].includes(job.kind));
+  if (bound && typeof draft.reply === 'string') return draft.reply;
+  return ["fix","docs"].includes(job.kind) ? reportReply(job) : (job.result?.responseDraft ?? "");
 }
+
+/** Resolve only the pinned PR source repository; never push a fork patch upstream. */
+export async function pushRepository(job: Job, repo: Repo, action: PublishAction, github: GitHub): Promise<string> {
+  const base = repo.githubName ?? repo.fullName;
+  if (action !== 'update_pr') return base;
+  const target = job.prContext?.headRepo;
+  if (!target || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(target)) throw Error('无法确定原 PR 的来源仓库，请刷新 PR 详情后重试。');
+  if (target.toLowerCase() === base.toLowerCase()) return target;
+  let metadata: unknown;
+  try { metadata = await github.request(`/repos/${target}`); }
+  catch (error) { throw new Error(`无法核对 PR 来源仓库 ${target} 的写入权限，请检查当前 GitHub 连接。`, {cause:error}); }
+  const checked = z.object({full_name:z.string(),permissions:z.object({push:z.boolean().optional()}).optional()}).safeParse(metadata);
+  if (!checked.success || checked.data.full_name.toLowerCase() !== target.toLowerCase() || checked.data.permissions?.push !== true)
+    throw Error(`当前 GitHub 账号没有向 PR 来源仓库 ${target} 推送的权限。请使用有该分支写入权限的账号，或下载补丁交给作者；无需提供上游仓库所有者密钥。`);
+  return target;
+}
+
 function publicationStamp(
   store: Store,
   job: Job,
@@ -164,8 +184,16 @@ async function remoteInputs(
   return live.updated_at;
 }
 
-function assertIssueFresh(job: Job, updatedAt: string): void {
-  const receipt = Object.values(job.publications ?? {})
+export function assertIssueFresh(store: Store, job: Job, updatedAt: string): void {
+  const lineage: Job[] = [];
+  const seen = new Set<string>();
+  let current: Job | undefined = job;
+  while (current && !seen.has(current.id) && lineage.length < 30) {
+    if (current.issueId !== job.issueId || current.repoId !== job.repoId || current.caseId !== job.caseId) break;
+    seen.add(current.id); lineage.push(current);
+    current = current.sourceJobId ? store.get<Job>("jobs",current.sourceJobId) : undefined;
+  }
+  const receipt = lineage.flatMap(item => Object.values(item.publications ?? {}))
     .filter((r) => r.status === "published")
     .sort((a, b) => b.at.localeCompare(a.at))[0];
   if (updatedAt !== (receipt?.remoteUpdatedAt ?? job.issueSnapshot.updatedAt))
@@ -201,9 +229,10 @@ export async function previewPublication(
       alreadyPublished,
     };
   const updatedAt = await remoteInputs(store, job, repo, action, github);
+  if (action === "update_pr") await pushRepository(job,repo,action,github);
   // A failed attempt may have written remotely before losing its response. Allow
   // the existing deduplication lookup; a genuinely new write still checks freshness.
-  if (!job.publications?.[action]) assertIssueFresh(job, updatedAt);
+  if (!job.publications?.[action]) assertIssueFresh(store, job, updatedAt);
   if (job.deliveryReviewId) {
     const delivery = await resolveDelivery(
       store,
@@ -333,12 +362,12 @@ export async function publish(
   };
   const remoteWrite = async (path: string, init: RequestInit) => {
     assertBinding();
-    assertIssueFresh(job, await remoteInputs(store, job, repo, action, github));
+    assertIssueFresh(store, job, await remoteInputs(store, job, repo, action, github));
     assertBinding();
     return github.request(path, init);
   };
   const updatedAt = await remoteInputs(store, job, repo, action, github);
-  const assertFresh = () => assertIssueFresh(job, updatedAt);
+  const assertFresh = () => assertIssueFresh(store, job, updatedAt);
   if (!prior) assertFresh();
   if (
     ["pr", "update_pr"].includes(action) &&
@@ -475,12 +504,7 @@ export async function publish(
         throw new Error("现有 PR 请使用更新原 PR，或下载补丁");
       if (!["fix", "docs"].includes(job.kind))
         throw new Error("只有实施或文档产物可发布代码，实验补丁不能发布");
-      if (
-        action === "update_pr" &&
-        (!job.prContext ||
-          job.prContext.headRepo !== (repo.githubName ?? repo.fullName))
-      )
-        throw new Error("跨仓库 fork 不自动推送，请下载补丁交给原作者");
+      await pushRepository(job,repo,action,github);
       await validateCheckout(repo.localPath, repo);
       const worktree = job.worktree!;
       const head = await git(worktree, ["rev-parse", "HEAD"]);
@@ -554,7 +578,7 @@ export async function publish(
       )
         throw new Error("推送前工作区已变化");
       assertIssueFresh(
-        job,
+        store, job,
         await remoteInputs(
           store,
           store.get<Job>("jobs", job.id)!,
@@ -564,11 +588,13 @@ export async function publish(
         ),
       );
       assertBinding();
+      const pushTarget = await pushRepository(job,repo,action,github);
+      assertBinding();
       await executeGit(
         worktree,
         [
           "push",
-          `https://github.com/${repo.mode === "local" ? repo.githubName : repo.fullName}.git`,
+          `https://github.com/${pushTarget}.git`,
           `HEAD:refs/heads/${action === "update_pr" ? job.prContext!.headRef : job.branch}`,
         ],
         true,
