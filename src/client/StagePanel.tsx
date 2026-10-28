@@ -87,6 +87,8 @@ export function StagePanel({
   const detail = tabs.some((tab) => tab.id === selection.detail)
     ? selection.detail
     : "result";
+  const decisionNode=timeline.nodes.find(node=>node.stage==='decision');
+  const publishedReview=selected.stage==='decision'&&currentJob?.kind==='review'&&currentJob.status==='approved'&&currentJob.publications?.comment?.status==='published';
   const panelId = useId();
   return (
     <section className="mw-stage-panel" aria-label="选中阶段" tabIndex={-1}>
@@ -165,6 +167,8 @@ export function StagePanel({
         className="mw-stage-content"
       >
         {detail==='result'&&<EnvironmentStatus job={attempt}/>}
+        {detail==='result'&&selected.stage==='validate'&&attempt?.id===timeline.currentRunId&&decisionNode?.attemptIds.length&&decisionNode.status!=='future'&&<section className="mw-review-handoff"><p>验证已通过。下一步核对修复补丁和验证证据，确认后交付。</p><button className="mw-button primary" onClick={()=>choose({view:'stage',detail:'result',nodeId:decisionNode.id})}>下一步：确认修复与交付</button></section>}
+        {detail==='result'&&['review','track'].includes(selected.stage)&&attempt?.id===timeline.currentRunId&&decisionNode&&decisionNode.status!=='future'&&<section className="mw-review-handoff"><p>审查结论与证据已保存。下一步由维护者确认，再发布结论并选择处理方式。</p><button className="mw-button primary" onClick={()=>choose({view:'stage',detail:'result',nodeId:decisionNode.id})}>下一步：确认与处理</button></section>}
         {detail === "manual" ? (
           manual
         ) : detail === "plan" ? (
@@ -232,6 +236,8 @@ export function StagePanel({
                 {selected.stage === "track" &&
                   track(currentJob, true, !timeline.historical)}
               </>
+            ) : publishedReview&&!readOnly ? (
+              render("review",currentJob,false,true)
             ) : selected.result === "输入已更新" ? (
               <p>
                 输入版本已变化，请通过下一步重新核对。此前的结论和执行记录可在前面的阶段查看。
@@ -255,18 +261,17 @@ export function StagePanel({
               </section>
             ) : selected.stage === "decision" ? (
               issue.type === "issue" &&
-              timeline.profile.category !== "question" ? (
+              timeline.profile.category !== "question" && !["fix", "docs"].includes(attempt?.kind ?? "") ? (
                 render("plan", currentJob, readOnly)
               ) : (
-                render("review", currentJob, readOnly, true)
+                render("review", attempt??currentJob, readOnly, true)
               )
             ) : selected.stage === "track" ? (
               attempt ? (
                 track(
                   attempt,
                   readOnly,
-                  !timeline.historical &&
-                    selected.id === timeline.currentNodeId,
+                  !timeline.historical,
                 )
               ) : (
                 <p>未保存可关联的交付运行，请核对本阶段的活动记录。</p>

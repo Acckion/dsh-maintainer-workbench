@@ -40,22 +40,20 @@ try{
  await page.screenshot({path:out+'/direct-published-fixture.png',fullPage:true});
  const result={fixtureOnly:true,externalWrites:0,directEntry:true,simulatedPostAttempts:attempts,simulatedComments:comments.length};await writeFile(out+'/direct-browser-result.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  }else{
- const body=page.getByRole('textbox',{name:'回复内容'}),preview=page.getByRole('button',{name:'保存并核对发布预览',exact:true});
+ const body=page.getByRole('textbox',{name:'回复内容'}),send=page.getByRole('button',{name:'发布评论',exact:true});
  await expect(body).toHaveValue(/已核对本次修改/);assert.equal(attempts,0);
- await body.fill('');await expect(preview).toBeDisabled();
+ await expect(page.getByRole('button',{name:/核对.*预览|确认发布以上内容/})).toHaveCount(0);
+ await body.fill('');await expect(send).toBeDisabled();
  await page.getByRole('button',{name:'引用审查结论',exact:true}).click();await expect(body).toHaveValue(/已核对本次修改/);
- await body.fill('这是维护者编辑后的回复，保留覆盖范围说明。');await preview.click();await expect(page.getByRole('button',{name:'确认发布以上内容',exact:true})).toBeEnabled();assert.equal(attempts,0);
- assert.equal(store.draft(issue.id).reply,'这是维护者编辑后的回复，保留覆盖范围说明。');
- await body.fill('修改预览后的内容，必须重新核对。');await expect(page.getByRole('button',{name:'确认发布以上内容',exact:true})).toHaveCount(0);
- await page.getByRole('button',{name:'保存并核对发布预览',exact:true}).click();await page.getByRole('button',{name:'确认发布以上内容',exact:true}).click();
- await expect(page.getByRole('alert').first()).toContainText('GitHub 403');await expect(body).toHaveValue('修改预览后的内容，必须重新核对。');assert.equal(comments.length,0);
+ await body.fill('这是维护者编辑后的回复，保留覆盖范围说明。');await send.click();
+ await expect(page.getByRole('alert').first()).toContainText('GitHub 403');await expect(body).toHaveValue('这是维护者编辑后的回复，保留覆盖范围说明。');assert.equal(comments.length,0);
+ await expect(page.getByRole('button',{name:/核对.*预览|确认发布以上内容/})).toHaveCount(0);
  await page.screenshot({path:out+'/permission-error.png',fullPage:true});permissionDenied=false;
- await page.getByRole('button',{name:'重新核对预览',exact:true}).click();await page.getByRole('button',{name:'确认发布以上内容',exact:true}).click();
- await expect(page.getByRole('heading',{name:'回复已发布',exact:true})).toBeVisible();assert.equal(comments.length,1);assert.ok(comments[0].body.includes('修改预览后的内容，必须重新核对。'));
+ await page.getByRole('button',{name:'重试发布',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'回复已发布',exact:true})).toBeVisible();assert.equal(comments.length,1);assert.ok(comments[0].body.includes('这是维护者编辑后的回复，保留覆盖范围说明。'));
  await page.screenshot({path:out+'/published-fixture.png',fullPage:true});
  await page.goto(`http://127.0.0.1:${server.address().port}/?direct=1`);
  await expect(page.getByRole('heading',{name:'回复已发布',exact:true})).toBeVisible();assert.equal(comments.length,1);assert.equal(attempts,2);
-
- const result={fixtureOnly:true,externalWrites:0,modelCalls:0,checks:['empty report draft opens editable composer','empty text cannot preview','quote accepted report explicitly','preview performs no post','edited text invalidates preview','permission error remains visible and preserves edits','retry after readonly recheck posts once and shows receipt','direct entry automatically checks and reconciles receipt without extra click or duplicate'],simulatedPostAttempts:attempts,simulatedComments:comments.length};await writeFile(out+'/browser-result.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+ const result={fixtureOnly:true,externalWrites:0,modelCalls:0,checks:['empty text cannot publish','single click publishes without preview or confirmation buttons','permission error preserves edits','single-click retry','direct entry reconciles receipt without duplicate'],simulatedPostAttempts:attempts,simulatedComments:comments.length};await writeFile(out+'/browser-result.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }
 }finally{await browser?.close();await new Promise(r=>server.close(r));await wb.close();if(savedToken===undefined)delete process.env.GITHUB_TOKEN;else process.env.GITHUB_TOKEN=savedToken;}

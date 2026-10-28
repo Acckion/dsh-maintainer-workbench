@@ -251,6 +251,14 @@ export class Workbench {
   rerun(id: string) {
     return this.maintenance.replacement(id,this.tasks.rerun(id));
   }
+  async recoverReport(id:string){
+    const job=this.store.get<Job>('jobs',id);if(job)this.orchestration.assertRecovery(job);
+    const result=await this.tasks.recoverReport(id);
+    this.orchestration.replacement(id,result);
+    const recovered=this.store.get<Job>('jobs',result.created[0]??result.reused[0]);
+    if(recovered?.workflowRunId)this.orchestration.completed(recovered);
+    return result;
+  }
   retry(id: string) {
     const job = this.store.get<Job>("jobs", id);
     if (job) this.orchestration.assertRecovery(job);

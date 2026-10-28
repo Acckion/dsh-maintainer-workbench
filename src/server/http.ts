@@ -717,6 +717,10 @@ export function handler(
         workbench.decide(p.issueId, p.stage, p.reason);
       } else if (path === "/cancel")
         workbench.cancel(z.object({ id: z.string() }).parse(input).id);
+      else if (path === "/recover-report") {
+        const id=z.object({id:z.string()}).parse(input).id;
+        send(res,200,{...await workbench.recoverReport(id),errors:[]});return;
+      }
       else if (path === "/retry") {
         const id = z.object({ id: z.string() }).parse(input).id;
         send(res, 200, { ...workbench.retry(id), errors: [] });

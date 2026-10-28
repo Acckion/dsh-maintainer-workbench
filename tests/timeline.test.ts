@@ -502,3 +502,41 @@ test("browsing an earlier scope decision never mounts the current editable plan 
     /current implementation must stay on its own node/,
   );
 });
+
+test('a completed PR review with findings hands off to maintainer decision, not publication inside review',()=>{
+ const review=job('review-with-findings','review','awaiting_review');
+ review.artifact={schemaVersion:1,stage:'review',summary:'Needs changes',coverage:'Fixture',evidence:[],nextSteps:[],responseDraft:'',findings:[],verdict:'changes_requested',blockers:[]};
+ const view=projectTimeline(issue,{...state,currentRunId:review.id},[review],[],availableActions(issue,review,[review]));
+ assert.equal(view.nodes.find(n=>n.id===view.currentNodeId)?.stage,'decision');
+ const selected=view.nodes.find(n=>n.stage==='review')!;
+ const markup=renderToStaticMarkup(React.createElement(StagePanel,{selected,timeline:view,issue,attempt:review,currentJob:review,history:[review],readOnly:true,selection:{view:'stage',detail:'result'},choose:()=>{},render:(_tab,_job,_readonly,decision)=>React.createElement('p',null,decision?'decision controls':'report evidence'),track:()=>null,evidence:()=>null}));
+ assert.match(markup,/下一步：确认与处理/);assert.match(markup,/report evidence/);assert.doesNotMatch(markup,/decision controls/);
+});
+
+test('publication receipts preserve delivery node and its order while agent repair runs, even without event cache',()=>{
+ const review={...job('published-review','review','approved',1),finishedAt:'2026-10-09T00:00:02Z',publications:{comment:{status:'published' as const,at:'2026-10-09T00:00:03Z',urls:['https://example.test/comment']}}};
+ const repair={...job('repair','fix','running',4),sourceJobId:review.id};
+ const view=projectTimeline(issue,{...state,currentRunId:repair.id,phase:'fix'},[review,repair],[]);
+ const track=view.nodes.find(n=>n.stage==='track')!;
+ assert.equal(track.status,'saved');assert.deepEqual(track.attemptIds,[review.id]);
+ assert.ok(view.nodes.indexOf(track)<view.nodes.findIndex(n=>n.stage==='fix'));
+ assert.equal(view.currentRunId,repair.id);
+});
+
+
+test("passing repair validation opens human confirmation without another review", () => {
+  const fix={...job("repair", "fix", "awaiting_review",2),patch:"same patch",patchSha256:"hash"};
+  const validation:Job={...job("checked", "validate", "completed",3),sourceJobId:fix.id,patch:fix.patch,patchSha256:fix.patchSha256,artifact:{schemaVersion:1,stage:"validate",summary:"Passed",coverage:"patch",evidence:[],nextSteps:[],responseDraft:"",environment:"fixture",tests:[{command:"test",status:"passed",output:"PASS"}],blockers:[],gaps:[]}};
+  const history=[job("original-review","review"),fix,validation];
+  const view=projectTimeline(issue,{...state,currentRunId:validation.id},history,[],availableActions(issue,validation,history));
+  const current=view.nodes.find(n=>n.id===view.currentNodeId)!;
+  assert.equal(current.stage,"decision");
+  assert.deepEqual(current.attemptIds,[fix.id]);
+  assert.equal(current.status,"waiting");
+  assert.equal(availableActions(issue,validation,history).primary,undefined);
+  for(const invalid of [{...validation,artifactState:"stale" as const},{...validation,patch:"different"},{...validation,sourceJobId:"missing"}]) {
+    const next=projectTimeline(issue,{...state,currentRunId:invalid.id},[fix,invalid],[]);
+    assert.notEqual(next.nodes.find(n=>n.id===next.currentNodeId)?.attemptIds[0],fix.id);
+  }
+  assert.equal(fix.status,"awaiting_review");
+});

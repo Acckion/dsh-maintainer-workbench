@@ -1,3 +1,4 @@
+import {executionReference} from "./execution-reference.ts";
 import { z } from 'zod';
 import { resolve } from 'node:path';
 import { artifactSchemas, findingSchema, parseArtifact, emptyInputRequest, type Artifact } from './artifacts.ts';
@@ -28,9 +29,8 @@ export function compactReportSchema(kind: JobKind) {
 
 /** Select only host records from the same session, checkout and (for read-only stages) patch. */
 function optionalRecordFor(kind: JobKind, id: string, context?: ReportContext, implementationCheck = false): ExecutionRecord | undefined {
-  const matches = context?.executionRecords?.filter(record => record.id === id || record.callId === id) ?? [];
-  const record = matches[0];
-  if (matches.length !== 1 || !context?.sessionId || !record || record.sessionId !== context.sessionId ||
+  const record = executionReference(context?.executionRecords??[],id,context?.sessionId);
+  if (!context?.sessionId || !record || record.sessionId !== context.sessionId ||
     record.checkoutSha !== context.baseSha || (context.worktree && !executionWithinWorktree(context.worktree, record.cwd)) ||
     ((['validate', 'review', 'ci'].includes(kind) || implementationCheck) && context.worktree && (!context.patchSha256 || record.patchHash !== context.patchSha256)))
     return undefined;
@@ -80,14 +80,20 @@ export function assembleReport(kind: JobKind, value: unknown, context?: ReportCo
           throw new ReportParseError(`源码引用与工具记录 ${record.id} 的 ${ref.path}:${ref.line} 不匹配；请使用完整原文或省略 quote 由主机提取：${line[2].trim()}`, 'schema');
         // The host supplies the full numbered line, including Markdown/list punctuation.
         // Legacy quote fragments must match it; unrelated text is never rewritten into evidence.
-        return { ...ref, quote: line[2] };
+        return { ...ref, executionId:record.id, quote: line[2] };
       }
-      if (ref.quote !== undefined) return ref; // The final evidence gate verifies unnumbered reads against disk.
+      if (ref.quote !== undefined) return {...ref,executionId:record.id}; // The final evidence gate verifies unnumbered reads against disk.
       throw new ReportParseError('工具输出没有可提取的编号源码行，请提供简短原文引用', 'schema');
     };
     body.inspectedSources = (report.inspectedSources as z.infer<typeof sourceRef>[] | undefined)
       ?.map(source).filter((ref): ref is z.infer<typeof sourceRef> => ref !== undefined);
-    body.findings = (report.findings as z.infer<typeof compactFinding>[]).map(finding => ({ ...finding, sourceEvidence: finding.sourceEvidence && source(finding.sourceEvidence) }));
+    body.findings = (report.findings as z.infer<typeof compactFinding>[]).map(finding => {
+      const reproduction=finding.reproduction;
+      const record=reproduction?.executionId?optionalRecordFor(kind,reproduction.executionId,context):undefined;
+      if(record&&reproduction?.basis==='executed'&&record.command&&reproduction.command!==undefined&&reproduction.command.trim()!==record.command.trim())
+        throw new ReportParseError(`复现命令与执行记录 ${record.id} 不一致；请使用完整命令，不要缩写：${record.command}`,'schema');
+      return {...finding,sourceEvidence:finding.sourceEvidence&&source(finding.sourceEvidence),reproduction:record&&reproduction?{...reproduction,executionId:record.id,command:record.command??reproduction.command}:reproduction};
+    });
   }
   return parseArtifact(kind, body);
 }

@@ -27,6 +27,9 @@ export class ActionsClient extends GitHubResourceClient {
             id: z.number().int().positive(),
             head_sha: z.string(),
             run_attempt: z.number().int().positive(),
+            status: z.string().optional(),
+            conclusion: z.string().nullable().optional(),
+            html_url: z.string().url().optional(),
           }),
         ),
       })
@@ -105,7 +108,7 @@ export class ActionsClient extends GitHubResourceClient {
         }
       }
     }
-    return { headSha, syncedAt: new Date().toISOString(), jobs, warnings };
+    return { headSha, syncedAt: new Date().toISOString(), jobs, warnings, runs:runs.workflow_runs.filter(run=>run.head_sha===headSha).map(run=>({id:run.id,headSha:run.head_sha,status:run.status,conclusion:run.conclusion,url:run.html_url})) };
   }
   async actionLog(
     repo: Repo,

@@ -55,3 +55,12 @@ export function validationAcceptance(implementation: Job, jobs: Job[], isCurrent
   if (state?.state === 'passed') return { allowed: true, latest };
   return { allowed: false, latest, reason: `同一补丁的最新验证：${state?.reason ?? '没有可接受的完整通过结果。'}` };
 }
+
+/** A passing validator links to one exact implementation; it does not approve it. */
+export function validatedImplementation(validation:Job,jobs:Job[]):Job|undefined{
+  if(validation.issueSnapshot.type!=='pr'||validation.kind!=='validate'||!['completed','approved'].includes(validation.status)||validation.artifactState==='stale'||!validation.patch||validationState(validation.artifact)?.state!=='passed')return;
+  const source=jobs.find(j=>j.id===validation.sourceJobId&&['fix','docs'].includes(j.kind));
+  if(!source||!['awaiting_review','approved'].includes(source.status)||source.artifactState==='stale'||!sameTarget(source,validation)||source.caseId!==validation.caseId||source.patch!==validation.patch||source.patchSha256!==validation.patchSha256)return;
+  const acceptance=validationAcceptance(source,jobs);
+  return acceptance.allowed&&acceptance.latest?.id===validation.id?source:undefined;
+}

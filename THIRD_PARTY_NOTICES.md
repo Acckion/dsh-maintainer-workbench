@@ -1,5 +1,11 @@
 # Third-party resources
 
+## Version scope (2026-10-26 documentation review)
+
+The first inventory below records the earlier installation baseline; its Harness, Cordis and Playwright versions are historical. The current npm lockfile resolves Harness `0.2.1-alpha.1`, Cordis `4.0.5-alpha.1` and Playwright `1.64.0`. See the [competition resource-list draft](docs/competition/RESOURCE-LIST.md) for the current source inventory, retained notices, unresolved model/service disclosures and release-package checks. This documentation review did not rebuild or certify a distribution package. Historical evidence retains its original version scope.
+
+## Earlier baseline inventory
+
 | Resource | Version | License | Usage |
 |---|---|---|---|
 | DeepSeek Harness | 0.1.7-alpha.1 | MIT, Copyright (c) 2026 DeepSeek | Native host, Standard Agent preset, coding tools, model adapters, sessions, permission system; API usage patterns referenced in docs/RESEARCH.md |

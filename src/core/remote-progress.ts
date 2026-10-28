@@ -32,6 +32,7 @@ export interface ActionsJob {
   }[];
 }
 export interface ActionsSnapshot {
+  runs?: {id:number;headSha:string;status?:string;conclusion?:string|null;url?:string}[];
   baseSha?: string;
   prNumber?: number;
   headSha: string;

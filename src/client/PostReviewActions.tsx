@@ -16,7 +16,6 @@ export function PostReviewActions({job,issue,jobs,native,busy,action}:{job:Job;i
  const outdated=changed||issue.title!==job.issueSnapshot.title||issue.body!==job.issueSnapshot.body;
  return <section className="mw-post-review" aria-label="发布后的下一步">
   <h4>结论已发布，接下来怎么处理？</h4>
-  <p className="mw-muted">可选择由插件生成修复补丁，或等待作者提交后复审。</p>
   <div className="mw-post-review-options">
    {!!findings.length&&<button className="mw-button" disabled={fixBlocked||!native||outdated} onClick={()=>setFix(!fix)}>由插件修复 Bug…</button>}
    {!waiting&&<button className="mw-button" disabled={disabled||!ready} onClick={()=>update({reviewFollowupId:job.id})}>等待作者更新后复审</button>}

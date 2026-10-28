@@ -1,3 +1,5 @@
+import {GitHubCheckSummary} from "./GitHubCheckSummary.tsx";
+import {genericGitHubCoverageGap} from "../core/github-check-notices.ts";
 import {AnalysisEvidence} from './AnalysisEvidence.tsx';
 import {presentedGaps} from './gap-presentation.ts';
 import {GapSummary} from './GapSummary.tsx';
@@ -47,6 +49,8 @@ export function StageResult({
       job.issueSnapshot.type === "pr" ? "审查覆盖缺口" : "信息缺口",
       job.result.missingInfo,
     ]);
+  const showGitHubChecks=!!job.prContext && (!!job.prContext.branchProtectionRead || artifact?.gaps?.some(genericGitHubCoverageGap));
+  const presented=artifact ? presentedGaps({...job,artifact:{...artifact,gaps:displayGaps}},allJobs) : [];
   const tests =
     artifact && "tests" in artifact
       ? artifact.tests
@@ -54,7 +58,8 @@ export function StageResult({
   return (
     <section className="mw-stage-result">
       {validation?.reusedSource&&<p className="mw-muted">所需检查已由前序独立验证完成；当前审查目录的环境限制不重复阻塞此补丁。原始报告与目录状态保留。</p>}
-      {artifact && <GapSummary presentation={presentedGaps({...job,artifact:{...artifact,gaps:displayGaps}},allJobs)} plan={{gaps:displayGaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
+      {showGitHubChecks && <GitHubCheckSummary context={job.prContext!}/>}
+      {artifact && <GapSummary presentation={showGitHubChecks?presented.filter(row=>!genericGitHubCoverageGap(row.gap)):presented} plan={{gaps:displayGaps,missingInfo:artifact.stage==="triage"?artifact.missingInfo:[]}} />}
       <p className="mw-stage-summary">
         {artifact?.summary ?? job.result?.summary ?? "暂无保存结果"}
       </p>
@@ -117,15 +122,12 @@ export function StageResult({
             <p>依据：{f.evidence}</p>
             <p>建议：{f.recommendation}</p>
             {f.reproduction && (
-              <details>
-                <summary>
-                  复现依据 ·{" "}
-                  {f.reproduction.basis === "executed" ? "已执行" : "源码推理"}
-                </summary>
+              <section className="mw-reproduction">
+                <h4>复现依据 · {f.reproduction.basis === "executed" ? "已执行" : "源码推理"}</h4>
                 <p>输入：{f.reproduction.input}</p>
                 <p>预期：{f.reproduction.expected}</p>
                 <p>实际：{f.reproduction.actual}</p>
-              </details>
+              </section>
             )}
             <small>
               处置：
@@ -154,7 +156,7 @@ export function StageResult({
         ))}
       {tests.length > 0 && (
         <section>
-          <details open={artifact?.stage === "validate"}>
+          <details open={artifact?.stage === "validate" || artifact?.stage === "review"}>
             <summary>本阶段验证记录 · {tests.length} 项</summary>
             {tests.map((test, index) => (
               <div className="mw-test" key={index}>
@@ -178,7 +180,7 @@ export function StageResult({
           查看本次补丁
         </button>
       )}
-      {(artifact?.responseDraft || job.result?.responseDraft) && (
+      {artifact?.stage !== 'review' && (artifact?.responseDraft || job.result?.responseDraft) && (
         <details>
           <summary>答复草稿</summary>
           <p className="mw-publish-preview">
@@ -186,7 +188,7 @@ export function StageResult({
           </p>
         </details>
       )}
-      <AnalysisEvidence job={job}/>
+      {artifact?.stage !== "review" && <AnalysisEvidence job={job}/>}
     </section>
   );
 }

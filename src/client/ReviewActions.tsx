@@ -45,19 +45,22 @@ export function ReviewActions({
   openSession?: (id: string) => void;
 }) {
   const prReview=job?.artifact?.stage==='review'&&job.issueSnapshot.type==='pr';
+  const repairArtifact=job?.issueSnapshot.type==='pr'&&['fix','docs'].includes(job?.kind??'');
   const commentPublished=job?.publications?.comment?.status==='published';
   const acceptance = job ? acceptanceEligibility(job, jobs, issue?.processing) : undefined;
+  const evidenceBlocked=job?.kind==='review'&&job.evidenceGate?.allowed===false?'证据引用尚未通过验收，请先恢复报告或补齐证据。':undefined;
   return (
     job && (
       <div className="mw-review-bar">
-        <h4>{['awaiting_review','completed'].includes(job.status)?'审核报告':job.status==='approved'?(prReview?(commentPublished?'PR 审查结论已发布':'下一步：发布审查结论'):'报告已接受 · 交付操作'):'任务操作'}</h4>
+        <h4>{['awaiting_review','completed'].includes(job.status)?(repairArtifact?'确认修复补丁':'审核报告'):job.status==='approved'?(prReview?(commentPublished?'PR 审查结论已发布':'下一步：发布审查结论'):'报告已接受 · 交付操作'):'任务操作'}</h4>
         {["awaiting_review", "completed"].includes(job.status) ? (
           <>
-            <div>
+            {job.kind==='review'&&job.rawOutput&&job.evidenceGate?.allowed===false&&<section className="mw-callout mw-report-recovery"><strong>证据引用未完成关联</strong><p>已有读取和执行记录已保留。先尝试恢复引用，不重新执行审查，也不调用模型；恢复后仍需人工核对。</p><button className="mw-button primary" disabled={busy} onClick={()=>void action('recover-report','/recover-report',{id:job.id},'已复用原执行记录恢复报告，等待你核对；未重新执行或发布')}>复用执行记录恢复报告</button></section>}
+            <div className="mw-review-action-row">
               <AcceptArtifactButton
                 job={job}
                 busy={busy}
-                blockedReason={acceptance?.reason}
+                blockedReason={evidenceBlocked??acceptance?.reason}
                 accept={() =>
                   void action(
                     "approve",
@@ -90,7 +93,7 @@ export function ReviewActions({
                 onChange={(e) => setReviewNote(e.target.value)}
               />
             </label>
-            {(job.artifactState==='stale'||acceptance?.reason)&&<p role="status" className="mw-callout amber">{job.artifactState==='stale'?'报告对应的输入版本已变化，请重新核对后再接受。':acceptance?.reason}</p>}
+            {(job.artifactState==='stale'||evidenceBlocked||acceptance?.reason)&&<p role="status" className="mw-callout amber">{job.artifactState==='stale'?'报告对应的输入版本已变化，请重新核对后再接受。':evidenceBlocked??acceptance?.reason}</p>}
             <p className="mw-muted">
               接受只保存本地决定，不代表测试通过，也不会自动发布。
             </p>
@@ -124,8 +127,9 @@ export function ReviewActions({
             <CheckCheck size={14} /> {taskStatus(job).label}
           </Tag>
         )}
+        <div className="mw-review-action-row mw-review-primary" role="group" aria-label="交付操作">
         {job.status === "approved" && job.artifactState !== "stale" && !(prReview&&commentPublished) && (
-          <div className="mw-publish-actions">
+          <>
             <button
               className="mw-button primary"
               onClick={() => void openPublishPreview("comment")}
@@ -134,7 +138,7 @@ export function ReviewActions({
               {prReview?(commentPublished?'核对已发布的评论':'发布结论到 PR 评论'):'发布回复'}
             </button>
 
-          </div>
+          </>
         )}
         {job.status==='approved'&&job.artifactState!=='stale'&&<>            {job.patch && ["fix", "docs"].includes(job.kind) && (
               <button
@@ -150,9 +154,10 @@ export function ReviewActions({
                 {job.issueSnapshot.type === "pr" ? "更新原 PR" : "创建草稿 PR"}
               </button>
             )}</>}
+        </div>
         {prReview&&job.status==='approved'&&!commentPublished&&<p className="mw-muted">报告已在本地接受。点击“发布结论到 PR 评论”，贡献者才能在 GitHub 看到本次结论。</p>}
         {prReview&&commentPublished&&<PostReviewActions job={job} issue={issue} jobs={jobs} native={native} busy={busy} action={action}/>}
-        <details className="mw-review-secondary"><summary>其他操作</summary>        {!["queued", "running"].includes(job.status) && (
+        <div className="mw-review-action-row mw-review-secondary" role="group" aria-label="辅助操作">        {!["queued", "running"].includes(job.status) && (
           <button
             className="mw-button"
             disabled={busy}
@@ -186,7 +191,25 @@ export function ReviewActions({
                 发布已采纳发现
               </button>
             )}
-</>}</details>
+</>}
+
+          {job.sessionId && openSession && (
+            <button
+              className="mw-button"
+              onClick={() => openSession(job.sessionId!)}
+            >
+              打开 Harness 会话 / 审批
+            </button>
+          )}
+          <a className="mw-button" href={`${API}/export/${job.id}`}>
+            <ArrowDownToLine size={13} />
+            导出结果
+          </a>
+          {job.patch && (
+            <a className="mw-button" href={`${API}/export/${job.id}?format=patch`}>下载补丁</a>
+          )}
+
+        </div>
         {job.publications &&
           Object.entries(job.publications).map(([key, receipt]) => (
             <div className="mw-publication" key={key}>
@@ -204,23 +227,7 @@ export function ReviewActions({
               ))}
             </div>
           ))}
-        <div className="mw-export-links">
-          {job.sessionId && openSession && (
-            <button
-              className="mw-text-button"
-              onClick={() => openSession(job.sessionId!)}
-            >
-              打开 Harness 会话 / 审批
-            </button>
-          )}
-          <a href={`${API}/export/${job.id}`}>
-            <ArrowDownToLine size={13} />
-            导出结果
-          </a>
-          {job.patch && (
-            <a href={`${API}/export/${job.id}?format=patch`}>下载补丁</a>
-          )}
-        </div>
+
       </div>
     )
   );

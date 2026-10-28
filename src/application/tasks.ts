@@ -1,3 +1,6 @@
+import {recoverSavedReviewArtifact} from "../core/saved-review-recovery.ts";
+import {reviewEvidenceGate} from "../core/review-evidence.ts";
+import {asAnalysis} from "../core/artifacts.ts";
 import { modelData } from "../core/model-input.ts";
 import { withManualContext, stepResolved } from "../workflow/manual.ts";
 import { createHash, randomUUID } from "node:crypto";
@@ -14,7 +17,7 @@ import { lightweight, type FindingDecision } from "../core/artifacts.ts";
 import { resolveDelivery, type DeliveryTarget } from "../core/delivery.ts";
 import { documentAcceptance } from "../core/document-acceptance.ts";
 import { copyExecutionLogs } from '../core/execution-evidence.ts';
-import { collectPatch } from "../core/git.ts";
+import { collectPatch, git } from "../core/git.ts";
 import { assertReviewEvidence } from "../core/review-evidence.ts";
 import { revision } from "../core/revision.ts";
 import {
@@ -347,6 +350,32 @@ export class TaskService extends ServiceBase {
         created,
       );
     return result;
+  }
+  async recoverReport(id:string):Promise<{created:string[];reused:string[]}>{
+    const job=this.job(id),issue=this.store.get<Issue>("issues",job.issueId)!;
+    const existing=this.store.jobs().find(j=>j.formatSourceJobId===id&&j.formatOnly&&j.evidenceGate?.allowed&&j.status==='awaiting_review');
+    if(existing&&issue.processing?.currentRunId===existing.id){
+      if(existing.artifactState==='stale'||revision(issue,this.repo(job.repoId),job.kind)!==existing.revision||!(await reviewEvidenceGate(existing)).allowed)throw Error('已恢复报告的版本或证据已变化，请重新核对');
+      return {created:[],reused:[existing.id]};
+    }
+    if(issue.state!=='open'||job.kind!=='review'||!['awaiting_review','completed','failed'].includes(job.status)||job.evidenceGate?.allowed!==false||Object.keys(job.publications??{}).length)throw Error('当前任务不适合仅恢复证据报告');
+    if(this.store.jobs().some(j=>j.issueId===job.issueId&&['queued','running'].includes(j.status))||this.active.has(id))throw Error('事项仍有执行任务，暂不恢复报告');
+    if(job.caseId!==issue.processing?.id||issue.processing?.currentRunId!==job.id||job.artifactState==='stale'||revision(issue,this.repo(job.repoId),job.kind)!==job.revision)throw Error('处理周期或输入版本已变化，不能恢复旧报告');
+    const snapshot=JSON.stringify(job),version=issue.processing.version;
+    const artifact=recoverSavedReviewArtifact(job);
+    const gate=await reviewEvidenceGate(job,artifact);
+    if(!gate.allowed)throw Error('已有记录尚不足以恢复报告：'+gate.reasons.join('；'));
+    if(!job.worktree||await git(job.worktree,['rev-parse','HEAD'])!==job.baseSha||createHash('sha256').update(await collectPatch(job.worktree,job.baseSha)).digest('hex')!==job.patchSha256)throw Error('恢复期间工作区版本或补丁已变化');
+    if(JSON.stringify(this.job(id))!==snapshot||this.store.get<Issue>('issues',job.issueId)?.processing?.version!==version||this.store.jobs().some(j=>j.issueId===job.issueId&&['queued','running'].includes(j.status)))throw Error('恢复期间任务或输入状态已变化，请刷新后重试');
+    const now=new Date().toISOString();
+    const restored:Job={...job,id:randomUUID(),status:'awaiting_review',attempt:job.attempt+1,createdAt:now,updatedAt:now,startedAt:undefined,finishedAt:now,artifact,result:asAnalysis(artifact),evidenceGate:gate,formatOnly:true,formatSourceJobId:id,error:undefined,publications:undefined,reviewNote:undefined,findingDecisions:undefined};
+    this.store.transaction(()=>{
+      copyExecutionLogs(this.dataDir,job,restored.id);
+      this.saveJob({...restored,status:'queued'});
+      this.saveJob(restored);
+      this.store.audit('job.evidence_recovered',`复用 ${id} 的原始会话、源码读取和进程记录，仅恢复证据引用；没有执行代码、调用模型、接受或发布报告`,restored.id);
+    });
+    return {created:[restored.id],reused:[]};
   }
   retry(id: string): { created: string[]; reused: string[] } {
     const job = this.job(id);

@@ -1,3 +1,4 @@
+import {validatedImplementation} from "../core/validation-acceptance.ts";
 import { canonicalStage, mergedDiagnosis, stepDisposition } from "./manual.ts";
 import {prReviewValidation,reviewValidationNeeds} from '../core/pr-review-validation.ts';
 import type { Issue, Job } from "../core/types.ts";
@@ -96,6 +97,9 @@ export function projectTimeline(
   for (const e of events)
     if (e.payload.type === "publication.confirmed")
       appearances.push({ stage: "track", at: e.receivedAt });
+  for (const job of ordered)
+    for (const receipt of Object.values(job.publications ?? {}))
+      if (receipt.status === "published") appearances.push({stage:"track",at:receipt.at});
   appearances
     .sort((a, b) => a.at.localeCompare(b.at))
     .forEach((a) => {
@@ -105,18 +109,20 @@ export function projectTimeline(
   const delivered = events.filter(
     (e) => e.payload.type === "publication.confirmed",
   );
-  if (delivered.length) {
+  const publishedJobs = ordered.filter(j => Object.values(j.publications ?? {}).some(receipt => receipt.status === "published"));
+  if (delivered.length || publishedJobs.length) {
     const track = add("track");
     track.attemptIds = [
-      ...new Set(
-        delivered.flatMap((e) => {
+      ...new Set([
+        ...publishedJobs.map(j => j.id),
+        ...delivered.flatMap((e) => {
           const payload = e.payload;
           return payload.type === "publication.confirmed" &&
             history.some((j) => j.id === payload.runId)
             ? [payload.runId]
             : [];
         }),
-      ),
+      ]),
     ];
     track.status = "saved";
     track.result = "交付已记录";
@@ -149,12 +155,13 @@ export function projectTimeline(
         ))) &&
     issue.type === "issue" &&
     profile.category !== "question";
+  const validatedTarget=currentJob?validatedImplementation(currentJob,history):undefined;
   const reviewDecision =
     currentJob?.artifactState !== "stale" &&
     ((issue.type === "pr" &&
       currentJob?.kind === "review" &&
       currentJob.artifact?.stage === "review" &&
-      currentJob.artifact.verdict === "no_findings" && prReviewValidation(currentJob,history,state).passed) ||
+      prReviewValidation(currentJob,history,state).passed) ||
       (issue.type === "issue" &&
         profile.category === "question" &&
         currentJob?.kind === "investigate" &&
@@ -170,6 +177,7 @@ export function projectTimeline(
       state.phase === "answered"
         ? "track"
         : planDecision ||
+            !!validatedTarget ||
             reviewDecision ||
             currentJob?.artifactState === "stale"
           ? "decision"
@@ -198,6 +206,7 @@ export function projectTimeline(
       status: currentJob?.status === "approved" ? "saved" : "waiting",
       result: currentJob?.status === "approved" ? "维护者已确认" : "等待维护者检查审查结论",
     });
+  if(validatedTarget&&currentStage==='decision')Object.assign(current,{attemptIds:[validatedTarget.id],status:validatedTarget.status==='approved'?'saved':'waiting',result:validatedTarget.status==='approved'?'修复产物已确认':'验证已通过，等待维护者确认修复产物'});
   if (currentStage === "track" && !terminal)
     Object.assign(current, { status: "waiting", result: "等待远端进度" });
   if (terminal)
@@ -351,6 +360,10 @@ export function projectTimeline(
         )
       : undefined;
   if (deliveryJob) current.attemptIds = [deliveryJob.id];
+  if (issue.type==='pr' && currentJob?.kind==='review') {
+    const decisionIndex=nodes.findIndex(node=>node.stage==='decision'),trackIndex=nodes.findIndex(node=>node.stage==='track');
+    if(decisionIndex>=0&&trackIndex>=0&&decisionIndex>trackIndex){const [decision]=nodes.splice(decisionIndex,1);nodes.splice(trackIndex,0,decision);}
+  }
   return {
     issueId: issue.id,
     caseId: state.id,

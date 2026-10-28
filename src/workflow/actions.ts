@@ -1,3 +1,4 @@
+import {validatedImplementation} from "../core/validation-acceptance.ts";
 import { reportNeedsRecovery } from "../core/report-state.ts";
 import {
   manualSource,
@@ -146,7 +147,7 @@ export function availableActions(
       job.handoff?.find((h) => h.id === job.sourceJobId)?.kind === "docs";
     primary =
       state === "passed"
-        ? "review"
+        ? validatedImplementation(job,history)?undefined:"review"
         : state === "failed"
           ? sourceDocs || category === "docs" || issue.origin
             ? "docs"

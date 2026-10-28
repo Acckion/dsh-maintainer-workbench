@@ -1148,3 +1148,31 @@ body[data-ds-dark-theme] .mw.mw-native-settings{background:transparent}
 .mw-review-bar>label{margin-top:12px}.mw-review-bar input{max-width:100%;box-sizing:border-box}
 .mw-review-bar .mw-export-links{flex-wrap:wrap}.mw-review-bar .mw-publication{overflow-wrap:anywhere}
 .mw-post-review{display:block!important;border-top:1px solid var(--mw-border);margin-top:16px;padding-top:16px}.mw-post-review-options{display:flex;gap:8px;flex-wrap:wrap}.mw-fix-scope{margin-top:12px;padding:12px;border:1px solid var(--mw-border);border-radius:8px}.mw-fix-scope label{display:flex!important;align-items:flex-start;gap:8px;margin:10px 0}.mw-fix-scope input[type=checkbox]{width:auto;margin:3px 0}.mw-review-secondary{margin-top:12px}.mw-review-secondary>summary{font-size:12px;color:var(--mw-muted);cursor:pointer}.mw-review-secondary .mw-button{margin:8px 8px 0 0}
+.mw-review-handoff{display:flex;gap:12px;align-items:center;justify-content:space-between;padding:12px 14px;margin-bottom:18px;border:1px solid var(--mw-border);border-radius:8px;background:var(--mw-surface-soft)}.mw-review-handoff p{margin:0;font-size:12px;color:var(--mw-muted)}.mw-review-handoff .mw-button{flex-shrink:0}@media(max-width:760px){.mw-review-handoff{align-items:flex-start;flex-direction:column}}
+
+/* Gap notices use a vertical layout so headings never compete with body text. */
+.mw-gap-summary .mw-gap-group{display:block;min-width:0}
+.mw-gap-group>strong{display:block;margin:0 0 10px;white-space:normal}
+.mw-gap-group>ul{margin:0;padding-left:20px;min-width:0}
+.mw-gap-group li+li{margin-top:12px}
+.mw-reproduction{padding:10px 12px;background:var(--mw-surface-soft);border-radius:8px;margin:10px 0}
+.mw-reproduction h4{margin:0 0 6px}
+
+.mw-delivery-history ol{list-style:none;margin:16px 0;padding:0 0 0 18px;border-left:2px solid var(--mw-border)}
+.mw-delivery-history li{position:relative;padding:0 0 22px 12px;min-width:0;overflow-wrap:anywhere}
+.mw-delivery-history li:before{content:"";position:absolute;left:-24px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--mw-muted)}
+.mw-delivery-history time{display:block;color:var(--mw-muted);font-size:12px;margin-bottom:5px}
+.mw-delivery-history li>div{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}
+
+.mw-github-check-summary .mw-gap-group{display:block;margin:12px 0;min-width:0;overflow-wrap:anywhere}
+
+.mw-report-recovery{display:block;min-width:0}
+.mw-report-recovery>strong{display:block;margin-bottom:8px}
+.mw-report-recovery>p{margin:8px 0}
+.mw-report-recovery>.mw-button{max-width:100%;white-space:normal;margin-top:8px}
+
+/* Always-visible workflow actions: content-sized controls wrap as a group. */
+.mw-review-bar .mw-review-action-row{display:flex;flex-flow:row wrap;align-items:center;gap:8px;margin-top:12px}
+.mw-review-bar .mw-review-action-row:empty{display:none}
+.mw-review-bar .mw-review-action-row>.mw-button{flex:0 1 auto;width:auto;max-width:100%;margin:0;box-sizing:border-box;min-height:36px;padding:8px 12px;font-size:12px!important;line-height:18px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;white-space:normal}
+.mw-review-bar .mw-review-secondary{padding-top:12px;border-top:1px solid var(--mw-border)}

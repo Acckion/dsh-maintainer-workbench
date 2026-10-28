@@ -1,3 +1,4 @@
+import {validatedImplementation} from "../core/validation-acceptance.ts";
 import {organizeActions} from "../core/organize.ts";
 import {prReviewValidation, reviewValidationNeeds} from '../core/pr-review-validation.ts';
 import {blockingGaps, planGaps} from '../domain/gaps.ts';
@@ -461,7 +462,9 @@ export class Orchestration {
         this.put(updated,{...updated.orchestration,run:{...run,status:"review",currentJobId:source.id,reason:"必要验证已通过，原源码审查仍适用；等待维护者最终审核"}});
         return;
       }
-      if (validation?.state === "passed")
+      if (validation?.state === "passed" && validatedImplementation(job,this.wb.store.jobs()))
+        this.stop(updated,"review","验证已通过，等待维护者核对修复补丁与验证证据后确认交付；不再自动派发审查。");
+      else if (validation?.state === "passed")
         this.schedule(updated, "review", job.id);
       else
         this.stop(

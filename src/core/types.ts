@@ -208,6 +208,8 @@ export interface PRContext {
   reviewComments?: unknown;
   commitStatus?: unknown;
   branchProtection?: unknown;
+  branchProtectionRead?: "configured" | "not_configured" | "permission_denied" | "not_found" | "unavailable";
+  workflowRuns?: unknown;
   branchRules?: unknown;
   warnings: string[];
 }

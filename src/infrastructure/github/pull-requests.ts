@@ -1,3 +1,4 @@
+import { GitHubRequestError } from "../../core/github-request.ts";
 import { z } from "zod";
 import { prNumber, type RemotePR } from "../../core/remote-progress.ts";
 import type { Issue, Repo } from "../../core/types.ts";
@@ -43,7 +44,28 @@ export class PullRequestClient extends GitHubResourceClient {
         return null;
       }
     };
-    const [checks, reviews, reviewComments, commitStatus, branchProtection, branchRules] = await Promise.all([
+    const root = `/repos/${repo.githubName ?? repo.fullName}`;
+    const branchPath = `${root}/branches/${encodeURIComponent(pr.base.ref)}`;
+    let branchProtectionRead: import("../../core/types.ts").PRContext["branchProtectionRead"] = "unavailable";
+    const protection = async () => {
+      // A protection endpoint 404 alone cannot distinguish absent rules from hidden permissions.
+      const branch = z.object({protected:z.boolean()}).safeParse(await optional(branchPath));
+      if (branch.success && !branch.data.protected) {
+        branchProtectionRead = "not_configured";
+        return null;
+      }
+      try {
+        const result = await this.request(`${branchPath}/protection`, {signal});
+        branchProtectionRead = "configured";
+        return result;
+      } catch (e) {
+        if(signal?.aborted) throw e;
+        branchProtectionRead = e instanceof GitHubRequestError && e.kind === "permission" ? "permission_denied" : e instanceof GitHubRequestError && e.kind === "not_found" ? "not_found" : "unavailable";
+        warnings.push(branchProtectionRead === "permission_denied" ? "无权读取分支保护详情；可由有权限的维护者核对，或授权仓库 Administration 只读权限。无需提供所有者密钥。" : branchProtectionRead === "not_found" ? "分支保护接口返回 404：可能未配置保护或当前身份无权读取，尚不能据此判断 CI 失败。" : "分支保护详情读取失败；请检查连接后重试，CI 状态需单独核对。");
+        return null;
+      }
+    };
+    const [checks, reviews, reviewComments, commitStatus, branchProtection, branchRules, workflowRuns] = await Promise.all([
       optional(
         `/repos/${repo.githubName ?? repo.fullName}/commits/${pr.head.sha}/check-runs?per_page=100`,
       ),
@@ -58,8 +80,9 @@ export class PullRequestClient extends GitHubResourceClient {
       optional(
         `/repos/${repo.githubName ?? repo.fullName}/commits/${pr.head.sha}/status`,
       ),
-      optional(`/repos/${repo.githubName ?? repo.fullName}/branches/${encodeURIComponent(pr.base.ref)}/protection`),
-      optional(`/repos/${repo.githubName ?? repo.fullName}/rules/branches/${encodeURIComponent(pr.base.ref)}?per_page=100`),
+      protection(),
+      optional(`${root}/rules/branches/${encodeURIComponent(pr.base.ref)}?per_page=100`),
+      optional(`${root}/actions/runs?head_sha=${pr.head.sha}&per_page=100`),
     ]);
     return {
       headSha: pr.head.sha,
@@ -75,10 +98,12 @@ export class PullRequestClient extends GitHubResourceClient {
       reviewComments,
       commitStatus,
       branchProtection,
+      branchProtectionRead,
       branchRules,
+      workflowRuns,
       warnings: [
         ...warnings,
-        "检查和审查最多各 100 条；分支保护规则和未解决讨论未完整覆盖，不构成合并许可。",
+        "检查、工作流和审查最多各 100 条；读取到的记录不构成合并许可，未解决讨论仍需单独核对。",
       ],
     };
   }

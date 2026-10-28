@@ -1,3 +1,6 @@
+import { validationAcceptance } from "../core/validation-acceptance.ts";
+import { DeliveryTimeline } from "./DeliveryTimeline.tsx";
+import { prReviewValidation } from "../core/pr-review-validation.ts";
 import {useListContextMenu,type ListMenuAction} from './ListContextMenu.tsx';
 import { filterItems, itemClassification, itemCategory, itemPriority, itemLabels, categoryLabel, defaultInboxFacets, type InboxFacets } from './issue-filters.ts';
 import {
@@ -352,7 +355,16 @@ export function App({
           [actionRepoId]: record,
         }));
       }
-      if (
+      if(path==='/recover-report'&&(result.created?.[0]||result.reused?.[0])&&currentContext.current.repoId===actionRepoId&&navigationGeneration.current===actionNavigation){
+        const source=jobs.find(j=>j.id===(data as {id?:string})?.id);
+        if(source){
+          // Recovery is part of the same item workflow, not a jump to standalone task details.
+          try{localStorage.removeItem(`maintainer.stage:${source.issueId}:${source.caseId??`legacy:${source.issueId}`}`);}catch{}
+          navigate('inbox',actionRepoId,true);setType(source.issueSnapshot.type);setFocused(source.issueId);setDecisionFocus(undefined);setJobFocus(result.created?.[0]??result.reused?.[0]);
+          setReaderRequest({sequence:Date.now(),issueId:source.issueId,tab:'overview'});
+        }
+        setToast({text:success});
+      } else if (
         result.delivery?.implementationJobId &&
         currentContext.current.repoId === actionRepoId &&
         navigationGeneration.current === actionNavigation
@@ -1298,7 +1310,8 @@ export function App({
         close={() => setReplyPublicationId(undefined)}
         published={async () => {
           await refresh();
-          setToast({ text: 'GitHub 回复发布结果已确认' });
+          setReplyPublicationId(undefined);
+          setToast({ text: '评论已发布到 GitHub' });
         }}
       />}
       {publishAction && previewJob && (
@@ -1785,7 +1798,7 @@ export function App({
     if (stage === "review")
       return job && (job.result || job.artifact || job.patch) ? (
         <>
-          {!readOnly && !["triage", "preflight"].includes(job.kind) && <section className="mw-stage-review-actions" aria-label="报告审核与交付">{renderReviewActions(job)}</section>}
+          {decision && !readOnly && !["triage", "preflight"].includes(job.kind) && <section className="mw-stage-review-actions" aria-label="报告审核与交付">{renderReviewActions(job)}</section>}
           <StageResult
             history={history}
             job={job}
@@ -1802,8 +1815,8 @@ export function App({
             }
           />
 
-          {job.kind === "review" && !readOnly && (
-            <section aria-label="发现处置与讨论串">
+          {decision && job.kind === "review" && !readOnly && (
+            <details className="mw-review-secondary"><summary>逐项处置与 GitHub 讨论</summary>
               <ReviewFindingControls
                 job={job}
                 history={history}
@@ -1812,7 +1825,7 @@ export function App({
                   action("workflow", path, data, message)
                 }
               />
-            </section>
+            </details>
           )}
         </>
       ) : (
@@ -1842,6 +1855,14 @@ export function App({
       ["triage", "preflight"].includes(selectedJob.kind)
     )
       return null;
+    if (selectedJob.kind === "review") {
+      const validation = prReviewValidation(selectedJob, jobs);
+      return validation.latest ? <section className="mw-linked-validation"><h4>关联验证</h4><button className="mw-text-button" onClick={() => openEvidenceJob(validation.latest!.id, "overview")}>查看独立验证报告</button></section> : null;
+    }
+    if (["fix", "docs"].includes(selectedJob.kind)) {
+      const validation = validationAcceptance(selectedJob, jobs);
+      return validation.latest ? <section className="mw-linked-validation"><h4>补丁验证</h4><button className="mw-text-button" onClick={() => openEvidenceJob(validation.latest!.id, "overview")}>查看验证报告与执行证据</button></section> : null;
+    }
     return (
       <details className="mw-delivery-evidence">
         <summary>关联验证与交付证据</summary>
@@ -1868,23 +1889,11 @@ export function App({
     return (
       <>
         {renderLinkedEvidence(selectedJob)}
-        {selectedJob &&
-          (readOnly
-            ? Object.entries(selectedJob.publications ?? {}).map(
-                ([kind, receipt]) => (
-                  <p key={kind}>
-                    {kind} · {receipt.status}
-                    {receipt.urls.map((url) => (
-                      <a key={url} href={url} target="_blank" rel="noreferrer">
-                        查看交付结果
-                      </a>
-                    ))}
-                  </p>
-                ),
-              )
-            : renderReviewActions(selectedJob))}
-        {(!readOnly || monitoring) && (
+        {selectedJob && <DeliveryTimeline job={selectedJob} jobs={jobs} open={openEvidenceJob}/>}
+        {selectedJob && !readOnly && selectedJob.kind !== "review" && renderReviewActions(selectedJob)}
+        {(
           <RemoteProgress
+            readOnly={readOnly && !monitoring}
             issue={displayedIssue}
             busy={!!busy}
             act={(path, data, message) =>

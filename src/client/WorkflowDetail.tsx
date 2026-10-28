@@ -1,3 +1,4 @@
+import {validatedImplementation} from "../core/validation-acceptance.ts";
 import { stepDisposition } from "../workflow/manual.ts";
 import { ManualStepForm, manualStepAccess } from "./ManualStepForm.tsx";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -196,21 +197,28 @@ export function WorkflowDetail({
       : selected?.attemptIds.includes(selection.attemptId ?? "")
         ? explicitAttempt
         : (history.find((j) => j.id === selected?.attemptIds.at(-1)) ??
-          (selected?.id === timeline.currentNodeId &&
+          ((selected?.id === timeline.currentNodeId || selected?.stage === "decision" && currentJob?.kind === "review") &&
           ["decision", "track"].includes(selected.stage)
             ? currentJob
             : undefined));
+  const reviewDecisionAccess = selected?.stage==='decision' && !timeline.historical &&
+    currentJob?.kind==='review' && !!currentJob.artifact && ['completed','awaiting_review','approved'].includes(currentJob.status) &&
+    (!selection.attemptId||selection.attemptId===currentJob.id) &&
+    (currentJob.artifactState!=='stale'||currentJob.publications?.comment?.status==='published');
+  const validatedTarget=currentJob?validatedImplementation(currentJob,history):undefined;
+  const validationDecisionAccess=selected?.stage==='decision'&&!timeline.historical&&validatedTarget?.id===attempt?.id&&!!validatedTarget;
+  const decisionAccess=reviewDecisionAccess||validationDecisionAccess;
   const readOnly =
     timeline.historical ||
-    selected?.id !== timeline.currentNodeId ||
+    (!decisionAccess && selected?.id !== timeline.currentNodeId) ||
     (attempt
-      ? attempt.id !== timeline.currentRunId ||
-        attempt.artifactState === "stale"
-      : selected?.id !== timeline.currentNodeId);
+      ? !validationDecisionAccess && attempt.id !== timeline.currentRunId ||
+        (!decisionAccess && attempt.artifactState === "stale")
+      : !decisionAccess && selected?.id !== timeline.currentNodeId);
   const viewingHistory =
     timeline.historical ||
-    selected?.id !== timeline.currentNodeId ||
-    (!!attempt && attempt.id !== timeline.currentRunId);
+    (!decisionAccess && selected?.id !== timeline.currentNodeId) ||
+    (!!attempt && !validationDecisionAccess && attempt.id !== timeline.currentRunId);
   const choose = (value: Selection) => {
     setSelection(value);
     try {
