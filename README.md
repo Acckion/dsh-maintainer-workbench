@@ -14,28 +14,37 @@
 
 ## 安装与启动
 
-推荐使用 **DeepSeek Harness 0.2.1-RC3（`0.2.1-rc.3`）**，这是本项目最终演示使用的宿主版本。从源码运行还需要 Node.js 24+ 和 Git。开发依赖及第三方资源版本见[资源说明](docs/RESOURCE-INVENTORY.md)。
+推荐使用 **DeepSeek Harness 0.2.1-RC3（`0.2.1-rc.3`）**，这是本项目最终演示使用的宿主版本。
 
-**已有 Harness：** 从 Release 下载 `dsh-maintainer-workbench.tgz`，在宿主的插件安装入口选择该文件，然后打开左侧“维护工作台”。预编译包包含客户端和服务端，不运行安装构建脚本。它仍需宿主提供兼容接口，并由包管理器解析运行依赖；不承诺完全离线安装。
+### 直接安装（推荐）
 
-**从源码启动：** 在源码目录执行：
+1. 从 [Harness 官网](https://www.deepseek.com/zh/harness/) 下载并安装桌面端，打开 Harness。已有 Harness 可跳过这一步。
+2. 在左侧选择 **插件 → 添加插件**，将下面的安装包地址粘贴到输入框：
+
+   ```text
+   https://github.com/Acckion/dsh-maintainer-workbench/releases/download/v1.0.0/dsh-maintainer-workbench.tgz
+   ```
+
+3. 确认插件来源后点击 **安装**，完成后启用插件；如提示重新加载，按提示操作。
+4. 在左侧打开 **维护工作台**，按下方“第一次使用”配置模型并接入仓库。
+
+这条安装路径无需克隆源码或执行构建命令。也可以从 [Release 页面](https://github.com/Acckion/dsh-maintainer-workbench/releases/tag/v1.0.0) 下载 `.tgz` 文件，在“添加插件”的同一输入框中填写该文件的本机绝对路径。
+
+### 开发者从源码运行
+
+准备好 **Node.js 24+ 和 Git**，在终端依次执行：
 
 ```sh
+git clone https://github.com/Acckion/dsh-maintainer-workbench.git
+cd dsh-maintainer-workbench
 npm ci --ignore-scripts
 npm run build
 npm run harness
 ```
 
-打开启动器打印的本地认证链接。默认端口 4318，沿用 `DSH_HOME` 或日常 Harness 配置，维护数据保存在 `.data/native/`。需要独立配置时使用 `npm run harness:isolated`，数据与宿主配置分开保存；不要把真实密钥提交到仓库。修改源码后重新构建并重启，避免在任务执行中替换后端。
+保持终端运行，打开终端打印的本地认证链接，在 Harness 左侧进入 **维护工作台**。首次使用仍需配置模型并接入仓库。
 
-只查看独立预览：
-
-```sh
-npm start
-# http://127.0.0.1:4317
-```
-
-预览使用 `.data/`；代码实施依赖原生 Harness，独立预览不具备同等执行能力。启动器不自动读取 `.env`，可通过宿主设置或运行环境配置凭据。
+修改源码后，停止开发进程，再执行 `npm run build` 和 `npm run harness`。开发依赖版本见[资源说明](docs/RESOURCE-INVENTORY.md)。
 
 ## 第一次使用
 
