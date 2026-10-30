@@ -8,7 +8,7 @@ import { lockDirectory } from '../core/lock.ts';
 import { Credentials } from '../core/credentials.ts';
 import { Store } from '../core/store.ts';
 import { Workbench } from '../core/workbench.ts';
-import { buildModelCatalog } from '@deepseek-ai/dsh-api-session-controller';
+import { buildModelCatalog } from './model-catalog.ts';
 import { API, handler } from '../server/http.ts';
 import { harnessRunner, hostStatus } from './native-runner.ts';
 import type {} from '@deepseek-ai/dsh-compaction';

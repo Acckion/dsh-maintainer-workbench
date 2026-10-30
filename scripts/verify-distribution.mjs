@@ -23,6 +23,10 @@ export async function verifyDistribution(archive) {
   // Check executable bundles without invoking plugin activation or host APIs.
   for (const path of ['dist/plugin.js', 'dist/server.js', 'dist/client.js']) {
     const code = execFileSync('tar', ['-xOzf', archive, `package/${path}`], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    if (path === 'dist/plugin.js') {
+      assert.doesNotMatch(code, /["']@deepseek-ai\/dsh-api-session-controller(?:\/[^"']*)?["']/,
+        'Host plugin must project its model catalog from injected llm and agentDefaultModel services; session-controller exports are not a supported dependency');
+    }
     execFileSync(process.execPath, ['--check', '--input-type=module'], { input: code });
   }
   return manifest;

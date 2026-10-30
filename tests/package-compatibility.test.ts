@@ -19,6 +19,11 @@ test('plugin declares shared host peers aligned with the development runtime', a
     assert.equal(lock.packages[`node_modules/${peer}`].version, '0.2.1-alpha.1');
   }
   assert.equal(manifest.scripts.prepare, 'npm run build');
+  for (const dependencies of [manifest.dependencies, manifest.peerDependencies, manifest.devDependencies,
+    lock.packages[''].peerDependencies, lock.packages[''].devDependencies]) {
+    assert.equal(dependencies['@deepseek-ai/dsh-api-session-controller'], undefined,
+      'Model catalog consumers must use injected host services instead of session-controller exports');
+  }
 });
 
 test('evaluation preserves raw lock fingerprints but permits root metadata changes only', () => {

@@ -1,6 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis';
 import { Store } from '../src/core/store.ts';
-import { buildModelCatalog } from '@deepseek-ai/dsh-api-session-controller';
+import { buildModelCatalog } from '../src/plugin/model-catalog.ts';
 import { Workbench } from '../src/core/workbench.ts';
 import { harnessRunner, hostStatus } from '../src/plugin/native-runner.ts';
 import { GitHub } from '../src/core/github.ts';

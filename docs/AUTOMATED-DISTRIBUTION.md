@@ -26,7 +26,7 @@ CLI 可使用 `dsh plugin --profile web add <附件URL或本地tgz路径>`。需
 
 安装依赖使用 `npm ci --ignore-scripts`，之后显式执行类型检查、包兼容及关键工作流测试、构建与真实 tarball 校验。全量测试入口保持不变；当前发布门槛使用有针对性的回归集，既有全量测试失败记录见编排实现记录，不宣称全量检查通过。
 
-打包脚本只复制 package.json 的 files 清单和许可证到临时目录。分发清单保留 runtime/peer 依赖、入口、Harness 配置及 start 命令，移除开发依赖与构建生命周期脚本。源码中的 prepare 保留，开发方式不变。tarball 检查真实入口、预览文件、工作流和文档检查脚本、第三方许可证，以及服务器和客户端 bundle 的 JavaScript 语法。
+打包脚本只复制 package.json 的 files 清单和许可证到临时目录。分发清单保留 runtime/peer 依赖、入口、Harness 配置及 start 命令，移除开发依赖与构建生命周期脚本。源码中的 prepare 保留，开发方式不变。tarball 检查真实入口、预览文件、工作流和文档检查脚本、第三方许可证，以及服务器和客户端 bundle 的 JavaScript 语法。Host bundle 还必须不引用 `dsh-api-session-controller`；模型目录从注入的 `llm` 与 `agentDefaultModel` 服务生成，避免已移除的 `buildModelCatalog` 导出再次使插件加载失败。该检查针对实际 tgz 内容，语法有效但仍含旧导入的包同样拒绝发布。
 
 Release 重跑先检查远端状态，仅将 404 视为尚未创建；认证、网络和其他 API 错误使任务失败。同一提交的附件可以重新上传。每个发布步骤重新检查 SHA-256。
 

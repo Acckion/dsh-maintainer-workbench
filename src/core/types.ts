@@ -387,7 +387,7 @@ export interface ModelChoice {
   model: string;
   reasoningEffort?: string;
 }
-/** Credential-free catalog projected by the same Harness API as its composer. */
+/** Credential-free choices projected from Harness model and default-selection services. */
 export interface HostModelCatalog {
   default: ModelChoice;
   groups: readonly {

@@ -18,6 +18,8 @@
 
 **已有 Harness：** 从 Release 下载 `dsh-maintainer-workbench.tgz`，在宿主的插件安装入口选择该文件，然后打开左侧“维护工作台”。预编译包包含客户端和服务端，不运行安装构建脚本。它仍需宿主提供兼容接口，并由包管理器解析运行依赖；不承诺完全离线安装。
 
+若启动时出现 `does not provide an export named 'buildModelCatalog'`，说明安装的旧包仍依赖已移除的 session-controller 导出。模型目录现由插件从宿主注入的 `llm` 与 `agentDefaultModel` 服务生成；需安装包含此修复的新版包并重启，仅更新本地源码或 Harness 不会替换 profile 内已安装的插件。发布前会检查实际 tgz，拒绝再次携带该导入的服务端 bundle。
+
 **从源码启动：** 在源码目录执行：
 
 ```sh
