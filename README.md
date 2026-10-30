@@ -33,7 +33,16 @@
 3. 确认插件来源后点击 **安装**，完成后启用插件；如提示重新加载，按提示操作。
 4. 在左侧打开 **维护工作台**，按下方“第一次使用”配置模型并接入仓库。
 
-这条安装路径无需克隆源码或执行构建命令。也可以从 [Release 页面](https://github.com/Acckion/dsh-maintainer-workbench/releases/tag/v1.0.0) 下载 `.tgz` 文件，在“添加插件”的同一输入框中填写该文件的本机绝对路径。
+### 下载 Release 压缩包后安装
+
+1. 从 [Release 页面](https://github.com/Acckion/dsh-maintainer-workbench/releases/tag/v1.0.0) 下载 [dsh-maintainer-workbench.tgz](https://github.com/Acckion/dsh-maintainer-workbench/releases/download/v1.0.0/dsh-maintainer-workbench.tgz)，保存到本机，**无需解压**。
+2. 打开 Harness 的 **插件 → 添加插件**，在输入框中填写这个 `.tgz` 文件的**完整绝对路径**，然后点击 **安装**。
+3. 安装完成后启用插件；如提示重新加载，按提示操作，再进入左侧 **维护工作台**。
+
+也支持本地插件目录：先解压 `.tgz`，在同一输入框中填写直接包含 `package.json`、`dist/` 和 `cordis.patch.yml` 的目录绝对路径。
+
+在线地址、压缩包和本地目录三种方式任选一种，无需重复安装，也无需编译源码；安装运行依赖仍可能需要联网。
+
 
 ### 开发者从源码运行
 
