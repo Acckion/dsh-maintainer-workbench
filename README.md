@@ -20,9 +20,6 @@
 | --- | --- | --- | --- |
 | Windows | x64（Intel / AMD 64 位） | [下载 EXE](https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.3-win-x64.exe) | DeepSeek 官方 |
 | macOS | ARM64（Apple M 系列芯片） | [下载 DMG](https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.3-mac-arm64.dmg) | DeepSeek 官方 |
-| macOS | x64（Intel 芯片） | [下载 DMG](https://github.com/flaqai/open-deepseek-harness-desktop/releases/download/odsh-v0.2.1-rc.3/DeepSeek-Harness-macos-x64.dmg) | FLAQ AI 社区构建 |
-
-官方 RC3 桌面安装包提供 Windows x64 和 macOS ARM64。Intel Mac 的链接为基于同版 Harness 的社区发行版，本插件尚未在该发行版验证。
 
 ### 直接安装（推荐）
 
