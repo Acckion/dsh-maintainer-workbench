@@ -7,7 +7,7 @@
 本项目开放插件源码、阶段工作流、测试与打包工具。Harness 提供 Agent、模型、工具、会话和权限能力；本项目实现维护事项组织、阶段编排、证据关联、恢复、交付及界面。我们不训练基础模型，也不将宿主能力作为团队原创。
 
 - [源码与问题反馈](https://github.com/Acckion/dsh-maintainer-workbench)
-- [1.0.0 正式安装包](https://github.com/Acckion/dsh-maintainer-workbench/releases/tag/v1.0.0)：标签 `v1.0.0`，不使用 Pre-release。请核对该版本的 `distribution.json` 和 `SHA256SUMS`；其他 `master-<commit>` 记录是开发预发布。
+- [下载安装包](https://github.com/Acckion/dsh-maintainer-workbench/releases/tag/v1.0.0)
 - [评审、复现与当前边界](docs/SUBMISSION.md)
 - [资源与 AI 辅助使用说明](docs/RESOURCE-INVENTORY.md)
 - [参与贡献](CONTRIBUTING.md) · [第三方许可与来源](THIRD_PARTY_NOTICES.md)
