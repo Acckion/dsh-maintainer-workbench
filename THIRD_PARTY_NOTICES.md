@@ -1,26 +1,12 @@
 # Third-party resources
 
-## Version scope (2026-10-26 documentation review)
+## Current distribution scope (2026-10-30)
 
-The first inventory below records the earlier installation baseline; its Harness, Cordis and Playwright versions are historical. The current npm lockfile resolves Harness `0.2.1-alpha.1`, Cordis `4.0.5-alpha.1` and Playwright `1.64.0`. See the [competition resource-list draft](docs/competition/RESOURCE-LIST.md) for the current source inventory, retained notices, unresolved model/service disclosures and release-package checks. This documentation review did not rebuild or certify a distribution package. Historical evidence retains its original version scope.
+The source lockfile resolves Harness / DSH SDK `0.2.1-alpha.1`, Cordis `4.0.5-alpha.1`, React / React DOM `18.3.1`, Lucide React `0.468.0`, Zod `3.25.76`, semver `7.8.5`, react-markdown `10.1.0` and remark-gfm `4.0.1`. Runtime/transitive notices and exact retained-license hashes are listed in `third_party/runtime/manifest.json`. Development tools include TypeScript `5.9.3` (Apache-2.0), esbuild `0.25.12` (MIT), tsx `4.23.15` (MIT), and Playwright `1.64.0` (Apache-2.0); their binaries are not shipped as part of the plugin.
 
-## Earlier baseline inventory
+See [resource inventory](docs/RESOURCE-INVENTORY.md) for source, service, AI-assistance and redistribution boundaries, and [reproduction instructions](docs/SUBMISSION.md) for what the submission package actually verifies. Historical test records retain their original host/version scope. Original project code is MIT; adapted workflow text has the Apache-2.0 scope below. Individual third-party licenses remain applicable.
 
-| Resource | Version | License | Usage |
-|---|---|---|---|
-| DeepSeek Harness | 0.1.7-alpha.1 | MIT, Copyright (c) 2026 DeepSeek | Native host, Standard Agent preset, coding tools, model adapters, sessions, permission system; API usage patterns referenced in docs/RESEARCH.md |
-| DeepSeek Cordis | 4.0.3 in development lock; 4.0.4 in fresh-install host trial | MIT | Native plugin lifecycle and dependency injection; one shared host instance |
-| React / React DOM | 18.3.1 | MIT | UI, native build reuses host React |
-| Lucide React | 0.468.0 | ISC | UI icons |
-| Zod | 3.25.76 | MIT | Request and model output validation |
-| semver | 7.8.5 | ISC | Validate target repository Node engine requirements |
-| React Scheduler | 0.23.2 | MIT | React DOM scheduling in standalone preview |
-| esbuild | 0.25.12 | MIT | Development/build only |
-| TypeScript | 5.9.3 | Apache-2.0 | Development/type checking only |
-| tsx | 4.23.15 | MIT | Development/test execution only |
-| Playwright | 1.63.0 | Apache-2.0 | Browser-test tooling; browser UI checks may be separately blocked |
-
-No proprietary GitHub Copilot or closed-source Codex material is copied into this repository. Open-source Codex and OpenAI Skills workflow adaptations are listed below. Each npm distribution retains its upstream license. Native client factory and slot-registration patterns follow the official MIT-licensed implementation, with its notice reproduced below.
+No proprietary GitHub Copilot or closed-source Codex implementation is copied into this repository. Only the explicitly attributed open-source workflow adaptations below are included.
 
 ## DeepSeek Harness notice
 
@@ -53,11 +39,11 @@ Only workflow text is adapted; the referenced Python helper scripts are not bund
 
 ## Bundled runtime notices and evaluation boundary (2026-10-02)
 
-The unmodified React, React DOM, Scheduler, Lucide and Zod license texts are now retained in `third_party/runtime/`. The accompanying manifest records exact installed versions, upstream sources, use, retained-notice paths and SHA-256 hashes. The `third_party` directory is included in the distributed tarball. This supplements the minified bundle headers, which refer to their upstream LICENSE files. Dependency changes require updating and rechecking this inventory; transitive resolution remains in package-lock.json.
+The unmodified runtime and Markdown dependency license texts are retained in `third_party/runtime/`. The accompanying manifest records exact installed versions, upstream sources, use, retained-notice paths and SHA-256 hashes. The `third_party` directory is included in the distributed tarball. This supplements the minified bundle headers, which refer to their upstream LICENSE files. Dependency changes require updating and rechecking this inventory; transitive resolution remains in package-lock.json.
 
 The deterministic evaluation corpus is newly authored for this project with generative-AI assistance, not copied from third-party issue data. It has no real model inference or paid API usage. AI-assisted implementation and review should be disclosed in competition materials together with the team's own review, changes and validation. Team identity, eligibility, ownership approvals and final submission declarations are not supplied by these technical records.
 
-A configured real DeepSeek or other model API and GitHub are external services, not parts relicensed by this repository. Their actual provider/model/version, applicable terms and usage must be added to the final competition resource list once the team selects and authorizes the real demonstration setup.
+A configured real DeepSeek or other model API and GitHub are external services, not parts relicensed by this repository. Known demonstration model, AI-assistance and media-tool usage is recorded in docs/RESOURCE-INVENTORY.md. Final report and video permissions and any unavailable historical versions still need separate disclosure; service terms are not replaced by this repository license.
 
 ## Repository detail Markdown rendering
 

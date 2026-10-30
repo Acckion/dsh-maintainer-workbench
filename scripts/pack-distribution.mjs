@@ -10,6 +10,9 @@ const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const git = (...args) => execFileSync('git', ['-c', `safe.directory=${root.replaceAll('\\', '/')}`, ...args], { cwd: root, encoding: 'utf8' }).trim();
 const commit = git('rev-parse', 'HEAD');
 if (process.env.GITHUB_SHA && commit !== process.env.GITHUB_SHA) throw Error('Checkout does not match the workflow source commit');
+const stable = process.env.DISTRIBUTION_CHANNEL === 'release';
+if (stable && !/^\d+\.\d+\.\d+$/.test(manifest.version)) throw Error('A stable release requires a plain semantic version');
+if (stable && process.env.GITHUB_REF_NAME && process.env.GITHUB_REF_NAME !== `v${manifest.version}`) throw Error('Release tag does not match the package version');
 const version = process.env.DISTRIBUTION_CHANNEL === 'master'
   ? `${manifest.version.split('-')[0]}-master.${git('show', '-s', '--format=%ct', 'HEAD')}.g${commit.slice(0, 12)}`
   : manifest.version;
@@ -37,7 +40,7 @@ try {
   if (info.filename !== 'dsh-maintainer-workbench.tgz') await rm(join(output, info.filename));
   await verifyDistribution(archive);
   const sha256 = createHash('sha256').update(await readFile(archive)).digest('hex');
-  const metadata = { name: manifest.name, version, sourceVersion: manifest.version, commit, tag: `master-${commit}`, file: 'dsh-maintainer-workbench.tgz', sha256, shasum: info.shasum };
+  const metadata = { name: manifest.name, version, sourceVersion: manifest.version, commit, tag: stable ? `v${version}` : `master-${commit}`, prerelease: !stable, file: 'dsh-maintainer-workbench.tgz', sha256, shasum: info.shasum };
   await writeFile(join(output, 'distribution.json'), JSON.stringify(metadata, null, 2) + '\n');
   await writeFile(join(output, 'SHA256SUMS'), `${sha256}  ${metadata.file}\n`);
   if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `version=${version}\ntag=${metadata.tag}\n`);

@@ -1,8 +1,9 @@
-name: Distribute master
+name: Distribute workbench
 
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
   workflow_dispatch:
@@ -24,12 +25,12 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
-      - name: Check package compatibility and core workflows
-        run: node --import tsx --test tests/package-compatibility.test.ts tests/orchestration.test.ts tests/global-settings.test.ts tests/model-routing.test.ts tests/dirty-workspace.test.ts
+      - name: Check package compatibility and workflows
+        run: npm test
       - name: Build and verify installable distribution
         run: npm run package:distribution
         env:
-          DISTRIBUTION_CHANNEL: master
+          DISTRIBUTION_CHANNEL: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || 'master' }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: distribution-${{ github.sha }}
@@ -41,7 +42,7 @@ jobs:
           retention-days: 30
 
   release:
-    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    if: (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -62,17 +63,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           SOURCE_SHA: ${{ github.sha }}
+          SOURCE_REF: ${{ github.ref }}
         run: |
           cd artifacts
           sha256sum --check SHA256SUMS
           tag=$(jq -r .tag distribution.json)
           version=$(jq -r .version distribution.json)
-          printf 'Prebuilt master package: %s\nSource commit: %s\n\nInstall the attached .tgz in Harness; installing the source Git URL still requires build approval.\n' "$version" "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
+          if [[ "$SOURCE_REF" == refs/tags/v* ]]; then
+            test "$(jq -r .prerelease distribution.json)" = false
+            release_flags=(--prerelease=false --latest=true)
+          else
+            release_flags=(--prerelease --latest=false)
+          fi
+          printf 'Prebuilt plugin: %s\nSource commit: %s\n\nInstall the attached .tgz in a compatible Harness host. See README for installation, licensing and known dependency advisories.\n' "$version" "$SOURCE_SHA" > "$RUNNER_TEMP/release-notes.md"
           # The immutable tag identifies the source commit. Reruns replace only
           # assets for that same commit; API/auth failures are not hidden.
           status=$(curl --silent --show-error --output "$RUNNER_TEMP/release.json" --write-out '%{http_code}' --header "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/$GH_REPO/releases/tags/$tag")
           if [ "$status" = 404 ]; then
-            gh release create "$tag" --target "$SOURCE_SHA" --prerelease --latest=false --title "$version" --notes-file "$RUNNER_TEMP/release-notes.md"
+            gh release create "$tag" --target "$SOURCE_SHA" "${release_flags[@]}" --title "$version" --notes-file "$RUNNER_TEMP/release-notes.md"
           elif [ "$status" != 200 ]; then
             echo "GitHub release lookup failed: HTTP $status" >&2
             exit 1

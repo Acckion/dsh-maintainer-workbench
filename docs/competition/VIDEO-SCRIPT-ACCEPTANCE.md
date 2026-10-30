@@ -1,5 +1,7 @@
 # 四分钟脚本：测试通过之后，维护者还要判断什么
 
+**2026-10-28：本稿已由[4:40 导演与配音方案](VIDEO-DIRECTOR-PLAN-20261028.md)替代。以下 PR #13 内容是历史版本，当前主线优先使用 PR #41。**
+
 日期：2026-10-27。使用 [dsh-acceptance-suite PR #13](https://github.com/LovelyFlash/dsh-acceptance-suite/pull/13)。本稿替代分账本地仓库主线；[旧稿](VIDEO-SCRIPT.md)与原试录记录保留。操作步骤见[手动录制指引](MANUAL-RECORDING-GUIDE.md)。
 
 状态：仓库和独立复现已准备，新的原生模型审查与录像尚未开始。S3–S6 必须按这轮真实结果定稿，不能预填“发现全部问题”“通过”“已接受”或“已导出”。

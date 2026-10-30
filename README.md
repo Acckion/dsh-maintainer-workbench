@@ -1,192 +1,86 @@
-# Maintainer Workbench
+# 开源维护智能工作台 · Maintainer Workbench
 
-面向个人和小团队开源维护者的 AI 协作工作台，以 DeepSeek Harness 原生插件提供。帮助维护者整理社区反馈、确认处理计划、核对修改依据，并决定哪些结果可以交付。
+基于开源 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的 AI 维护工作台，面向个人和小团队的开源维护者。
 
-工作台把问题分诊、代码与文档维护、贡献审查、执行记录和发布交接串成持续的维护流程。AI 的分析结论、实际执行的测试和维护者的接受决定分别记录；当前修改缺少证据或版本发生变化时，不能借用旧的通过结果。
+社区问题、代码贡献和仓库文档在这里统一处理。AI 调查、修复和验证，维护者查看进度、改动与依据，再决定是否发布。确认后的回复和补丁回到原 Issue 与 PR，供社区核对、复用和继续改进。
 
-产品目标与已实现范围见 [产品定位](docs/product/PRODUCT-FOCUS.md)。AIC AI+开源的规则、材料与证据入口见 [参赛准备状态](docs/product/COMPETITION-READINESS.md)；真实维护质量、人工效率和费用仍需系统对照验证。
+本项目开放插件源码、阶段工作流、测试与打包工具。Harness 提供 Agent、模型、工具、会话和权限能力；本项目实现维护事项组织、阶段编排、证据关联、恢复、交付及界面。我们不训练基础模型，也不将宿主能力作为团队原创。
 
-## 启动
+- [源码与问题反馈](https://github.com/Acckion/dsh-maintainer-workbench)
+- [1.0.0 正式安装包](https://github.com/Acckion/dsh-maintainer-workbench/releases/tag/v1.0.0)：标签 `v1.0.0`，不使用 Pre-release。请核对该版本的 `distribution.json` 和 `SHA256SUMS`；其他 `master-<commit>` 记录是开发预发布。
+- [评审、复现与当前边界](docs/SUBMISSION.md)
+- [资源与 AI 辅助使用说明](docs/RESOURCE-INVENTORY.md)
+- [参与贡献](CONTRIBUTING.md) · [第三方许可与来源](THIRD_PARTY_NOTICES.md)
 
-要求 Node.js 24+、Git、Harness `0.2.1-alpha.1` 或提供兼容接口的更新版本。持久化原生提问使用 `@deepseek-ai/dsh-tools@^0.2.1-alpha.1` 的 `concludeTurn()`，旧 `0.2.0-rc.2` 客户端需要升级后使用此版本。
+## 安装与启动
+
+需要 Node.js 24+、Git。当前源码锁定 Harness `0.2.1-alpha.1`、Cordis `4.0.5-alpha.1`；请优先使用这一宿主版本复现。部分 peer 范围为兼容旧接口保留，并不代表旧桌面客户端的全部功能均可用。
+
+**已有 Harness：** 从 Release 下载 `dsh-maintainer-workbench.tgz`，在宿主的插件安装入口选择该文件，然后打开左侧“维护工作台”。预编译包包含客户端和服务端，不运行安装构建脚本。它仍需宿主提供兼容接口，并由包管理器解析运行依赖；不承诺完全离线安装。
+
+**从源码启动：** 在源码目录执行：
 
 ```sh
-npm ci
+npm ci --ignore-scripts
 npm run build
 npm run harness
 ```
 
-打开终端打印的本地认证链接，跳过首次引导或配置模型，在 Harness 左侧点击 **维护工作台**。默认端口 4318。开发启动器默认沿用 `DSH_HOME` 或正常用户 Harness 配置目录，维护数据保存在 `.data/native/`；不会再将插件密钥覆盖到宿主环境。`HARNESS_PROFILE` 可选择已有 profile。需要隔离开发环境时显式运行 `npm run harness:isolated`，使用 `.harness-local/`；为避免大量文件监听，开发启动器关闭宿主 HMR，修改后重新构建并重启。
+打开启动器打印的本地认证链接。默认端口 4318，沿用 `DSH_HOME` 或日常 Harness 配置，维护数据保存在 `.data/native/`。需要独立配置时使用 `npm run harness:isolated`，数据与宿主配置分开保存；不要把真实密钥提交到仓库。修改源码后重新构建并重启，避免在任务执行中替换后端。
 
-目标仓库需要独立 Node/pnpm 时，可在 `.data/native/runtime/config.json`（或 `MAINTAINER_DATA_DIR/runtime/config.json`）配置 `{"binDirectory":"/absolute/path/to/bin","nodeOptions":["--max-old-space-size=4096"]}`。该目录必须提供可执行的 `node` 和 `pnpm`。之后仍使用 `npm run harness`，启动器会用指定 Node 启动宿主，并把该目录置于工具进程 PATH 首位。配置缺失时沿用当前环境；配置存在但无效时停止启动，避免静默退回旧版本。依赖仍需按目标仓库锁文件安装到各验证工作区，不共享 `node_modules`。
-
-在「仓库设置 → 验证环境」可开启自动准备 npm/pnpm 锁定依赖，选择根项目或整个工作区，以及该仓库的运行时工具目录。联网下载与安装脚本默认关闭；离线自动准备仅支持禁用安装脚本。后端在验证模型启动前检查 Node engines、包管理器版本与当前目录依赖，准备成功后直接验证；只共享下载缓存。缺工具、无锁文件、准备失败或版本变化会明确停止并保留日志，不循环安装。事项明确“不安装依赖”时，仓库默认策略不会覆盖它；维护者可点击「授权本次依赖准备并继续」，只授权当前版本环境准备，代码范围与验证 Agent 权限不变。详见 [验证工作区环境计划](docs/product/WORKSPACE-ENVIRONMENT.md)。
-
-只体验界面和队列：
+只查看独立预览：
 
 ```sh
 npm start
 # http://127.0.0.1:4317
 ```
 
-独立预览使用 `.data/`，与原生运行的数据隔离。首次启动为空工作区，连接仓库后支持真实 GitHub 资料的分诊、调查与 PR 分析；代码修改必须在原生 Harness 中运行。`npm run dev` 只监视服务端代码，前端修改后运行 `npm run build`。
+预览使用 `.data/`；代码实施依赖原生 Harness，独立预览不具备同等执行能力。启动器不自动读取 `.env`，可通过宿主设置或运行环境配置凭据。
 
-`npm start` / `npm run dev` / `npm run harness` 默认启用 `--use-system-ca`（Harness 启动器通过 `NODE_OPTIONS` 传给宿主进程），以便在安装了拦截 HTTPS 根证书（企业代理或安全工具）的机器上连接 GitHub；若改用其他方式启动 Harness（例如已安装的 Harness 桌面版）后导入仓库提示「证书验证失败」，请用 `NODE_OPTIONS=--use-system-ca` 启动，或改用错误提示中的 `NODE_EXTRA_CA_CERTS` 方案。
+## 第一次使用
 
-## 从零完成一次真实维护
+1. **配置模型与连接。** 在 Harness 设置中配置模型，再到“设置 → 维护工作台”选择默认模型。阶段设置优先于插件默认，最后继承 Harness 默认。输出 Token 上限、并发与超时可调整；已启动任务保留启动时配置，修改后需明确重试。GitHub Token 在服务端保存，不写入导出结果。
+2. **接入仓库。** 选择已有工作区或输入 `owner/repository`。公开仓库可匿名读取；私有读取、评论和推送需要对应权限。代码阶段自动准备固定提交的专用 worktree；不会把分诊当成已经审查源码。
+3. **处理事项。** 点击阶段节点查看结果或历史；点击“开始”类操作才会派发任务。页面把当前结果、待决定事项和实际执行记录分开显示。
+4. **核对与交付。** 阅读报告、源码位置、命令输出及真实差异，再接受结果。点击“发布回复”即提交当前回复，不再反复弹出内容确认；服务端仍检查权限、输入版本和重复发布。修改代码则使用“更新原 PR”或创建新 PR，工作台不自动合并。
 
-1. **配置模型**：先在 Harness「设置 → 模型」配置提供方与凭据，再在「设置 → 维护工作台 → 模型」选择插件默认模型。菜单直接读取 Harness 模型目录，按提供方分组；高级设置可为分诊、预检、调查、实施、审查、文档、验证和 CI 单独选择模型与推理等级。优先级为阶段选择 → 插件默认 → Harness 默认；已启动任务保留原模型，已有结果不会自动重跑。模型被移除时明确报错，重新选择后才能运行，不自动切换提供方。单个聊天的临时模型选择不改变本插件设置。独立预览保留自己的兼容 API 配置。
-2. **发现仓库**：优先自动识别 Harness 工作区及 GitHub 远端；其他远程仓库可以输入 `owner/repository` 添加。公开仓库可以匿名读取；私有仓库、写入和更高读取限额需要在“设置与连接”填写 GitHub Token。细粒度令牌的读取需要 Metadata/Issues/Pull requests，发布还需要相应写权限，代码推送需要 Contents write。
-3. **准备仓库**：分诊可以直接使用远程仓库资料；调查、审查、修复与文档任务自动克隆到插件管理的目录，并在固定提交创建专用 worktree，无需用户配置路径。也可在设置中点击「自动准备仓库」，或绑定已有 clone。自动准备不安装依赖、不执行仓库脚本。私有仓库仍需 GitHub 凭据。已有用户克隆需要包含同步时提交，缺失时会提示 fetch。
-4. **批量派发**：勾选 Issue/PR，执行智能分诊、调查、修复、文档维护或 PR 审查。选中 Issue 时不能使用 PR 专属审查。默认每批 20 个、并发 2 个，可在设置修改。
-5. **处理宿主审批**：实际命令遵循 Harness 的权限 preset。调查/审查使用 `read-only`；修复/文档任务默认继承宿主权限预设。需要审批时在对应 Harness 会话中处理。任务详情可点击「打开 Harness 会话 / 审批」，直接进入对应原生会话。
-6. **处理结果**：在“处理流程”的横向节点查看历史、当前阶段和下一步条件。下方通过“进度与结果 / 手动处理 / 执行记录 / 处理计划”页签查看所选阶段，切换节点或页签不会启动任务。阶段下方的“处理记录”统一展示执行及人工操作；一次展开即可查看状态变化、工作区路径，并进入执行详情或会话。在“手动处理”直接填写结果，可保存补充、提交结果并继续或跳过；存在相关执行任务时可停止 Agent 并接管。在“处理计划”确认或编辑目标，独立执行按钮用于继续、审批和交付。明确启动的修复目标会在改动完成后进入验证，通过验证后进入审查。Tasks 按处理链集中展示需要确认、运行中、完成和失败任务，快速分诊与预检默认隐藏。审核时查看工具结果、测试记录、真实 diff 和输入版本。测试列表是 Agent 的报告，实际执行输出保存在工具证据与 Harness Session 中；二者应一起检查。可以退回并重试、取消运行任务、导出结果 JSON 和补丁。
-7. **发布**：接受结果后，点击发布回复、应用标签或创建草稿 PR。二次预览显示即将写入的内容；草稿 PR 会提交已审核差异、推送专用分支并调用 GitHub API。工作台不自动合并 PR。发布记录保存在任务中。
+## 主要流程
 
-报告格式恢复：分诊、调查、实施、验证及审查共用严格报告校验。标点错误优先本地修复；字段错误或报告截断最多自动整理一次，使用已有输出和执行证据，不重新实施代码，也不提高输出上限。同一任务的初始报告与证据补齐后的报告共享整理额度。仍失败时显示“报告待整理”，保留原始输出、补丁和工作区；点击“重新整理报告”先尝试本地恢复已有输出，仍有格式问题才调用工具被禁用的整理会话；保留原执行会话、诊断和完整工具日志。模型报告中的空补充信息请求（`null` 或 `fields: []`）按未提出问题处理，不触发格式重试；真实资料缺口、阻塞项及有问题的输入请求仍严格校验。也可通过“手动处理”补充结果。网络、权限、工具执行失败仍按执行错误处理，报告未生成不能作为可批准或交付的产物。
+| 入口 | 处理方式 | 需要维护者判断的地方 |
+| --- | --- | --- |
+| Issue | 分诊；资料清楚时定位与范围 → 修复 → 验证 → 补丁审查 → 交付；已有关联 PR 或缺资料时进入相应分支 | 是否实施、目标与授权范围、最终结果；缺少报告者资料时向原 Issue 提问并记录回执，等待回复 |
+| PR | 预检 → 变更审查 → 发布结论与选择处理方式 → 可选 Agent 修订 → 验证 → 维护者确认与交付 | 接受哪些发现、是否让 Agent 修复、是否发布；对已绑定当前补丁且证据合格的验证结果，不强制再跑一轮相同审查 |
+| Repository | 检查 README、Agent 指引、CI 等文件，保存问题与来源；确认范围后实施、验证和审查 | 修改路径、依赖准备、验收条件及最终交付；CI 配置存在不代表远端 CI 已运行 |
 
-模型输入与报告：仓库正文、讨论、源码提示、维护者输入和工具摘要使用保留原始换行、引号及反斜杠的分段文本，维护者任务与仓库资料分开提供；只解码程序生成的 GitHub 传输对象，不对源码做全局反转义。最终报告使用 `compact-v1`：模型填写阶段结论、发现与限制，执行命令和日志通过当前工具 ID 引用，由程序按同会话、同提交及对应补丁组装为现有内部报告。Harness 提供 `submit_stage_report` 结构化工具；文本 JSON 是兼容入口，普通 API 使用较小的 JSON 对象。报告提交不代表批准，也不执行工具或产生测试证据；连续两次工具提交不合格后停止模型请求。旧完整报告仍可读取，状态机、审批及交付检查保持原有逻辑。
+以上是按事实与门槛分支的流程，不要求每个 Issue 都机械走完所有节点。只完成分诊或发出补充问题，不能标为已完成修复。
 
+“交付与跟踪”保留已发布评论和后续修改的历史；新的代码或有效输入变化使旧结果过期，本插件自己确认的评论不应被误判为代码变化。报告整理失败时保留原会话、工具记录、补丁和工作区，优先复用这些内容恢复，而非重跑整轮任务。
 
-## 功能与实现范围
-
-| 功能 | 实现 |
-|---|---|
-| Issue/PR 统一收件箱 | 搜索、类型筛选、优先级、未分诊、疑似重复、已关闭记录、批量选择 |
-| 智能分诊 | 分类、优先级、置信度、缺失信息、建议标签、相关问题检索、带理由的重复建议 |
-| 问题调查 | 原生模式读取代码；独立模式明确限定为远端资料分析 |
-| 修复 / 文档维护 | 复用 Harness Standard preset 和原生工具，在专用 worktree 运行，返回实际差异 |
-| PR 审查 | 获取 PR base/head 和变更，结合报告及代码分析，明确覆盖边界 |
-| 队列 | SQLite 持久化、版本绑定、幂等派发、并发上限、超时、取消、保留历史的重试 |
-| 阶段导航 | 按 Issue/PR 类型显示阶段与关注点，历史尝试/周期只读，实时更新保留历史选中项；[设计与限制](docs/product/WORKFLOW-UX.md) |
-| 事项状态 | 独立处理周期、事件历史、暂缓与等待；GitHub 更新使旧输入/审核过期，关闭重开保留历史 |
-| 补充输入 | Agent 结构化问题表单，回答持久化后显式继续；新的运行与工作区保留原证据 |
-| 审核 | 结果、工具证据、输入提交、真实 diff、接受/退回、差异变更和输入过期检查 |
-| 交付 | JSON / patch 导出，GitHub 回复、标签、草稿 PR；发布去重与状态记录 |
-| 自动化 | 可配置定时同步、对新版本问题自动分诊；默认关闭，不自动发布 |
-| 图形配置 | 仓库、自动工作区、宿主模型状态、GitHub 令牌、并发与自动化 |
-| 仓库理解 | 自动读取固定提交的目录、约定、README、构建配置、CI 与测试入口，展示来源与覆盖范围 |
-| 任务工作流 | 分诊、调查、修复、审查、文档五类工作流；参考许可允许的 Codex / OpenAI Skills 并保留来源 |
-
-## 安装为分发插件
-
-每次 `master` 更新，GitHub Actions 自动构建预编译包，在 [GitHub Releases](https://github.com/Acckion/dsh-maintainer-workbench/releases) 发布按提交区分的 `master-<commit>` 预发布版本。下载其 `dsh-maintainer-workbench.tgz` 后，在 Harness 插件安装入口选择本地文件，或使用该 Release 附件的完整下载 URL。包内包含 `dist`，没有安装构建脚本，因此不需要为本插件配置 Git 构建白名单；直接安装源码 Git URL 仍需授权。
-
-自动发布规则、npm 可选配置和校验方式见 [自动分发说明](docs/AUTOMATED-DISTRIBUTION.md)。本地生成同样的包：
+## 验证与复现
 
 ```sh
-npm ci --ignore-scripts
-npm run package:distribution
-dsh plugin --profile web add /absolute/path/artifacts/dsh-maintainer-workbench.tgz
+npm run check                 # 类型检查、行为测试、本地 Git 流程与构建
+npm run test:native           # 本地脚本模型 + 真实 Harness 工具链
+npm run test:browser:settings # 浏览器设置夹具；需 Playwright Chromium
+DISTRIBUTION_CHANNEL=release npm run package:distribution # 构建正式 tgz
 ```
 
-```sh
-npm run build
-npm pack
-# 在已有 Harness 环境：
-dsh plugin --profile web add /absolute/path/dsh-maintainer-workbench-0.4.0.tgz
-dsh web
-```
+`npm run check` 不调用收费模型，不向真实 GitHub 发布。测试夹具的通过率衡量工程契约，不能当成真实模型修复率。历史对照评估脚本 `npm run evaluate` 需要完整 Git 历史中的基线提交；赛事源码快照不含 `.git`，运行该项前应从上方地址克隆仓库。其他检查不需要历史基线。
 
-也可以从宿主 Plugins 页面安装本地 tarball。包包含 host entry、原生 client factory、bundle patch；不是只有 Skill/MCP 配置。原生接口与实测版本见 [开发核查](docs/RESEARCH.md)。
+赛事源码与安装包可在验证、提交代码后通过 `python3 scripts/pack-submission.py` 重新检查、构建和整理；额外需要 Python 3 标准库和 Git、tar。脚本拒绝未提交的跟踪文件，只打包明确允许的目录，并检查文件哈希与第三方许可文本。详见[复现说明](docs/SUBMISSION.md)。
 
-## 检查与证据
+## 权限、数据与能力边界
 
-```sh
-npm run check          # strict TypeScript + 行为/本地 Git 流程测试 + 构建
-npm run test:native    # 本地 Messages 模型夹具 + 真正的 Harness Agent / Shell 联调
-npm run test:browser:settings # 原生设置注册、保存、重开、冲突与失败恢复的浏览器夹具
-```
+- 公开资料读取不要求令牌属于仓库所有者。评论需对应 Issues / Pull requests 写权限，更新代码需 Contents 写权限及可写目标分支；组织可能要求批准或 SSO。无权读取分支保护时显示未知，未配置保护也不等于检查失败。不要仅为演示提供全权限密钥。
+- 模型可能错误、遗漏或受输出限制；报告声明“已执行”必须能关联实际工具记录。测试全绿不代表无缺陷；未运行检查、未知 CI 与失败结果分别保留。
+- 维护数据在本机持久化；Git worktree 隔离代码改动，命令权限由 Harness 管理，不是容器或多租户隔离。模型服务会接收任务相关内容，应按仓库授权选择可发送范围。
+- 自动化默认关闭；开启后依赖本地进程存活。它不提供云端常驻服务、自动合并或精确金额封顶保证。
+- 现有真实演示是自建受控案例，不是社区真实事故或随机样本。PR #41 的修复已提交到远端并有 CI 结果；这不证明模型普遍正确、社区采纳或上游合并。详细版本与证据链接见复现说明。
 
-新增 `npm run evaluate` 可对固定基线和当前源码运行八案例工作流对照，并生成 JSON/Markdown 证据；默认同时进行本地模型驱动的真实 Harness 联调。使用方式与未测边界见 [可复现评估](docs/EVALUATION.md)。这不是模型质量或修复成功率评测。
+已知生产依赖告警：Zod 资源耗尽风险及当前运行边界见 [安全说明](docs/SECURITY.md)。工程检查通过不代表无漏洞。
 
-浏览器回归脚本为 `scripts/browser-smoke.mjs`；需要先启动独立预览，并安装 Playwright Chromium。已记录的证据范围见 [验证记录](docs/VALIDATION.md)。本地模型夹具验证协议和工具链，不代表真实模型的智能评测。
+## 许可证与开放协作
 
-## 数据与限制
+原创代码使用 [MIT](LICENSE)。`skills/maintainer-*/SKILL.md` 中改编自 OpenAI Codex / Skills 的工作流文本按 Apache-2.0 保留适用许可、来源、通知及修改说明，见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和 `third_party/openai/`。第三方库保留各自许可，不能统称整个包只有 MIT。
 
-- **全局设置入口**：Harness「设置 → 维护工作台」，包含模型、自动化、执行、连接和任务工作区。工作台右上角按钮保留快捷页面，两处使用同一表单与 SQLite 配置；保存前核对配置版本，冲突时保留草稿。仓库策略与本地路径仍在工作台的「仓库设置」。当前 SDK 未公开打开指定设置 section 的服务，因此快捷按钮不操纵宿主私有状态，也不替换原生设置启动器。
-
-- 原生模型凭据由 Harness 管理。GitHub 令牌以及独立预览凭据单独保存在 `credentials.json`（权限 0600），不返回浏览器、不包含在任务导出中。环境变量也可配置：`DEEPSEEK_API_KEY`、`MAINTAINER_API_KEY`、`MAINTAINER_BASE_URL`、`GITHUB_TOKEN`。启动器不会自动读取 `.env`，如使用 `.env`，由运行环境加载。
-- 每个数据目录只允许一个 worker 进程。崩溃中的任务转为失败，保留 worktree，人工决定是否重试；不会静默重放代码修改。
-- worktree 隔离 Git 修改，命令执行隔离由宿主提供。不要把它当成容器或多租户安全系统。
-- 同步上限可在设置中调整，也可选择无上限；默认读取最近更新的 1000 个 Issue/PR。分析最多获取前 30 条讨论、PR 前 100 个文件，GitHub 还可能截断 patch；结果需要说明范围。
-- 默认不开启自动化；开启后按进程存活期间的分钟轮询执行。它不是云端常驻服务。
-- 并发、超时、每次请求输出上限均可配置；暂不提供精确的总金额预算、跨仓库权限分级、自动合并、依赖升级机器人或长期向量记忆。
-- 已有真实事项试用和原始模型输出的排障记录，但真实修复质量、人工效率和费用尚缺系统对照证据；受控发布测试也不能替代真实 GitHub 写入的完整验收。不能把模拟演示或本地测试的成功率当作真实维护成功率。各项证据的版本、环境与未测范围见 [证据索引](docs/competition/EVIDENCE-INDEX.md)。
-
-原创代码 MIT，改编工作流 Apache-2.0；上游使用范围与许可证见 [第三方清单](THIRD_PARTY_NOTICES.md)。
-
-
-## 通用性与仓库理解
-
-运行时代码、提示词和默认界面没有特定仓库名称或专用构建命令。Agent 从仓库自己的文件识别语言、构建与测试方式，支持混合语言和 monorepo；没有足够证据时保留未知，不强行假定 `npm test`。初始摘要不是完整语义索引：本地最多读取 12 份配置/约定摘要、远程最多 6 份，每份最多 6000 字符，所有裁剪和缺失会提示。Agent 应继续使用 Harness 工具读取任务相关实现及更细粒度的约定。摘要按提交缓存，源码未变时复用；提交变化后重建。
-
-工作流是随插件分发、按任务自动加载的版本化 SKILL.md，不要求用户手动安装五个技能或重新写提示词。宿主默认 Agent preset 的工具/Skills 仍通过原生 preset 机制加载。只有维护工作流覆盖范围和输出格式由插件补充。
-
-测试仓库与评估计划见 [通用验收方案](docs/ACCEPTANCE.md)。
-
-正式运行不包含演示数据或模拟执行器。旧版本数据库在启动时自动清除 mode=demo 的仓库、关联问题、任务及演示审计；真实 GitHub 数据和连接配置保留。测试夹具只位于 tests/ 与测试脚本中，不随插件分发。
-
-### 私有 GitHub 仓库
-
-公开和私有仓库使用相同的“接入仓库”入口。服务端优先使用已配置的 GitHub Token / GITHUB_TOKEN，其次 GH_TOKEN；没有显式令牌时自动复用本机 GitHub CLI 登录（gh auth login）。界面会验证并显示当前账号，未安装 CLI 也可在连接窗口直接保存令牌。令牌仅保存在服务端，CLI 凭据不复制到插件配置。
-
-细粒度令牌需选择目标仓库，并允许读取 Contents、Issues、Pull requests；发布评论、标签或 PR 才需要对应写权限。组织仓库可能还需管理员批准和 SSO 授权。API 同步、私有仓库克隆、fetch 与审核后的 push 使用统一认证来源；无权访问会显示错误，不会生成替代数据。
-
-### 多仓库工作区
-
-“接入仓库”支持每行一个仓库名称或 GitHub URL，每批最多 20 个；重复输入自动合并，失败逐项显示。设置页列出全部已连接仓库，可切换当前仓库或同步全部。切换会清空勾选项、详情和发布预览，并记住上次选择。收件箱、任务、审核和克隆按仓库隔离；活动记录、模型、执行策略和 GitHub 登录在工作台共享。目前不支持为各仓库配置不同 GitHub 身份。
-
-
-## 阶段化维护流程
-
-默认进入当前仓库的问题列表，可在 Issues、Pull Requests、Repository 和 Tasks 间切换。Issue 使用“快速分诊 → 调查 / 实施 → 验证 → 审查 → 发布”；PR 使用“变更预检 → 审查此版本 → 逐项处理发现 → 更新原 PR”。详情页根据产物给出下一步，其他阶段收在快捷操作中。目标、验收条件、历史证据和反馈会自动交接，无需重复输入完整提示词。
-
-分诊与预检仅处理元数据，不创建代码工作区、不开放 shell；代码任务在固定版本的隔离工作区执行，继续通过 Harness 运行，按阶段解析模型并继承权限。设置中可按仓库调整同步、自动分诊与预算。发布仍需预览并确认，不自动合并。
-
-Repository 页以文件清单和持久化问题组织仓库维护：打开时仅识别文件，不调用模型或运行仓库脚本。可按文档、Agent 指引和 CI 浏览固定版本内容，检查指定文件/目录，或从 PR 的“检查文档影响”进入同一个处理上下文。检查结果按内容依据复用，保存问题证据、暂缓/忽略原因和历史；相关文件变化后提示复查，不将部分检查当成仓库没有问题。
-
-勾选同类问题或直接指定目标后，可预览允许修改的路径和验收条件，再一次确认连续实施、验证与审查。补丁超出范围或未经允许移动/删除文件时停止；修改成功不自动解决原问题，仍需完整复查。执行列表位于侧边栏，详情保留证据、差异与补丁导出，恢复和最终交接复用 Tasks 流程。本地仓库无需 GitHub 也可维护；普通文件夹仅支持受限只读检查，生成修改需要 Git 提交。PR 检查与预览固定到 head/base，版本变化后旧预览不能执行。CI 配置、本地检查与实际远端 CI 状态分别判断。
-
-具体实现、验证与能力边界见 [工作流实现记录](docs/product/IMPLEMENTATION.md)。
-
-模块划分、持久化状态机、事件与人工输入、worktree 所有权、冻结补丁交接和旧数据迁移见 [架构说明](docs/product/ARCHITECTURE.md)。
-
-2026-10-02 安装包试用发现并修复了两处维护流程断点：失败验证仍保留为待处理事项；接受独立审查后可定位同版本、同补丁的原实施产物，继续单独批准与发布。完整十步试用、复现脚本和未测边界见 [安装包维护试用](docs/product/INSTALLED-TRIAL.md)，参赛剩余材料见 [准备状态](docs/product/COMPETITION-READINESS.md)。
-
-随后收敛为“维护者判断台”，默认详情加入同补丁的统一审阅摘要及明确恢复状态。产品目标与非目标见 [产品定义](docs/product/PRODUCT-FOCUS.md)，个人试用时建议检查的五个场景见 [个人试用说明](docs/product/PERSONAL-TRIAL.md)。后续验证可见性与过期发布预览的补充修正、已知限制见 [补充复核](docs/product/RECOVERY-REVIEW.md)。
-
-### Fresh profile compatibility
-
-The current manifest targets DSH `0.2.1-alpha.1` and declares shared host peers for Cordis `^4.0.5-alpha.1`, dsh-home-paths `^0.2.1-alpha.1`, dsh-llm `^0.2.1-alpha.1`, dsh-api-session-controller `0.2.0-rc.2 || ^0.2.1-alpha.1`, and dsh-tools `^0.2.1-alpha.1` (the durable question bridge requires `concludeTurn()`). The source lockfile resolves Cordis `4.0.5-alpha.1`. Git dependency installs build the package through `prepare`. The earlier isolated DSH `0.1.7-alpha.1` / Cordis `4.0.4` installed-package workflow evidence below describes the previous dependency contract; it does not verify the current host runtime.
-
-Harness profiles use `autoInstallPeers: false` and resolve Cordis from the host. A standalone `pnpm peers check` in that profile may therefore report a missing peer even when the runtime shares the host instance. This command requires pnpm 11 or later: before running it, verify `pnpm --version`; use an isolated pnpm 11+ tool directory if the user's PATH provides an older version. Our fresh-install check explicitly linked that exact host Cordis directory and verified realpath equality, then obtained a clean peer check. This diagnostic link is not a general install script for every Harness distribution. Do not hide peer errors or install a separate private Cordis copy. Exact evidence: [installation check](docs/evidence/install-peer-2026-10-02.json).
-
-### 类型化事项与当前版本复核
-
-Issue 详情现支持类型化目标与验收计划、已提出的问题和等待用户记录；同步后提示新回复，维护者核对后再继续。后续审查显式追踪历史发现，支持批量处置和经预览确认的 GitHub 讨论串状态更新。原生测试报告可直接关联工具调用、实际退出码、执行基线、补丁指纹和原始日志。用法、证据限制和浏览器复现见 [本轮实现说明](docs/product/ISSUE-REVIEW-EVIDENCE.md)。
-
-关联 PR 的审查、CI、合并和源 Issue 关闭进度，以及 GitHub Actions 失败步骤和日志读取，见 [远端跟踪与 Actions 说明](docs/product/REMOTE-PR-ACTIONS.md)。
-
-0.2.0 的导航、处理目标与回滚说明见 [界面与处理目标](docs/product/UI-0.2.0.md)。
-
-### 事项详情面板（0.3.0 的旧入口）
-
-以下描述 0.3.0 的原有入口；当前版本统一为“处理流程”与可点击阶段导航，旧深链接继续映射，详见 [阶段导航设计](docs/product/WORKFLOW-UX.md)。原来同一行左侧是 **Overview / Plan / Work / Review**，右侧是 **Summary / Activity / Diff**。Plan 仅用于 Issue；提问且没有计划时不显示。小屏幕使用两个选择器，不增加第二层页签。
-
-- Overview：已保存的结论、分类、缺少的信息及启动操作。
-- Plan：编辑目标、范围、复现和验收草稿；明确确认后才更新正式计划；也可一键确认并启动实施。运行中的任务阻止确认新计划，草稿仍保留。
-- Work：当前任务状态、失败与重试、真实工具日志、补充要求和处理历史。
-- Review：PR 发现与逐项处置，或实施产物的验收、同补丁验证和交付。失败或没有产物的任务在 Work 处理。
-- Summary：原始 Markdown、元数据；PR 的 Commits 与 Checks 按需展开。
-- Activity：原始讨论与本机回复草稿。使用已有回复建议无需再次调用模型；接受结果后可预览发布编辑后的回复。
-- Diff：GitHub PR 变更和本机产物分别显示，支持从审查位置跳转并返回。
-
-计划草稿、回复草稿、补充要求和上次查看的面板按事项保存到本机 SQLite 的 `item_drafts` 表。保存草稿不启动 Agent，也不覆盖已确认计划。回复预览绑定具体草稿内容；预览后修改草稿会阻止旧预览发布。
-
-本轮验证使用本机浏览器、合成仓库和模拟模型，没有产生真实 GitHub 写操作或收费模型调用。详见 [详情面板验收记录](docs/product/ITEM-PANELS.md)。
-
-### 后续工作流编排计划
-
-后续改造按 [工作流编排计划](docs/product/WORKFLOW-ORCHESTRATION-PLAN.md) 推进：系统整理带来源的计划草稿，确认后自动衔接实施、验证与审查，界面集中呈现计划确认、异常决定和最终审核；交付区分新建 PR、更新已有 PR 与补丁导出。首版已接入计划草稿、事项编排与对应界面，操作与验证范围见 [编排实现记录](docs/product/ORCHESTRATION-IMPLEMENTATION.md)。自动修复审查发现暂留后续。
-模型目录复用 Harness 官方 `buildModelCatalog(ctx)`，与宿主对话选择器使用同一来源；菜单是插件自身的紧凑界面，不读取宿主私有 React 状态。模型 ID 与阶段覆盖存入既有 SQLite 设置行，两处设置入口共享版本冲突保护。推理等级仅使用所选模型声明的值，切换模型后恢复该模型默认。公开接口说明：[Harness model selection](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-model-selection/README.md)。
+欢迎通过 Issue 报告可复现问题、补充失败样本、改进文档或提交 PR。基础 Harness 的问题应尽量在确认来源后向上游反馈；工作台特有的问题留在本仓库。复用时请保留来源与许可，不把模型、GitHub 服务或第三方演示仓库当然纳入本项目 MIT 授权。

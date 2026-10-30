@@ -1,5 +1,7 @@
 # 自动分发
 
+> 2026-10-30：正式版本由 `v<package.json.version>` 标签触发，例如 `v1.0.0`。标签构建使用 `DISTRIBUTION_CHANNEL=release`，安装版本为 `1.0.0`，Release 的 Pre-release 为 false 并标为 Latest。master 开发构建仍使用提交专属的预发布版本。发行流程现运行完整 `npm test`。
+
 `.github/workflows/distribution.yml` 在每次 master push 后生成预编译包，PR 只执行构建与校验，不发布。也可在 Actions 中手动运行，只有选择 master 才会发布。各提交独立运行，繁忙时不会因全局构建并发组而丢弃排队中的提交。
 
 ## 安装与追溯

@@ -15,3 +15,16 @@ playwright-report/
 # Local trial installations, evidence bundles and user attachments
 .deepseek-harness-verify/
 attachments/
+
+# Local production materials and older exported deliverables (preserved locally)
+/output/
+/releases/
+/.kilo/
+/docs/competition/voiceover/
+/scripts/voiceover/
+/AIC·AI+开源技术报告参考大纲.pdf
+/AIC·AI+开源竞赛规则及作品提交要求.pdf
+
+# Python packaging tool cache
+__pycache__/
+*.pyc
