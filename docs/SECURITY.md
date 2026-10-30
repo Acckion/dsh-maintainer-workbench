@@ -4,7 +4,7 @@
 
 ## Zod 资源耗尽告警
 
-`npm audit --omit=dev` 报告直接依赖 `zod@3.25.76` 一项高危告警：[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)。公告描述超大集合校验可积累大量错误并耗尽内存，修复版本为 `4.6.6`；本项目当前 v3 依赖范围未获得兼容自动修复（审计返回 `fixAvailable: false`）。
+`npm audit --omit=dev` 报告直接依赖 `zod@3.25.76` 一项高危告警：[GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)。公告描述超大集合校验可积累大量错误并耗尽内存，修复版本为 `4.6.6`；本项目当前 v3 依赖范围未获得兼容自动修复；本次新缓存审计建议升级到 `4.6.7`，并明确标为主版本升级（`isSemVerMajor: true`）。
 
 本次没有进行未经完整兼容验证的 Zod 主版本迁移，也不声明该风险已修复。独立服务监听 `127.0.0.1`、校验本地请求来源、将 HTTP 请求体限制为 128 KiB（`src/server/http.ts`）。这些措施缩小该入口的暴露面，不能代替库修复，也不覆盖全部宿主、工具和内部调用路径。避免导入不可信的超大数据或把服务暴露到外网。
 
