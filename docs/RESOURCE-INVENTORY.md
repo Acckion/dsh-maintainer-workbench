@@ -8,7 +8,8 @@
 
 | 资源 | 锁定版本或固定来源 | 许可 / 使用范围 |
 | --- | --- | --- |
-| DeepSeek Harness / DSH SDK | `0.2.1-alpha.1`，https://github.com/deepseek-ai/deepseek-harness | MIT；宿主与 SDK，保留适用通知；宿主二进制不随赛事 ZIP 提供 |
+| DeepSeek Harness，最终演示宿主 | `0.2.1-rc.3`（0.2.1-RC3），https://github.com/deepseek-ai/deepseek-harness | MIT；实际使用的桌面宿主，推荐用于体验和复现；宿主二进制不随赛事 ZIP 提供 |
+| DSH SDK，源码开发依赖 | `0.2.1-alpha.1`；具体包与版本见 `package-lock.json` | MIT；源码构建依赖版本，不作为用户安装宿主的版本要求 |
 | DeepSeek Cordis | `4.0.5-alpha.1` | MIT；复用宿主共享实例 |
 | React / React DOM / Scheduler | `18.3.1` / `18.3.1` / `0.23.2` | MIT；原生复用宿主 React，独立预览包含相关运行代码 |
 | Lucide React / semver | `0.468.0` / `7.8.5` | ISC |
