@@ -81,7 +81,7 @@ DISTRIBUTION_CHANNEL=release npm run package:distribution # 构建正式 tgz
 
 `npm run check` 不调用收费模型，不向真实 GitHub 发布。测试夹具的通过率衡量工程契约，不能当成真实模型修复率。历史对照评估脚本 `npm run evaluate` 需要完整 Git 历史中的基线提交；赛事源码快照不含 `.git`，运行该项前应从上方地址克隆仓库。其他检查不需要历史基线。
 
-赛事源码与安装包可在验证、提交代码后通过 `python3 scripts/pack-submission.py` 重新检查、构建和整理；额外需要 Python 3 标准库和 Git、tar。脚本拒绝未提交的跟踪文件，只打包明确允许的目录，并检查文件哈希与第三方许可文本。详见[复现说明](docs/SUBMISSION.md)。
+赛事工程包可在验证、提交代码后通过 `python3 scripts/pack-submission.py --source-only` 重新检查、构建和整理；额外需要 Python 3 标准库和 Git、tar。脚本拒绝未提交的跟踪文件，只打包明确允许的目录，并检查文件哈希与第三方许可文本。详见[复现说明](docs/SUBMISSION.md)。
 
 ## 权限、数据与能力边界
 
