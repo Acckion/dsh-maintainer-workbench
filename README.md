@@ -16,9 +16,17 @@
 
 推荐使用 **DeepSeek Harness 0.2.1-RC3（`0.2.1-rc.3`）**，这是本项目最终演示使用的宿主版本。
 
+| 系统 | 处理器 | RC3 安装包 | 来源 |
+| --- | --- | --- | --- |
+| Windows | x64（Intel / AMD 64 位） | [下载 EXE](https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.1-rc.3-win-x64.exe) | DeepSeek 官方 |
+| macOS | ARM64（Apple M 系列芯片） | [下载 DMG](https://download.deepseek.com/dsh-desk/bin/mac-arm64/deepseek-harness-0.2.1-rc.3-mac-arm64.dmg) | DeepSeek 官方 |
+| macOS | x64（Intel 芯片） | [下载 DMG](https://github.com/flaqai/open-deepseek-harness-desktop/releases/download/odsh-v0.2.1-rc.3/DeepSeek-Harness-macos-x64.dmg) | FLAQ AI 社区构建 |
+
+官方 RC3 桌面安装包提供 Windows x64 和 macOS ARM64。Intel Mac 的链接为基于同版 Harness 的社区发行版，本插件尚未在该发行版验证。
+
 ### 直接安装（推荐）
 
-1. 从 [Harness 官网](https://www.deepseek.com/zh/harness/) 下载并安装桌面端，打开 Harness。已有 Harness 可跳过这一步。
+1. 从上表选择适合系统和处理器的安装包，安装并打开 Harness。已有 Harness 可跳过这一步。
 2. 在左侧选择 **插件 → 添加插件**，将下面的安装包地址粘贴到输入框：
 
    ```text
